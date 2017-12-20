@@ -107,6 +107,16 @@ static void InitGL(float r=0.9f, float g=0.9f, float b=0.9f, float a=1)
 	//Sometimes models present incorrectly because back-faces obscure them.
 	assert(2==togglecullingface);
 	//glEnable(GL_CULL_FACE); glCullFace(GL_BACK); //1	
+
+	//EXPERIMENTAL
+	//glEnable(GL_MULTISAMPLE);
+	/*GLUT_MULTISAMPLE isn't working.
+    GLint iMultiSample = 0;
+    GLint iNumSamples = 0;
+    glGetIntegerv(GL_SAMPLE_BUFFERS,&iMultiSample);
+    glGetIntegerv(GL_SAMPLES,&iNumSamples);
+	daeEH::Verbose<< "MSAA on, GL_SAMPLE_BUFFERS = "<<iMultiSample<<", GL_SAMPLES = "<<iNumSamples;
+	*/
 }
 //Resize And Initialize The GL Window
 static void ResizeGLScreen(int width, int height)
@@ -522,10 +532,13 @@ struct TestIO : daeIO //QUICK & DIRTY
 				if(r!=nullptr)
 				{
 					fseek(r,0,SEEK_END); 					
-					i = ftell(r); fseek(r,0,SEEK_SET);
-					setRange(rngI,nullptr);
+					i = ftell(r); fseek(r,0,SEEK_SET);					
 				}
-				if(i>0) lock = i; else OK = DAE_ERROR;
+				if(i>0) 
+				{
+					lock = i; setRange(rngI,nullptr);
+				}
+				else OK = DAE_ERROR;
 			}
 			if(!O.getRequest().isEmptyRequest())
 			{
