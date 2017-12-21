@@ -533,12 +533,23 @@ struct TestIO : daeIO //QUICK & DIRTY
 				{
 					fseek(r,0,SEEK_END); 					
 					i = ftell(r); fseek(r,0,SEEK_SET);					
+					//HACK#1: setRange requires lock = i;
+					//setRange(rngI,nullptr);
 				}
 				if(i>0) 
 				{
-					lock = i; setRange(rngI,nullptr);
+					lock = i;
+					
+					//HACK#2: setRange requires lock = i;
+					//NOTE: The HTTP pathway handles rngI.
+					if(r!=nullptr) setRange(rngI,nullptr); 
 				}
-				else OK = DAE_ERROR;
+				else
+				{
+					OK = DAE_ERROR;
+
+					if(rngI!=nullptr) rngI->limit_to_size(0);
+				}
 			}
 			if(!O.getRequest().isEmptyRequest())
 			{
