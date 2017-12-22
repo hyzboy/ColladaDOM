@@ -626,17 +626,17 @@ typedef struct //C++98/03 (C2918)
 { 
 	bool operator()(const daeDocRef &a, daeString b)const
 	{
-		return strcmp(a->getDocURI().data(),b)<0; 
+		return 0<strcmp(a->getDocURI().data(),b); 
 	}
-}daeURI_docHookup_less;	
-static const daeDocRef *_docHookup_reverse_lb
+}daeURI_reverse_less;	
+static const daeDocRef *daeURI_reverse_lb
 (const daeDocRef *b, const daeDocRef *e, daeString URI)
 {
-	daeURI_docHookup_less less; //C++98/03 (C2918)	
 	//Could dp upper_bound-1 here, but it's a little 
 	//less clear and requires 2 comparator overloads.
 	typedef std::reverse_iterator<const daeDocRef*> r;
-	return &std::lower_bound(r(e),r(b),URI,less)[-1];
+	r lb = std::lower_bound(r(e),r(b),URI,daeURI_reverse_less());
+	return lb==r(b)?e:&*lb;
 }
 template<int doing_docLookup>
 //NOTE: THIS IS DOUBLING AS THE docLookup() PROCEDURE.
@@ -645,7 +645,7 @@ void daeURI_base::_docHookup(daeArchive &a, daeDocRef &reinsert)const
 	daeString URI = data();		
 	const daeArray<daeDocRef> &docs = a.getDocs();
 	const daeDocRef *b = docs.begin(), *e = docs.end();	
-	const daeDocRef *lb = _docHookup_reverse_lb(b,e,URI);
+	const daeDocRef *lb = daeURI_reverse_lb(b,e,URI);
 										  	
 	//This is much simpler with "reverse lower bound" behavior.
 	//That is get the item that is less-than-or-equal-to. But 
@@ -706,7 +706,7 @@ void daeIORequest::narrow()
 	const daeDocRef *b = scope->getDocs().begin();
 	const daeDocRef *c,*e = scope->getDocs().end();
 	const daeDocRef *lb = 
-	_docHookup_reverse_lb(b,e,localURI->data());
+	daeURI_reverse_lb(b,e,localURI->data());
 	if(lb!=e)
 	{
 		if((*lb)->isArchive()&&localURI->transitsDoc(*lb))
@@ -770,7 +770,7 @@ void daePlatform::_narrowURI_open_ZAE(daeIORequest &a)
 		//If the scope includes this extension, then nesting
 		//is involved, and ZIP is only followed inside a ZAE.
 		zae = true;
-		if(p+4-pp<=a.scope->getDocURI().getURI_path().extent)
+		if(p+4-pp<=daeOffset(a.scope->getDocURI().getURI_path().extent))
 		continue;
 
 		//daeURI could use a span-based constructor.
