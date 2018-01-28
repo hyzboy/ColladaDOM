@@ -187,7 +187,7 @@ COLLADA_(public)
 	/**LEGACY-SUPPORT
 	 * Writes doc to its archive/document's URI.
 	 * If @c this is a @c daeDOM its docs are written. The library does this unless
-	 * @a O implements @c daeIOPlugin::writeDoc() or the default I/O plugin does so.
+	 * @a O implements @c daeIOPlugin::writeRequest() or built-in I/O plugins do so.
 	 */
 	inline daeOK write(daeIOPlugin *O=nullptr)const{ return _write(_uri,O); }
 	/**WARNING, LEGACY-SUPPORT

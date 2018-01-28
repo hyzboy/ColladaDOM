@@ -69,7 +69,7 @@ COLLADA_(public)
 	{
 		return _data.size()-_size; 
 	}
-	//Reminer: It's tempting to remove this for symmetry with 
+	//Reminder: It's tempting to remove this for symmetry with 
 	//a write operation, where the amount of output is unknown.
 	//But it's convenient to store it in daeGZ. And it doesn't
 	//look like daeGZ will be able to do DEFLATE jobs anyway.
@@ -1322,7 +1322,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 				if(i.string==jmg)
 				{
 					daeImage *img = atlas.getContained()[j];
-					atlas.nextImage(jmg,j);
+					jmg = atlas.nextImage(jmg,j);
 					if(img->getIsDeleted())
 					continue;
 				}
@@ -1380,7 +1380,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 			if(!defIO.empty()) 
 			{
 				assert(dt==0);				
-				values[5] =	defIO.clear(values[1]); //SMALL,CODE
+				values[5] = defIO.clear(values[1]); //SMALL,CODE
 				OK = defIO.OK;
 				values[7] = (int)defIO.checksize; //LARGE				
 				checksum = defIO.checksum;
@@ -1455,7 +1455,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 	}
 	daeOK output_central_directory(const daeArchive &a, char eocd[22])
 	{			
-		//HACK: Figure out how many	output_local_entries.
+		//HACK: Figure out how many output_local_entries.
 		short eocd_entered = (short&)eocd[8];
 		daeZAE::BigEndian<16>(eocd_entered);
 		daeZAE_vec::iterator it = cd.end()-eocd_entered*22;
@@ -1476,9 +1476,6 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 			daeZAE::BigEndian<16>((short&)cde[28]=(short)i.extent);			
 			daeZAE::BigEndian<32>((int&)cde[42]=position);
 			
-			#ifdef NDEBUG
-			#error Don't forget 8B alignment.		 			
-			#endif
 			crc->writeOut(cde,46);
 			crc->writeOut(i.string,i.extent);
 			eocd_entered2++;
