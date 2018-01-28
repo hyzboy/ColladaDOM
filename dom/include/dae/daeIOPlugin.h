@@ -543,8 +543,8 @@ COLLADA_(private)
 	/**
 	 * Writes a document/element's contents-array to an output.
 	 *
-	 * @see @c writeDoc() in cases where a @c daeDoc is an archive
-	 * or DOM or other "doc" that is not a @c daeDocument.
+	 * @see @c writeRequest() in cases where a @c daeDoc is an 
+	 * archive, DOM, or other not @c daeDocument doc-or-object.
 	 */
 	virtual daeOK writeContent(daeIO &IO, const daeContents &content) = 0;	
 
@@ -555,7 +555,7 @@ COLLADA_(private)
 	 * be. Otherwise the plugin is left to its own devices, and may
 	 * set @a URI if it likes.
 	 * @note THAT @c daeDocument::write() prefers @c writeContent()
-	 * to this more specialized interface.
+	 * to this less specialized interface.
 	 *
 	 * @return Returns @c DAE_ERR_NOT_IMPLEMENTED if the library is
 	 * to write each of the DOM's docs one-by-one as if each one is
