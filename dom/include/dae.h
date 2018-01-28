@@ -45,8 +45,10 @@ template<class T> struct daeDocRoot : daeDocRef, daeOK
 	daeDocRoot(){}
 	daeDocRoot(daeOK cp):daeOK(cp){}
 	daeDocRoot(daeError cp):daeOK(cp){}
-	daeDocRoot(const daeDocRef &cp):daeDocRef(cp),daeOK(cp){}
-	daeDocRoot(const daeDocRoot<> &cp):daeDocRef(cp),daeOK(cp){}		
+	template<class U> //(daeDoc* is ambiguous.)
+	daeDocRoot(const U &cp):daeDocRef(cp),daeOK(cp){}
+	//daeDocRoot(const daeDocRef &cp):daeDocRef(cp),daeOK(cp){}
+	//daeDocRoot(const daeDocRoot<> &cp):daeDocRef(cp),daeOK(cp){}		
 	template<class U>
 	daeDocRoot &operator=(const daeDocRoot<U> &cp)
 	{
@@ -180,8 +182,11 @@ COLLADA_(public/*private*/) //new/openDoc() implementation
 	 * ZAE
 	 * @param o may be recycled in order to facilitate recursive operations, such as
 	 * how @c daeZAEPlugin will produce the index document given sufficient metadata.
+	 * @param IO is for symmetry with @c daeDoc::_write2(). The plugin will draw its
+	 * input from it. It is not closed.
+	 * @see @c daeIORequest::fulfillRequestI().
 	 */
-	LINKAGE static daeError _read2(daeDocRef &o, daeMeta*, const daeIORequest&, daeIOPlugin*);
+	LINKAGE static daeError _read2(daeDocRef&o,daeMeta*,const daeIORequest&,daeIOPlugin*,daeIO*IO=nullptr);
 
 COLLADA_(public) //ACCESSORS & MUTATORS
 	/**
@@ -865,9 +870,6 @@ COLLADA_(private) //INVISIBLE
 		//SUB-OBJECT
 		/** List of @c daeRef "resolvers." */
 		daeRefResolverList _refResolvers;
-
-		/** Implements @c daeDoc::_write() where @c this is a @c daeDOM*. */
-		daeOK _write_this_DOM(const daeURI&,daeIOPlugin*)const;
 
 #endif //BUILDING_COLLADA_DOM	
 };

@@ -33,7 +33,7 @@ struct daeLegacyIOPlugins : daeIOEmpty //INTERNAL
 {
 	daeLegacyIOPlugins(int legacy, const daeURI &URI)
 	{
-		//There's room for improvement here.
+		if(!URI.empty()) //DOM flushing mode?
 		daeEH::Error<<
 		"No platform provided daeIOPlugin.\n"
 		"Nor built-in plugin.\n"
@@ -58,6 +58,12 @@ COLLADA_(protected) //daeIOPlugin methods
 	virtual daeOK addDoc(daeDocRef&,daeMeta*);
 	/**PURE-OVERRIDE */
 	virtual daeOK readContent(daeIO&,daeContents&);
+	/**PURE-OVERRIDE */
+	virtual void getDemands(int &I, int &O)
+	{
+		I = /*Demands::unimplemented|Demands::CRT|*/Demands::string;
+		O = /*Demands::unimplemented|Demands::CRT*/0;
+	}
 
 COLLADA_(protected) //Visual Studio workaround
 
@@ -219,11 +225,6 @@ COLLADA_(public)
 
 COLLADA_(protected) //daeIOPlugin methods
 	/**PURE-OVERRIDE */
-	virtual void getDemands(int &I, int &O)
-	{
-		I = Demands::string/*|Demands::CRT*/; O = 0; 
-	}
-	/**PURE-OVERRIDE */
 	virtual daeOK writeContent(daeIO &IO, const daeContents &content);
 
 COLLADA_(public) //FORMERLY set/getOption()	
@@ -349,12 +350,6 @@ COLLADA_(public)
 
 COLLADA_(protected) //daeIOPlugin methods
 	/**PURE-OVERRIDE */
-	virtual void getDemands(int &I, int &O)
-	{
-		I = /*Demands::unimplemented|Demands::CRT|*/Demands::string;
-		O = /*Demands::unimplemented|Demands::CRT*/0;
-	}
-	/**PURE-OVERRIDE */
 	virtual daeOK writeContent(daeIO &IO, const daeContents &content);	
 	
 #ifdef BUILDING_COLLADA_DOM
@@ -439,10 +434,24 @@ COLLADA_(protected) //daeIOPlugin methods
 	virtual daeOK readContent(daeIO&,daeContents&);				
 	/**PURE-OVERRIDE */
 	virtual daeOK writeContent(daeIO&,const daeContents&);
+	/**PURE-OVERRIDE */
+	virtual daeOK writeRequest(daeIO&,const_daeURIRef&);
+	/**PURE-OVERRIDE */
+	virtual void getDemands(int &I, int &O){ I = Demands::string; O = 0; }
 
 COLLADA_(private) 
 
 	daeIOPlugin *_I,*_O;
+
+#ifdef BUILDING_COLLADA_DOM
+
+COLLADA_(public) //INVISIBLE
+
+	class Zipper; //INTERNAL
+
+	enum{ _gz_implementation=4096*4 }; //daeGZ.cpp
+
+#endif
 };
 #endif //COLLADA_DOM_OMIT_ZAE
 

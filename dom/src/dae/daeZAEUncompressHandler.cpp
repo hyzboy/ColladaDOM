@@ -9,11 +9,19 @@
 
 #ifdef __COLLADA_DOM__ZAE
 
+//_DEQUESIZ is broken. Why even use STD library on MSVC??
+#ifndef _MSC_VER
+#include <deque>
+#define daeZAE_vec std::deque<char>
+#else
+#define daeZAE_vec std::vector<char>
+#endif
+
 COLLADA_(namespace)
 {//-.
 //<-'
 
-/**HELPER
+/**EXPERIMENTAL
  * daeGZ is a candidate for exposing to clients in order
  * help download GZ compressed files. E.g. when the HTTP
  * header says the content is GZ-compressed. It's common.
@@ -21,11 +29,11 @@ COLLADA_(namespace)
 class daeGZ
 {		
 	char _32k_dictionary[32*1024]; 
-	char _private_implementation[4096*4]; 	
+	char _private_implementation[daeZAEPlugin::_gz_implementation]; //4096*4
 	size_t _restart,_final_input;
 	size_t _size;
 	#ifdef NDEBUG
-	#error Use daeArray<char> to expose daeGZ.
+	#error std::vector should be a daeArray with a built-in buffer.
 	#endif
 	std::vector<char> _data;
 	daeError _error;
@@ -61,22 +69,39 @@ COLLADA_(public)
 	{
 		return _data.size()-_size; 
 	}
+	//Reminer: It's tempting to remove this for symmetry with 
+	//a write operation, where the amount of output is unknown.
+	//But it's convenient to store it in daeGZ. And it doesn't
+	//look like daeGZ will be able to do DEFLATE jobs anyway.
 	inline size_t getRemaining()const
 	{
 		return _final_input-_restart-getUnderflow(); 
 	}
 
 	/**
-	 * @return Returns @c size() or 0.
+	 * @return Returns @c size() or 0. If nonzero the stream should be
+	 * in working order; If not then @c getError() should be consulted.
 	 */
 	COLLADA_DOM_LINKAGE size_t inflate(const void *in, size_t in_chars);
-		
+	//The Miniz "tdefl" implementation is several times larger than the
+	//"tinfl" data structure. Not sure if they can be reconciled into 1
+	//structure, or if they are, there's no reason to do it.
+	/**
+	 * @return Returns @c size() or 0.
+	 */
+	//COLLADA_DOM_LINKAGE size_t deflate(const void *in, size_t in_chars);
+	
+	/**
+	 * @return Returns @c DAE_NOT_NOW if the DEFLATE stream is in an 
+	 * incomplete state; i.e. more input/output is required in order
+	 * to not lose informatin at the stream's end.
+	 */
 	inline daeError getError()const{ return _error; }
 
 	inline bool isOK()const{ return _error==DAE_OK; }
 };
 
-/**@todo Expose @c daeZAE?
+/**INTERNAL
  *
  * TO-DO LIST
  * Enable encryption features?
@@ -108,38 +133,36 @@ COLLADA_(public)
        97 - WavPack compressed data
        98 - PPMd version I, Rev 1
  */
-class daeZAE : public daeAtlas
+class daeZAE : public daeAtlas, daeAtlasValue
 {
 COLLADA_(public) //CENTRAL-DIRECTORY
 
-	daeZAE():_initialized(){}
+	daeZAE(const daeIORequest &req):daeAtlas(req)
+	,_initialized(){}
 	bool _initialized; 
 	enum{ _8192=8192 };
 	daeError maybe_init(daeIO &IO);
 	daeError _init_central_directory(daeIO*,char*,int,int,int);
 	struct cde //VARIABLE-LENGTH
 	{				
-		//LOSSY! dates, comments, etc. won't be written.
-		unsigned isize,dsize,lhpos; daeStringCP path[1];
+		//LOSSY! comments, etc. won't be written.
+		unsigned isize,dsize,lhpos,mtime,dcode:8; daeStringCP path[1];
 
-		static bool less(cde *a, cde *b)
-		{
-			return strcmp(a->path,b->path)<0; 
-		}
+		static bool less(cde*a,cde*b){ return strcmp(a->path,b->path)<0; }
 	};
 	std::vector<cde*> CD; daeStringAlligator<cde,16> A;
 
 	typedef std::vector<cde*>::const_iterator iterator;
-
-	inline cde *find(daeString path)
+		
+	static cde *cde_cast(daeClientString p)
 	{
-		cde *v = (cde*)(path-daeOffsetOf(cde,path));
-		iterator it = std::lower_bound(CD.begin(),CD.end(),v,cde::less);
-		if(it==CD.end()) return nullptr;
-		int len = 0; while(path[len]!='\0'&&path[len]!='#') len++;
-		if(0==memcmp(path,(*it)->path,len)&&'\0'==(*it)->path[len])
-		return *it; return nullptr;
+		return p==nullptr?nullptr:(cde*)(p-daeOffsetOf(cde,path));
 	}
+
+COLLADA_(public) //daeAtlas methods
+	
+	virtual daeError getNames(daeArray<daeClientString>&,daeName)const;
+	virtual daeError getValues(daeArray<int>&,daeClientString)const;
 	
 COLLADA_(public) //HELPER
 
@@ -158,11 +181,8 @@ COLLADA_(public) //HELPER
 			for(;second->isArchive();second=&second->getArchive()) 			
 			if(a==&second->getAtlas())
 			{
-				size_t zae = second->getDocURI().getURI_uptoCP<'?'>()+1;
-				const daeURI *URI = p->getRequest().localURI;				
-				if(URI->size()>zae)
-				third = a->find(URI->data()+zae);
-				else assert(0);
+				third = cde_cast
+				(a->name(*p->getRequest().localURI-second->getDocURI()));	
 				return;
 			}			
 			//HACK: This I/O framework is not ideal in this hypothetical case.
@@ -173,43 +193,72 @@ COLLADA_(public) //HELPER
 
 COLLADA_(public) //I/O
 		
+	struct rw : daeIOSecond<>
+	{
+		cde *e; 				
+		int e_overflowed;
+		//img==0: offset is ZIP header size.
+		//img!=0: offset is its r/w pointer.
+		size_t offset;
+		daeImageRef img;
+		daeIO *IO;			
+		daeIORequest req;			
+		rw(daeIO *IO=nullptr):e()
+		,offset(),e_overflowed(-1),IO(IO) //piggybackI
+		{}
+		rw(const trio &p):daeIOSecond(req)
+		,e(p.third),offset(),e_overflowed(-1),IO()
+		,req(e==nullptr?nullptr:&p.second->getArchive())
+		{				
+			if(e!=nullptr) //Use daeImage?
+			try_image(p.second->getAtlas()); 
+				
+			if(!req.isEmptyRequest())
+			{
+				req.remoteURI = //Default to localURI.
+				req.localURI = &p.second->getDocURI();
+				p.second->getAtlas()->getSource(req);
+			}
+		}
+		void try_image(daeAtlas&, size_t i=-1);
+		bool cpy_image(daeAtlas&, size_t i, daeIO *io);		
+		void maybe_openIO(daeIOPlugin &I, daeIOPlugin &O)
+		{
+			if(!req.isEmptyRequest())
+			IO = req.scope->getIOController().openIO(I,O);
+		}
+		daeOK maybe_closeIO(daeOK OK=DAE_OK)
+		{ 
+			if(IO!=nullptr //try_image?
+			&&req.string.empty() //_stringI?
+			&&!req.isEmptyRequest()) //piggybackI?			
+			OK = req.scope->getIOController().closeIO(IO,OK);
+			IO = nullptr; return OK;
+		}
+		~rw()
+		{
+			assert(IO==nullptr); //maybe_closeIO();
+
+			if(img!=nullptr) img->atomize(); //HINT
+		}
+	};
 	struct io : daeIO 
-	{				 
-		struct rw : daeIOSecond<>
-		{
-			cde *e; 						
-			int e_overflowed;
-			daeIO *IO;
-			daeIORequest req;			
-			rw(daeIO *IO=nullptr)
-			:e(),e_overflowed(-1),IO(IO) //piggybackI
-			{}
-			rw(const trio &p):daeIOSecond(req)
-			,e(p.third),e_overflowed(-1),IO()
-			,req(e==nullptr?nullptr:&p.second->getArchive())
-			{
-				#ifdef NDEBUG
-				#error ASSUMING remoteURI is localURI?
-				#endif				
-				if(!req.isEmptyRequest())
-				req.remoteURI = &p.second->getDocURI();					
-			}
-			~rw()
-			{ 
-				if(!req.isEmptyRequest()) 
-				req.scope->getIOController().closeIO(IO);
-			}
-			void maybe_openIO(daeIOPlugin &I, daeIOPlugin &O)
-			{
-				if(!req.isEmptyRequest())
-				IO = req.scope->getIOController().openIO(I,O);
-			}
-		}r,w; daeIOEmpty _;
-		daeOK OK; size_t lock;
+	{	
+		rw r,w; 
+		daeStringI _stringI;
+		daeIOEmpty _emptyIO;
+		daeOK OK; size_t lock;		
 		io(const std::pair<trio,trio> &IO)
-		:r(IO.first),w(IO.second),lock(-1)
+		:r(IO.first),w(IO.second)
+		,_stringI(r.req.string),lock(-1)
 		{
-			r.maybe_openIO(r,_); w.maybe_openIO(_,w);		
+			if(!_stringI.empty())	
+			{
+				r.IO = &_stringI;
+			}
+			else r.maybe_openIO(r,_emptyIO);
+			
+			w.maybe_openIO(_emptyIO,w);
 		} 		
 		io(std::pair<daeIO*,cde*> I):r(I.first),lock(-1)
 		{
@@ -218,176 +267,177 @@ COLLADA_(public) //I/O
 
 		//daeIO methods//////////////////////////
 
-		virtual daeError getError()
-		{
-			return OK;  
-		}
+		virtual daeError getError(){ return OK; }
+		virtual daeOK readIn(void*,size_t);
+		virtual daeOK writeOut(const void*,size_t);
 		virtual size_t getLock(Range *I, Range *O)
 		{
-			if(OK==DAE_OK&&lock==size_t(-1))
+			if(OK!=DAE_OK||lock!=size_t(-1))
+			return lock;				
+			lock = 0;
+			if(r.e!=nullptr) //IIIIIIIIIIIIIIIIIIIII
 			{	
-				lock = 0;
-				if(r.e!=nullptr)
-				{	
-					enum{extraN=64};
-					int est = r.e->dsize+30+strlen(r.e->path)+extraN;
-					Range dI = {r.e->lhpos,r.e->lhpos+est};
-					r.IO->setRange(&dI,nullptr);
-					char buf[4096]; 
-					if(!r.IO->readIn(buf,30))
-					{
-						OK = DAE_ERR_BACKEND_IO;
-						return 0;
-					}
-									  					
-					//Read to end of ZIP's headers.
-					int gpbits = BigEndian<16,unsigned short>(buf+6);
-					int method = BigEndian<16,unsigned short>(buf+8);
-					int rem = BigEndian<16,unsigned short>(buf+26);
-					int extra = BigEndian<16,unsigned short>(buf+28);
-					rem+=extra; assert(extra<=extraN);
-					if((unsigned)est<30+rem+r.e->dsize) //HACK?
-					{
-						//The estimate was inadequate.
-						//HACK: Assuming not interested in Extra field.
-						dI.first+=30+rem;
-						dI.second = dI.first+r.e->dsize;
-						r.IO->setRange(&dI,nullptr);						
-						daeEH::Warning<<"daeZAEPlugin's Extra data allotment ("<<+extraN<<") is inadequate. Resetting download range. Extra was "<<extra;
-					}
-					else for(size_t rd;rem!=0;r.IO->readIn(buf,rd),rem-=rd)
-					rd = std::min<int>(rem,sizeof(buf));
+				//ext is if reading from the back of 
+				//the headers. est is estimated size.
+				size_t ext,est; if(I==nullptr)
+				{
+					ext = r.e->dsize;
+				}
+				else if(0==I->first)
+				{
+					ext = std::min(r.e->dsize,I->second);
+					I->second = ext;
+				}
+				else ext = 0; enum{extraN=64};
+				est = ext+30+strlen(r.e->path)+extraN;
 					
-					if(OK=r.IO->getError()) switch(method)
-					{
-					default:
+				Range dI = {0,est};
+				dI.offset(r.e->lhpos);
+				r.IO->setRange(&dI,nullptr);
+				char buf[4096]; 
+				if(!r.IO->readIn(buf,30))
+				{
+					OK = DAE_ERR_BACKEND_IO;
+					return 0;
+				}
+									  					
+				//Read to end of ZIP's headers.
+				int gpbits = BigEndian<16,unsigned short>(buf+6);
+				int method = BigEndian<16,unsigned short>(buf+8);
+				int rem = BigEndian<16,unsigned short>(buf+26);
+				int extra = BigEndian<16,unsigned short>(buf+28);
+				rem+=extra; assert(extra<=extraN);
+				int reset = r.offset = 30+rem;
+
+				if(ext!=0) if(est<reset+ext) //HACK?
+				{
+					//The estimate was inadequate.
+					//HACK: Assuming not interested in Extra field.
+					dI.first+=reset;
+					dI.second = dI.first+ext;
+					r.IO->setRange(&dI,nullptr);						
+					daeEH::Warning<<"daeZAEPlugin's Extra data allotment ("<<+extraN<<") is inadequate. Resetting download range. Extra was "<<extra;
+				}
+				else for(size_t rd;rem!=0;r.IO->readIn(buf,rd),rem-=rd)
+				{
+					rd = std::min<int>(rem,sizeof(buf));
+				}
+					
+				if(OK=r.IO->getError()) switch(method)
+				{
+				default:
 							
-						daeEH::Error<<"ZIP decompression method ("<<method<<") is unsupported.";
+					daeEH::Error<<"ZIP decompression method ("<<method<<") is unsupported.";
 							
-						OK = DAE_ERR_NOT_IMPLEMENTED; break;
+					OK = DAE_ERR_NOT_IMPLEMENTED; break;
 
-					case 8: r.e_overflowed = 0;
+				case 8: r.e_overflowed = 0;
 
-						gz = zae->gz_stack.pop(r.e->dsize); //break;
+					gz = zae->gz_stack.pop(r.e->dsize); //break;
 
-					case 0: lock = r.e->isize; break;
-					}						
-
-					//This can be optimized if not compressed/encrypted.
-					if(I!=nullptr)
-					{
-						I->limit_to_size(lock);	
-						//HACK? Must read ahead.
-						rem = I->first;
-						for(size_t rd;rem!=0;r.IO->readIn(buf,rd),rem-=rd)
-						rd = std::min<int>(rem,sizeof(buf));
-					}
-				}
-				else if(r.IO!=nullptr) //Pass-thru?
+				case 0: lock = r.e->isize; break;
+				}						
+				if(ext==0) setRange(I,nullptr);
+			}
+			else if(r.img!=nullptr)
+			{
+				if(r.img->getIsDeleted())
 				{
-					lock = r.IO->getLock(I,nullptr);
+					OK = DAE_ERR_BACKEND_IO; //Or???
+					daeEH::Warning<<"Reading deletion from atlas ("<<r.img->getName()<<")";
 				}
-				if(w.e!=nullptr)
-				{
-					assert(O==nullptr); //incomplete
+				else lock = r.img->size();
 
-					#ifdef NDEBUG
-					#error incomplete
-					#endif
-				}
-				else if(w.IO!=nullptr) //Pass-thru?
-				{
-					w.IO->getLock(nullptr,O);
-				}
+				if(I!=nullptr) setRange(I,nullptr);
+			}
+			else if(r.IO!=nullptr) //Pass-thru?
+			{
+				lock = r.IO->getLock(I,nullptr);
+			}
+			if(w.e!=nullptr) //OOOOOOOOOOOOOOOOOOOOO
+			{
+				assert(O==nullptr); //incomplete
+
+				#ifdef NDEBUG
+				#error incomplete
+				#endif
+				OK = DAE_ERR_NOT_IMPLEMENTED;
+			}
+			else if(w.IO!=nullptr) //Pass-thru?
+			{
+				w.IO->getLock(nullptr,O);
 			}
 			return lock;
 		}
 		virtual size_t setRange(Range *rngI, Range *rngO)
 		{
 			if(lock==size_t(-1)) return getLock(rngI,rngO);
-
-			//Reminder: Must advance the GZ buffer.
-			#ifdef NDEBUG
-			#error incomplete
-			#endif
-			assert(0);
-			OK = DAE_ERR_NOT_IMPLEMENTED; return 0;
-		}
-		virtual daeOK readIn(void *in, size_t chars)
-		{
-			bool z = r.e_overflowed>-1;
-			if(z&&!gz->empty()) inflated:
+			
+			if(rngI!=nullptr) 
 			{
-				size_t cp = gz->size()-r.e_overflowed;
-				if(cp!=0)
-				{
-					cp = std::min<size_t>(chars,cp);
-					memcpy(in,(char*)*gz+r.e_overflowed,cp); 
-					r.e_overflowed+=(int)cp;								
-					(char*&)in+=cp;
-					chars-=cp; 					
+				rngI->limit_to_size(lock);
+				bool stored = 0>r.e_overflowed;
+				bool partial = 0!=rngI->first||lock!=rngI->second;
+				if(!stored&&partial)
+				{					
+					//Making a random-access copy.
+					size_t i;
+					if(!zae->findImage(r.e->path,i))
+					if(!r.cpy_image(*zae,i,this))
+					{
+						OK = DAE_ERR_BACKEND_IO;
+						rngI->limit_to_size(0);
+						return lock;
+					}
 				}
-				if(r.e_overflowed==(int)gz->size())
+				if(r.img!=nullptr) //Image?
 				{
-					r.e_overflowed = 0;
-					gz->clear();
+					r.offset = rngI->first;
 				}
-
-				if(0==chars) return OK;
+				else //Not partial or uncompressed?
+				{
+					daeIO::Range dI = {r.offset+rngI->first};
+					dI.second = stored?r.offset+rngI->second:r.e->dsize;
+					dI.offset(r.e->lhpos);
+					r.IO->setRange(&dI,nullptr);
+				}
+			}
+			if(rngO!=nullptr)
+			{
+				OK = DAE_ERR_NOT_IMPLEMENTED; assert(0);
+				rngO->limit_to_size(0); 
 			}
 
-			char *buf = (char*)in, underflow[512];
-			size_t charz = chars; if(z)
-			{
-				//This is just to keep the output buffer
-				//from being very large when reading in 
-				//an entire file. Maybe it should depend
-				//on the ratio of dsize and isize.
-				charz = std::min<size_t>(charz,4*4096);
-
-				charz = std::max(charz,sizeof(underflow));				
-				charz = std::min(charz,gz->getRemaining());				
-				if(charz>chars) buf = underflow;
-			}
-
-			if(OK) 
-			if(OK=r.IO->readIn(buf,charz))
-			if(z)
-			{
-				if(0==gz->inflate(buf,charz))
-				{
-					OK = gz->getError();				
-				}
-				else goto inflated;
-			}
-
-			return OK;			
-		}
-		virtual daeOK writeOut(const void *out, size_t chars)
-		{
-			#ifdef NDEBUG
-			#error incomplete
-			#endif
-			assert(0);
-			OK = DAE_ERR_NOT_IMPLEMENTED; return 0;
-		}
+			return lock;
+		}		
 
 		//daeIOController methods ////////
 		
 		daeSmartRef<daeZAE> zae; daeGZ *gz;
-
+									
 		io *set_zae(daeZAE *ioc)
 		{
 			zae = ioc; gz = nullptr; return this;
 		}
 
 		~io(){ if(gz!=nullptr) zae->gz_stack.push(gz); }
+
+		daeOK close(daeOK cancel)
+		{
+			//Reminder: It's important to close the read
+			//file first so its write-lock doesn't block
+			//self-overwriting operations.
+			daeOK rOK = r.maybe_closeIO(cancel);
+			daeOK wOK = w.maybe_closeIO(cancel);
+			return OK?wOK?rOK:wOK:OK;
+		}
 	};
 
 COLLADA_(public) //daeIOController methods
 	
-	daeIOController::Stack<io> io_stack;
-	daeIOController::Stack<daeGZ> gz_stack;
+	//static just to reduce outstanding memory.
+	static daeIOController::Stack<io> io_stack;
+	static daeIOController::Stack<daeGZ> gz_stack;
 
 	/**PURE-OVERRIDE */
 	daeIO *openIO(daeIOPlugin &I, daeIOPlugin &O)
@@ -395,16 +445,21 @@ COLLADA_(public) //daeIOController methods
 		return io_stack.pop(std::make_pair(trio(&I,this),trio(&O,this)))->set_zae(this);
 	}
 	/**PURE-OVERRIDE */
-	void closeIO(daeIO *IO){ io_stack.push(IO); }
+	daeOK closeIO(daeIO *IO, daeOK cancel)
+	{
+		daeOK OK = ((io*)IO)->close(cancel); io_stack.push(IO); return OK;
+	}
 
 COLLADA_(public) //INTERNAL
 
-	inline daeIO *piggybackI(daeIO &IO, daeString path)
+	inline daeIO *piggybackI(daeIO &IO, daeName path)
 	{
-		cde *e = find(path);
+		cde *e = cde_cast(name(path));
 		return e==nullptr?nullptr:io_stack.pop(std::make_pair(&IO,e))->set_zae(this);
 	}
 };
+daeZAE::Stack<daeZAE::io> daeZAE::io_stack;
+daeZAE::Stack<daeGZ> daeZAE::gz_stack;
 
 daeError daeZAE::maybe_init(daeIO &IO)
 {
@@ -480,21 +535,32 @@ daeError daeZAE::_init_central_directory(daeIO *IO, char *buf, int bufN, int rem
 		
 		short_cd: cdp = buf; eob = buf+bufN; for(;cdp+46<eob;)
 		{
-			assert((0x02014b50==BigEndian<32,unsigned int>(cdp)));
+			assert((0x02014b50==BigEndian<32,int>(cdp)));			
+			short gpbits = BigEndian<16,short>(cdp+8); 
+			short method = BigEndian<16,short>(cdp+10);
+			if(8!=method&&0!=method)
+			{
+				daeEH::Error<<"Unsupported ZIP encoding: "<<method;
+				goto error;
+			}
 
-			int pathlen = BigEndian<16,unsigned short>(cdp+28);
+			short pathlen = BigEndian<16,short>(cdp+28);
 			if(cdp+46+pathlen>eob) break;
 
 			int eN = sizeof(cde)+pathlen;
 			if(A._nexT->path+pathlen>=A._end)
 			A._reserve(std::max(eN,A._reserveN()));
-			cde &e = *A._nexT; A._nexT+=eN;
-
-			//dsize will include the local-header's size.
+			cde &e = *A._nexT; A._nexT+=eN;			
+			
+			e.dcode = 0x7F&method;
+			e.mtime = BigEndian<32,unsigned int>(cdp+12);
 			e.dsize = BigEndian<32,unsigned int>(cdp+20);
 			e.isize = BigEndian<32,unsigned int>(cdp+24);
-			e.lhpos = BigEndian<32,unsigned int>(cdp+42); 
-			//TODO? IBM437 to UTF8.
+			e.lhpos = BigEndian<32,unsigned int>(cdp+42);
+			if(0==(gpbits&0x400))
+			{
+				//TODO? IBM437 to UTF8.
+			}
 			memcpy(e.path,cdp+46,pathlen);
 			e.path[pathlen] = '\0';
 
@@ -507,23 +573,27 @@ daeError daeZAE::_init_central_directory(daeIO *IO, char *buf, int bufN, int rem
 	}while(rem>0); std::sort(CD.begin(),CD.end(),cde::less);
 
 	return IO!=nullptr?IO->getError():DAE_OK;
+
+	error: CD.clear(); return DAE_ERROR;
 }
 
 daeOK daeZAEPlugin::addDoc(daeDocRef &add, daeMeta *rootmeta)
 {	
-	daeZAE *zae = new daeZAE();
+	const daeIORequest &req = getRequest();
+
+	daeZAE *zae = new daeZAE(req);
 	zae->__DAEP__Object__unembed();
-	daeArchiveRef out(*getRequest().getDOM());		
+	daeArchiveRef out(*req.getDOM());		
 	out->_getAtlas() = zae;
 
 	//This is not pretty. Basically, assuming the caller means
 	//to open the index document as daeArchive::_read2 does it.
 	if(rootmeta!=nullptr
-	&&getRequest().localURI!=nullptr
-	&&getRequest().localURI->getURI_extensionIs("zae"))
+	&&req.localURI!=nullptr
+	&&req.localURI->getURI_extensionIs("zae"))
 	{
 		//This branch continues to daeZAEPlugin::readContent().
-		out->getDocURI() = *getRequest().localURI;
+		out->getDocURI() = *req.localURI;
 		out->setDocument(out->newDoc("dae_root"));
 	}
 	else //HACK: Open any ZIP without dae_root or manifest.xml?
@@ -535,8 +605,11 @@ daeOK daeZAEPlugin::addDoc(daeDocRef &add, daeMeta *rootmeta)
 		//This is what _read2 would do, but there isn't an API
 		//that is analogous to daeIOPlugin::readContent.
 		daeIOEmpty O;
-		daeRAII::CloseIO RAII(getRequest().scope->getIOController()); //emits error	
-		daeIO *IO = RAII = RAII.p.openIO(*this,O);
+		daeRAII::CloseIO RAII(req.scope->getIOController()); //emits error	
+		daeStringI strI(req.string);
+		daeIO *IO = nullptr;
+		if(strI.empty()) IO = RAII = RAII.p.openIO(*this,O);
+		else IO = &strI;
 		if(IO==nullptr)
 		return DAE_ERR_BACKEND_IO;
 		daeOK OK = zae->maybe_init(*IO);
@@ -623,640 +696,114 @@ daeOK daeZAEPlugin::readContent(daeIO &IO, daeContents &content)
 	return OK;
 }
 
-daeOK daeZAEPlugin::writeContent(daeIO &IO, const daeContents &content)
+/**
+ * This is used when a compressed subimage is accessed in its middle.
+ * Mainly this is for nested ZIP files since they are read from back 
+ * to front; and it doesn't seem that DEFLATE can jump to the middle.
+ */
+struct daeZAE_inflated : daeImage
 {
-	#ifdef NDEBUG
-	#error incomplete
-	#endif
-	assert(0);
-	return DAE_ERR_BACKEND_IO; 
-}
-
-
-
-//// GZ //// GZ //// GZ //// GZ //// GZ //// GZ //// GZ ////
-
-
-
-//https://github.com/uroni/miniz/blob/master/miniz_tinfl.c
-//(changes made for readability/maintainability)
-//REMINDER: MAY NEED TO SUPPORT CRC-32 CHECKSUMS
-/**************************************************************************
- *
- * Copyright 2013-2014 RAD Game Tools and Valve Software
- * Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
- * All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *
- **************************************************************************/
-namespace //SCHEDULED FOR REMOVAL?
-{
-//Reminder: This is how Miniz defines these types ca. 2017.
-typedef unsigned char /*mz_*/uint8_t;
-typedef signed short /*mz_*/int16_t;
-typedef unsigned short /*mz_*/uint16_t;
-typedef unsigned int /*mz_*/uint32_t;
-typedef long long /*mz_*/int64_t;
-typedef unsigned long long /*mz_*/uint64_t;
-static daeCTC<CHAR_BIT==8> _uint8_check;
-static daeCTC<sizeof(uint16_t)*CHAR_BIT==16> _uint16_check;
-static daeCTC<sizeof(uint32_t)*CHAR_BIT==32> _uint32_check;
-#define TINFL_BITBUF_SIZE 32
-typedef uint32_t tinfl_bit_buf_t; //uint64_t
-}
-enum // Internal/private bits
-{
-  TINFL_MAX_HUFF_TABLES = 3, 
-  TINFL_MAX_HUFF_SYMBOLS_0 = 288,
-  TINFL_MAX_HUFF_SYMBOLS_1 = 32,
-  TINFL_MAX_HUFF_SYMBOLS_2 = 19,
-  TINFL_FAST_LOOKUP_BITS = 10, 
-  TINFL_FAST_LOOKUP_SIZE = 1 << TINFL_FAST_LOOKUP_BITS,
-};
-typedef struct _tinfl_huff_table //compiler
-{
-	uint8_t m_code_size[TINFL_MAX_HUFF_SYMBOLS_0];
-	int16_t m_look_up[TINFL_FAST_LOOKUP_SIZE], m_tree[TINFL_MAX_HUFF_SYMBOLS_0*2];
-
-}tinfl_huff_table;
-typedef struct _tinfl_decompressor //compiler
-{
-	//daeGZ
-	//Miniz houses this and the dictionary separate from the decompressor, but I can't see
-	//how the structures are separate when using TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF
-	//mode. If all input is available and output fills the dictionary flush, then it can
-	//be independent. But COLLADA-DOM doesn't have that luxury.
-	struct
-	{
-		unsigned short wrapping_output_buf;
-
-	}ext;
-
-	uint32_t m_state, m_num_bits, m_zhdr0, m_zhdr1, m_z_adler32, m_final, m_type,
-	m_check_adler32, m_dist, m_counter, m_num_extra, m_table_sizes[TINFL_MAX_HUFF_TABLES];
-
-	tinfl_bit_buf_t m_bit_buf;
-	size_t m_dist_from_out_buf_start;
-	tinfl_huff_table m_tables[TINFL_MAX_HUFF_TABLES];
-	uint8_t m_raw_header[4], m_len_codes[TINFL_MAX_HUFF_SYMBOLS_0+TINFL_MAX_HUFF_SYMBOLS_1+137];
-
-}tinfl_decompressor;
-enum 
-{	
-	//If set, the input has a valid zlib header and ends with an adler32 checksum (it's a valid zlib stream). Otherwise, the input is a raw deflate stream.	
-	//TINFL_FLAG_PARSE_ZLIB_HEADER = 1,
-	//If set, there are more input bytes available beyond the end of the supplied input buffer. If clear, the input buffer contains all remaining input.
-	TINFL_FLAG_HAS_MORE_INPUT = 2,
-	//If set, the output buffer is large enough to hold the entire decompressed stream. If clear, the output buffer is at least the size of the dictionary (typically 32KB).
-	TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF = 4,	
-	//TINFL_FLAG_COMPUTE_ADLER32 = 8,	
-	//Force adler-32 checksum computation of the decompressed bytes.
-};
-typedef enum _tinfl_status //compiler
-{
-	TINFL_STATUS_FAILED_CANNOT_MAKE_PROGRESS = -4,
-	TINFL_STATUS_BAD_PARAM = -3,
-	TINFL_STATUS_ADLER32_MISMATCH = -2,
-	TINFL_STATUS_FAILED = -1,
-	TINFL_STATUS_DONE = 0,
-	TINFL_STATUS_NEEDS_MORE_INPUT = 1,
-	TINFL_STATUS_HAS_MORE_OUTPUT = 2
-
-}tinfl_status;
-static tinfl_status tinfl_decompress(tinfl_decompressor *r, 
-const uint8_t*pIn_buf_next,size_t*pIn_buf_size,uint8_t*pOut_buf_start,uint8_t*pOut_buf_next,size_t*pOut_buf_size, 
-const uint32_t decomp_flags)
-{
-	tinfl_status status = TINFL_STATUS_FAILED; //out
-
-	static const int s_length_base[31] = 
-	{ 3,4,5,6,7,8,9,10,11,13, 15,17,19,23,27,31,35,43,51,59, 67,83,99,115,131,163,195,227,258,0,0 };
-	static const int s_length_extra[31] = 
-	{ 0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0,0,0 };
-	static const int s_dist_base[32] = 
-	{ 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193, 257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577,0,0};
-	static const int s_dist_extra[32] = 
-	{ 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
-	static const uint8_t s_length_dezigzag[19] = 
-	{ 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15 };
-	static const int s_min_table_sizes[3] = { 257,1,4 };
+	mutable daeZAE_vec _data; //std::deque<char>
 		
-	uint32_t num_bits, dist, counter, num_extra; tinfl_bit_buf_t bit_buf;	
-	const uint8_t *pIn_buf_cur = pIn_buf_next, *const pIn_buf_end = pIn_buf_next+*pIn_buf_size;
-	uint8_t *pOut_buf_cur = pOut_buf_next, *const pOut_buf_end = pOut_buf_next+*pOut_buf_size; 
-	size_t out_buf_size_mask = decomp_flags&TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF?size_t(-1):((pOut_buf_next-pOut_buf_start)+*pOut_buf_size)-1;
-	size_t dist_from_out_buf_start;
-
-	//Ensure the output buffer's size is a power of 2, unless the output buffer is large enough to hold the entire output file (in which case it doesn't matter).
-	if((out_buf_size_mask+1)&out_buf_size_mask||pOut_buf_next<pOut_buf_start){ *pIn_buf_size = *pOut_buf_size = 0; return TINFL_STATUS_BAD_PARAM; }
-
-	num_bits = r->m_num_bits; bit_buf = r->m_bit_buf; dist = r->m_dist; counter = r->m_counter; num_extra = r->m_num_extra; 
-	dist_from_out_buf_start = r->m_dist_from_out_buf_start;
-	
-	#define TINFL_CR_BEGIN switch(r->m_state){ default: assert(0); case 0:
-	#define TINFL_CR_RETURN(state_index,result) \
-	{ status = result; r->m_state = state_index; goto common_exit; case state_index:; }
-	#define TINFL_CR_RETURN_FOREVER(state_index,result) \
-	for(;;){ TINFL_CR_RETURN(state_index,result); }
-	#define TINFL_CR_FINISH } 	
-	#define TINFL_GET_BYTE(state_index,c)\
-	{\
-		while(pIn_buf_cur>=pIn_buf_end)\
-		TINFL_CR_RETURN(state_index,decomp_flags&TINFL_FLAG_HAS_MORE_INPUT?TINFL_STATUS_NEEDS_MORE_INPUT:TINFL_STATUS_FAILED_CANNOT_MAKE_PROGRESS)\
-		c = *pIn_buf_cur++;\
-	}
-	#define TINFL_NEED_BITS(state_index,n) \
-	do{ unsigned c; TINFL_GET_BYTE(state_index,c); bit_buf|=tinfl_bit_buf_t(c)<<num_bits; num_bits+=8;\
-	}while(num_bits<unsigned(n));
-	#define TINFL_SKIP_BITS(state_index,n) \
-	{ if(num_bits<unsigned(n)) TINFL_NEED_BITS(state_index,n) bit_buf>>=(n); num_bits-=(n); }
-	#define TINFL_GET_BITS(state_index,b,n) \
-	{ if(num_bits<unsigned(n)) TINFL_NEED_BITS(state_index,n) b = bit_buf&((1<<(n))-1); bit_buf>>=(n); num_bits-=(n); } 
-	//TINFL_HUFF_BITBUF_FILL() is only used rarely, when the number of bytes remaining in the input buffer falls below 2.
-	//It reads just enough bytes from the input stream that are needed to decode the next Huffman code (and absolutely no more). It works by trying to fully decode a
-	//Huffman code by using whatever bits are currently present in the bit buffer. If this fails, it reads another byte, and tries again until it succeeds or until the
-	//bit buffer contains >=15 bits (deflate's max. Huffman code size).
-	#define TINFL_HUFF_BITBUF_FILL(state_index,pHuff) \
-	do{\
-		temp = (pHuff)->m_look_up[bit_buf&(TINFL_FAST_LOOKUP_SIZE-1)]; \
-		if(temp>=0)\
-		{\
-			code_len = temp>>9;\
-			if(code_len&&num_bits>=code_len) break; \
-		}\
-		else if(num_bits>TINFL_FAST_LOOKUP_BITS)\
-		{\
-			code_len = TINFL_FAST_LOOKUP_BITS;\
-			do{ temp = (pHuff)->m_tree[~temp+((bit_buf>>code_len++)&1)];\
-			}while(temp<0&&num_bits>=code_len+1);\
-			if(temp>=0) break;\
-		}\
-		TINFL_GET_BYTE(state_index,c)\
-		bit_buf|=tinfl_bit_buf_t(c)<<num_bits;\
-		num_bits+=8;\
-	}while(num_bits<15);
-	//TINFL_HUFF_DECODE() decodes the next Huffman coded symbol. It's more complex than you would initially expect because the zlib API expects the decompressor to never read
-	//beyond the final byte of the deflate stream. (In other words, when this macro wants to read another byte from the input, it REALLY needs another byte in order to fully
-	//decode the next Huffman code.) Handling this properly is particularly important on raw deflate (non-zlib) streams, which aren't followed by a byte aligned adler-32.
-	//The slow path is only executed at the very end of the input buffer.
-	#define TINFL_HUFF_DECODE(state_index,sym,pHuff) \
-	{\
-		int temp; unsigned code_len, c;\
-		if(num_bits<15)\
-		if(pIn_buf_end-pIn_buf_cur>=2)\
-		{\
-			bit_buf|=((tinfl_bit_buf_t)pIn_buf_cur[0]<<num_bits)|((tinfl_bit_buf_t)pIn_buf_cur[1]<<num_bits+8);\
-			pIn_buf_cur+=2; num_bits+=16;\
-		}\
-		else TINFL_HUFF_BITBUF_FILL(state_index,pHuff)\
-		temp = (pHuff)->m_look_up[bit_buf&(TINFL_FAST_LOOKUP_SIZE-1)];\
-		if(temp<0)\
-		{\
-			code_len = TINFL_FAST_LOOKUP_BITS;\
-			do{ temp = (pHuff)->m_tree[~temp+((bit_buf>>code_len++)&1)];\
-			}while(temp<0);\
-		}\
-		else{ code_len = temp>>9; temp&=511; }\
-		sym = temp;\
-		bit_buf>>=code_len;	num_bits-=code_len;\
-	}
-	#define TINFL_ZERO_MEM(obj) memset(&(obj),0,sizeof(obj));
-	#if 1 //MINIZ_USE_UNALIGNED_LOADS_AND_STORES && MINIZ_LITTLE_ENDIAN
-	#define TINFL_READ_LE16(p) *((const uint16_t*)(p))
-	#define TINFL_READ_LE32(p) *((const uint32_t*)(p))
-	#else
-	#define TINFL_READ_LE16(p) ((uint32_t)(((const uint8_t*)(p))[0])|((uint32_t)(((const uint8_t*)(p))[1])<<8U))
-	#define TINFL_READ_LE32(p) ((uint32_t)(((const uint8_t*)(p))[0])|((uint32_t)(((const uint8_t*)(p))[1])<<8U)|\
-					           ((uint32_t)(((const uint8_t*)(p))[2])<<16U)|\
-							   ((uint32_t)(((const uint8_t*)(p))[3])<<24U))
-	#endif
-	TINFL_CR_BEGIN //switch(r->m_state){ case 0:
-	//
-	bit_buf = num_bits = dist = counter = 0;
-	num_extra = r->m_zhdr0 = r->m_zhdr1 = 0; 
-	r->m_z_adler32 = r->m_check_adler32 = 1;
-	//
-	/*if(0!=(decomp_flags&TINFL_FLAG_PARSE_ZLIB_HEADER))
+	virtual size_t data(const void *in, daeIO::Range *r1, daeIO::Range *r2)const
 	{
-		TINFL_GET_BYTE(1,r->m_zhdr0); TINFL_GET_BYTE(2,r->m_zhdr1)
-		counter = (r->m_zhdr0*256+r->m_zhdr1)%31!=0||(r->m_zhdr1&32)!=0||(r->m_zhdr0&15)!=8?1:0;
-		if(0==(decomp_flags&TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF)) 
-		counter|=1U<<8U+(r->m_zhdr0>>4)>32768U||out_buf_size_mask+1<size_t(1U<<8U+(r->m_zhdr0>>4));
-		if(counter) TINFL_CR_RETURN_FOREVER(36,TINFL_STATUS_FAILED)
-	}*/
-	do
-	{	TINFL_GET_BITS(3,r->m_final,3); 
-		r->m_type = r->m_final>>1;
-		if(r->m_type==0)
+		daeZAE_vec::iterator it = _data.begin();
+
+		if(r2!=nullptr) //Read or Erase?
 		{
-			TINFL_SKIP_BITS(5,num_bits&7)
-			for(counter=0;counter<4;++counter) 
+			if(in!=nullptr&&r1==nullptr) //Read?
 			{
-				if(num_bits) 
-					TINFL_GET_BITS(6,r->m_raw_header[counter],8) 
-				else TINFL_GET_BYTE(7,r->m_raw_header[counter]) 
+				//COLLADA_SUPPRESS_C(4996)
+				std::copy(it+r2->first,it+r2->second,(char*)in);
+				return _data.size();
 			}
-
-			counter = r->m_raw_header[0]|(r->m_raw_header[1]<<8);
-			if(counter!=(unsigned)(0xFFFF^(r->m_raw_header[2]|(r->m_raw_header[3]<<8)))) 
-			TINFL_CR_RETURN_FOREVER(39,TINFL_STATUS_FAILED)
-
-			while(counter&&num_bits)
-			{
-				TINFL_GET_BITS(51,dist,8)
-				while(pOut_buf_cur>=pOut_buf_end)
-				TINFL_CR_RETURN(52,TINFL_STATUS_HAS_MORE_OUTPUT)
-				*pOut_buf_cur++ = (uint8_t)dist;
-				counter--;
-			}
-
-			while(counter)
-			{
-				while(pOut_buf_cur>=pOut_buf_end)
-				TINFL_CR_RETURN(9,TINFL_STATUS_HAS_MORE_OUTPUT)
-
-				while(pIn_buf_cur>=pIn_buf_end)
-				TINFL_CR_RETURN(38,decomp_flags&TINFL_FLAG_HAS_MORE_INPUT?TINFL_STATUS_NEEDS_MORE_INPUT:TINFL_STATUS_FAILED_CANNOT_MAKE_PROGRESS)				
-
-				size_t n = std::min(counter,std::min<size_t>(pOut_buf_end-pOut_buf_cur,pIn_buf_end-pIn_buf_cur));
-				memcpy(pOut_buf_cur,pIn_buf_cur,n);				
-				pIn_buf_cur+=n; pOut_buf_cur+=n; 
-				counter-=(unsigned)n;
-			}
+			_data.erase(it+r2->first,it+r2->second);
 		}
-		else if(r->m_type==3)
+
+		if(r1!=nullptr) if(in!=nullptr) //Insert?
 		{
-			TINFL_CR_RETURN_FOREVER(10,TINFL_STATUS_FAILED)
+			_data.insert(it+r1->first,(char*)in,(char*)in+r1->size());
 		}
-		else
-		{
-			if(r->m_type==1)
-			{
-				uint8_t *p = r->m_tables[0].m_code_size; 
-				r->m_table_sizes[0] = 288; r->m_table_sizes[1] = 32; 
-				memset(r->m_tables[1].m_code_size,5,32); 
-				unsigned i=0;
-				for(;i<=143;++i) *p++ = 8; 
-				for(;i<=255;++i) *p++ = 9;
-				for(;i<=279;++i) *p++ = 7; 
-				for(;i<=287;++i) *p++ = 8;
-			}
-			else
-			{
-				for(counter=0;counter<3;counter++)
-				{ 
-					TINFL_GET_BITS(11,r->m_table_sizes[counter],"\05\05\04"[counter])
-					r->m_table_sizes[counter]+=s_min_table_sizes[counter]; 
-				}
-				TINFL_ZERO_MEM(r->m_tables[2].m_code_size)
-				for(counter=0;counter<r->m_table_sizes[2];counter++) 
-				{
-					unsigned s; TINFL_GET_BITS(14,s,3)
-					r->m_tables[2].m_code_size[s_length_dezigzag[counter]] = (uint8_t)s; 
-				}
-				r->m_table_sizes[2] = 19;
-			}
+		else _data.insert(it+r1->first,r1->size(),0); return _data.size();
+	}
 
-			for(;(int)r->m_type>=0;r->m_type--)
-			{					
-				tinfl_huff_table *pTable;
-				pTable = &r->m_tables[r->m_type]; //C2360
-				TINFL_ZERO_MEM(pTable->m_look_up) TINFL_ZERO_MEM(pTable->m_tree)
-				unsigned i,used_syms,total,sym_index,next_code[17],total_syms[16];
-				TINFL_ZERO_MEM(total_syms)
-				for(i=0;i<r->m_table_sizes[r->m_type];i++) 
-				total_syms[pTable->m_code_size[i]]++;
-				used_syms = total = next_code[0] = next_code[1] = 0;
-				for(i=1;i<=15;used_syms+=total_syms[i++]) 
-				next_code[i+1] = total = total+total_syms[i]<<1; 
-				if(65536!=total&&used_syms>1)
-				TINFL_CR_RETURN_FOREVER(35,TINFL_STATUS_FAILED)
-				
-				int tree_next, tree_cur; 
-				for(tree_next=-1,sym_index=0;sym_index<r->m_table_sizes[r->m_type];sym_index++)
-				{
-					unsigned rev_code = 0, l, cur_code;
-					unsigned code_size = pTable->m_code_size[sym_index]; 
-					if(!code_size) continue;
-					cur_code = next_code[code_size]++; 
-					for(l=code_size;l>0;l--,cur_code>>=1) 
-					rev_code = (rev_code<<1)|(cur_code&1);
-					if(code_size <= TINFL_FAST_LOOKUP_BITS)
-					{
-						int16_t k = (int16_t)((code_size<<9)|sym_index); 
-						while(rev_code<TINFL_FAST_LOOKUP_SIZE)
-						{
-							pTable->m_look_up[rev_code] = k; rev_code+=(1<<code_size); 
-						} 
-						continue; 
-					}
-					tree_cur = pTable->m_look_up[rev_code&(TINFL_FAST_LOOKUP_SIZE-1)];
-					if(tree_cur==0)
-					{
-						pTable->m_look_up[rev_code&(TINFL_FAST_LOOKUP_SIZE-1)] = (int16_t)tree_next;
-						tree_cur = tree_next; tree_next-=2; 
-					}
-					rev_code>>=(TINFL_FAST_LOOKUP_BITS-1);
-					for(unsigned j=code_size;j>(TINFL_FAST_LOOKUP_BITS+1);j--)
-					{
-						tree_cur-=((rev_code>>=1)&1);
-						if(!pTable->m_tree[-tree_cur-1])
-						{ 
-							pTable->m_tree[-tree_cur-1] = (int16_t)tree_next;
-							tree_cur = tree_next; tree_next-=2;
-						}
-						else tree_cur = pTable->m_tree[-tree_cur-1];
-					}
-					tree_cur-=(rev_code>>=1)&1;
-					pTable->m_tree[-tree_cur-1] = (int16_t)sym_index;
-				}
-				if(r->m_type==2)
-				{
-					for(counter=0;counter<r->m_table_sizes[0]+r->m_table_sizes[1];)
-					{
-						TINFL_HUFF_DECODE(16,dist,&r->m_tables[2])
-						if(dist<16)
-						{
-							r->m_len_codes[counter++] = (uint8_t)dist; 
-							continue; 
-						}
-						if(dist==16&&0==counter)
-						TINFL_CR_RETURN_FOREVER(17,TINFL_STATUS_FAILED)
-						unsigned s; 
-						num_extra = "\02\03\07"[dist-16]; 
-						TINFL_GET_BITS(18,s,num_extra) s+="\03\03\013"[dist-16];
-						memset(r->m_len_codes+counter,(dist==16)?r->m_len_codes[counter-1]:0,s); 
-						counter+=s;
-					}
-					if((r->m_table_sizes[0]+r->m_table_sizes[1])!=counter)
-					{
-						TINFL_CR_RETURN_FOREVER(21,TINFL_STATUS_FAILED)
-					}
-					memcpy(r->m_tables[0].m_code_size,r->m_len_codes,r->m_table_sizes[0]);
-					memcpy(r->m_tables[1].m_code_size,r->m_len_codes+r->m_table_sizes[0],r->m_table_sizes[1]);
-				}
-			}
-
-			for(uint8_t *pSrc;;)
-			{
-				for(;;)
-				{
-					if(pIn_buf_end-pIn_buf_cur<4||pOut_buf_end-pOut_buf_cur<2)
-					{
-						TINFL_HUFF_DECODE(23,counter,&r->m_tables[0])
-						if(counter>=256) break;
-						while(pOut_buf_cur>=pOut_buf_end)
-						TINFL_CR_RETURN(24,TINFL_STATUS_HAS_MORE_OUTPUT)
-						*pOut_buf_cur++ = (uint8_t)counter;
-					}
-					else
-					{							
-						#if 64==TINFL_BITBUF_SIZE //TINFL_USE_64BIT_BITBUF
-						if(num_bits<30){ bit_buf|=(((tinfl_bit_buf_t)TINFL_READ_LE32(pIn_buf_cur))<<num_bits); pIn_buf_cur+=4; num_bits+=32; }
-						#else
-						if(num_bits<15){ bit_buf|=(((tinfl_bit_buf_t)TINFL_READ_LE16(pIn_buf_cur))<<num_bits); pIn_buf_cur+=2; num_bits+=16; }
-						#endif
-
-						unsigned code_len;
-						int sym2 = r->m_tables[0].m_look_up[bit_buf&(TINFL_FAST_LOOKUP_SIZE-1)];
-						if(sym2<0) 
-						{
-							code_len = TINFL_FAST_LOOKUP_BITS; 							
-							do{ sym2 = r->m_tables[0].m_tree[~sym2+((bit_buf>>code_len++)&1)]; 							
-							}while(sym2<0);
-						}
-						else code_len = sym2>>9;
-						counter = sym2; bit_buf>>=code_len; num_bits-=code_len;
-						if(counter&256) break;
-
-						#if 64!=TINFL_BITBUF_SIZE //!TINFL_USE_64BIT_BITBUF
-						if(num_bits<15){ bit_buf|=(((tinfl_bit_buf_t)TINFL_READ_LE16(pIn_buf_cur))<<num_bits); pIn_buf_cur+=2; num_bits+=16; }
-						#endif
-
-						sym2 = 
-						r->m_tables[0].m_look_up[bit_buf&(TINFL_FAST_LOOKUP_SIZE-1)];
-						if(sym2<0)
-						{
-							code_len = TINFL_FAST_LOOKUP_BITS; 
-							do{ sym2 = r->m_tables[0].m_tree[~sym2+((bit_buf>>code_len++)&1)];
-							}while(sym2<0);
-						}
-						else code_len = sym2>>9;
-						bit_buf>>=code_len; num_bits-=code_len;
-						pOut_buf_cur[0] = (uint8_t)counter;
-						if(sym2&256)
-						{
-							pOut_buf_cur++;	counter = sym2;
-							break;
-						}
-						pOut_buf_cur[1] = (uint8_t)sym2;
-						pOut_buf_cur+=2;
-					}
-				}
-				counter&=511;
-				if(counter==256) break;
-				num_extra = s_length_extra[counter-257];
-				counter = s_length_base[counter-257];
-				if(num_extra)
-				{
-					unsigned extra_bits; 
-					TINFL_GET_BITS(25,extra_bits,num_extra)
-					counter+=extra_bits; 
-				}
-				TINFL_HUFF_DECODE(26,dist,&r->m_tables[1])
-				num_extra = s_dist_extra[dist]; 
-				dist = s_dist_base[dist];
-				if(num_extra)
-				{
-					unsigned extra_bits;
-					TINFL_GET_BITS(27,extra_bits,num_extra)
-					dist+=extra_bits; 
-				}
-				dist_from_out_buf_start = pOut_buf_cur-pOut_buf_start;
-				if(dist>dist_from_out_buf_start&&decomp_flags&TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF)				
-				TINFL_CR_RETURN_FOREVER(37,TINFL_STATUS_FAILED)
-
-				pSrc = pOut_buf_start+((dist_from_out_buf_start-dist)&out_buf_size_mask);
-
-				if(std::max(pOut_buf_cur,pSrc)+counter>pOut_buf_end)
-				{
-					while(counter--)
-					{
-						while(pOut_buf_cur>=pOut_buf_end)
-						TINFL_CR_RETURN(53,TINFL_STATUS_HAS_MORE_OUTPUT)						
-						*pOut_buf_cur++ = pOut_buf_start[(dist_from_out_buf_start-dist)&out_buf_size_mask];
-						dist_from_out_buf_start++;
-					}
-					continue;
-				}
-				#if 1 //MINIZ_USE_UNALIGNED_LOADS_AND_STORES
-				else if(counter>=9&&counter<=dist)
-				{
-					const uint8_t *pSrc_end = pSrc+(counter&~7);
-
-					do
-					{
-						((uint32_t*)pOut_buf_cur)[0] = ((const uint32_t*)pSrc)[0];
-						((uint32_t*)pOut_buf_cur)[1] = ((const uint32_t*)pSrc)[1];
-						pSrc+=8; pOut_buf_cur+=8;
-
-					}while(pSrc<pSrc_end);
-
-					counter&=7;
-					if(counter<3)
-					{
-						if(counter!=0)
-						{
-							pOut_buf_cur[0] = pSrc[0];
-							if(counter>1)
-							pOut_buf_cur[1] = pSrc[1];
-							pOut_buf_cur+=counter;
-						}
-						continue;
-					}
-				}
-				#endif
-				do
-				{
-					pOut_buf_cur[0] = pSrc[0];
-					pOut_buf_cur[1] = pSrc[1];
-					pOut_buf_cur[2] = pSrc[2];
-					pOut_buf_cur+=3; pSrc+=3;
-					counter-=3;
-
-				}while((int)counter>2);
-
-				if((int)counter>0)
-				{
-					pOut_buf_cur[0] = pSrc[0];
-					if((int)counter>1)
-					pOut_buf_cur[1] = pSrc[1];
-					pOut_buf_cur+=counter;
-				}
-			}
-		}
-	}while(0==(r->m_final&1));
-
-	/* Ensure byte alignment and put back any bytes from the bitbuf if we've looked ahead too far on gzip, or other Deflate streams followed by arbitrary data. */
-	/* I'm being super conservative here. A number of simplifications can be made to the byte alignment part, and the Adler32 check shouldn't ever need to worry about reading from the bitbuf now. */
-    TINFL_SKIP_BITS(32,num_bits&7);
-    while(pIn_buf_cur>pIn_buf_next&&num_bits>=8)
-    {
-        pIn_buf_cur--; num_bits-=8;
-    }
-    bit_buf&=tinfl_bit_buf_t((uint64_t(1)<<num_bits)-uint64_t(1));
-    assert(0==num_bits); /* if this assert fires then we've read beyond the end of non-deflate/zlib streams with following data (such as gzip streams). */
-
-	/*if(0!=(decomp_flags&TINFL_FLAG_PARSE_ZLIB_HEADER))
+	daeZAE_inflated(daeClientString name):daeImage(name){}
+};
+bool daeZAE::rw::cpy_image(daeAtlas &a, size_t i, daeIO *io)
+{		
+	daeZAE_inflated *o = new daeZAE_inflated(e->path); 
+	o->__DAEP__Object__unembed();
+		
+	daeIO::Range r = {0,e->isize};
+	size_t rem = io->setRange(&r,nullptr);
+	char buf[_8192];
+	for(size_t rd;rem>0;rem-=rd)
 	{
-		for(counter=0;counter<4;counter++) 
-		{
-			unsigned s; 
-			if(0!=num_bits) TINFL_GET_BITS(41,s,8) else TINFL_GET_BYTE(42,s)
-			r->m_z_adler32 = (r->m_z_adler32<<8)|s; 
-		}
-	}*/
-	TINFL_CR_RETURN_FOREVER(34,TINFL_STATUS_DONE)
-	TINFL_CR_FINISH //}
+		rd = std::min(rem,sizeof(buf));
+		if(!io->readIn(buf,rd)) break;
+		o->_data.insert(o->_data.end(),buf,buf+rd);
+	}
+	if(rem!=0)
+	{
+		assert(rem==0); return false;
+	}
 
-common_exit: /////////////////////////////////////////////////////////////////
+	//DICEY: Change over to image based I/O.
+	offset = 0; e_overflowed = -1;
 
-	/* As long as we aren't telling the caller that we NEED more input to make forward progress: */
-    /* Put back any bytes from the bitbuf in case we've looked ahead too far on gzip, or other Deflate streams followed by arbitrary data. */
-    /* We need to be very careful here to NOT push back any bytes we definitely know we need to make forward progress, though, or we'll lock the caller up into an inf loop. */
-    if(status!=TINFL_STATUS_NEEDS_MORE_INPUT
-	 &&status!=TINFL_STATUS_FAILED_CANNOT_MAKE_PROGRESS)
-    {
-        while(pIn_buf_cur>pIn_buf_next&&num_bits>=8)
-        {
-            pIn_buf_cur--; num_bits-=8;
-        }
-    }
+	a.contain(o,i); try_image(a,i); return true;
+}
+void daeZAE::rw::try_image(daeAtlas &a, size_t i)
+{
+	if(i==-1&&!a.findImage(e->path,i)) return;
 
-	r->m_num_bits = num_bits; 
-	r->m_bit_buf = bit_buf&tinfl_bit_buf_t((uint64_t(1)<<num_bits)-uint64_t(1));
-	r->m_dist = dist; 
-	r->m_counter = counter; 
-	r->m_num_extra = num_extra;
-	r->m_dist_from_out_buf_start = dist_from_out_buf_start;
+	img = a.getContained()[i]; 
 
-	*pIn_buf_size = pIn_buf_cur-pIn_buf_next; 
-	*pOut_buf_size = pOut_buf_cur-pOut_buf_next;
-
-	/*if(status>=0&&0!=(decomp_flags&(TINFL_FLAG_PARSE_ZLIB_HEADER|TINFL_FLAG_COMPUTE_ADLER32)))
-	{			
-		const uint8_t *ptr = pOut_buf_next; 
-		size_t buf_len = *pOut_buf_size, block_len = buf_len%5552;
-		uint32_t s1 = r->m_check_adler32&0xffff, s2 = r->m_check_adler32>>16; 
-		while(0!=buf_len)
-		{
-			uint32_t i = 0;
-			for(;i+7<block_len;i+=8,ptr+=8)
-			{
-				s2+=s1+=ptr[0]; s2+=s1+=ptr[1]; s2+=s1+=ptr[2]; s2+=s1+=ptr[3];
-				s2+=s1+=ptr[4]; s2+=s1+=ptr[5]; s2+=s1+=ptr[6]; s2+=s1+=ptr[7];
-			}
-			for(;i<block_len;i++)
-			{
-				s2+=s1+=*ptr++;
-			}
-
-			s1%=65521U; s2%=65521U; buf_len-=block_len; block_len = 5552;
-		}
-		r->m_check_adler32 = (s2<<16)+s1; 
-		if(status==TINFL_STATUS_DONE
-		&&decomp_flags&TINFL_FLAG_PARSE_ZLIB_HEADER&&r->m_check_adler32!=r->m_z_adler32)
-		status = TINFL_STATUS_ADLER32_MISMATCH;
-	}*/
-	return status;
+	//DICEY: Change over to image based I/O.
+	maybe_closeIO(); e = nullptr; req.scope = nullptr;	
 }
 
+
+
+////READING ////READING ////READING ////READING ////READING ////READING
+////READING ////READING ////READING ////READING ////READING ////READING
+////READING ////READING ////READING ////READING ////READING ////READING
+
+
+
+//daeGZ.cpp is defining these minimal extern APIs.
+typedef struct _tinfl_decompressor tinfl_decompressor;
+extern unsigned *get_tinfl_decompressor_state_etc(void*,size_t,size_t);
+extern daeError tinfl_decompress(void*,const void*,size_t*,void*,void*,size_t*);
 size_t daeGZ::inflate(const void *in, size_t in_chars)
 {	
-	if(_error!=DAE_OK) return 0;
+	if((int)_error<0) return 0;
 
-	//http://code.google.com/p/miniz/source/browse/trunk/tinfl.c 			
-	daeCTC<(sizeof(_private_implementation)>=sizeof(tinfl_decompressor))>();
+	//daeCTC<(sizeof(_private_implementation)>=sizeof(tinfl_decompressor))>();
 	tinfl_decompressor &decomp = (tinfl_decompressor&)_private_implementation;
+	unsigned *st = get_tinfl_decompressor_state_etc(&decomp,sizeof(_private_implementation),1);	
 	if(_restart==0) 
-	{
-		decomp.m_state = 0; //tinfl_init(&decomp);
+	{	
+		st[0] /*decomp.m_state*/ = 0; //tinfl_init(&decomp);
 
 		//These are extensions to the original Miniz data structure.
 		//Really the 32k dictionary should be housed inside it also.
-		decomp.ext.wrapping_output_buf = 0;
+		st[1] /*decomp.ext.wrapping_output_buf*/ = 0;
 	}
+	unsigned &ext_wrapping_output_buf = st[1]; 
 	
 	//THIS IS really all one big loop. 
 	//tinfl_decompress expects _32k_dictionary to be a persistent
 	//circular buffer, which really complicates things when input
-	//is partially buffered.
-	//I guess there is good reason for this. Like the buffer must
-	//store partial work that is gradually resolved into an ouput.
-	uint32_t f = TINFL_FLAG_HAS_MORE_INPUT;
+	//is partially buffered.			
 	char buf[4096];	
 	size_t underflow = getUnderflow();
 	assert(underflow<sizeof(buf));
 	if(0!=underflow)
 	memcpy(buf,&_data[_size],underflow);
 	_data.resize(_size); 	
+	//f is almost no longer needed.
+	int f = 1; //TINFL_FLAG_HAS_MORE_INPUT
 	for(bool looping=true;looping;)
 	{
 		//TODO? In theory buf can be discarded as soon as carried
@@ -1276,28 +823,33 @@ size_t daeGZ::inflate(const void *in, size_t in_chars)
 		looping = in_chars!=0||f==0&&underflow!=0;
 
 		underflow = bufN; //Misleading...
-		const char *offset = _32k_dictionary+decomp.ext.wrapping_output_buf;
-		size_t out = sizeof(_32k_dictionary)-decomp.ext.wrapping_output_buf;
-		tinfl_status status =
-		tinfl_decompress(&decomp,(uint8_t*)buf,&underflow,
-		(uint8_t*)_32k_dictionary,(uint8_t*)offset,&out,f);	
+		char *offset = _32k_dictionary+ext_wrapping_output_buf;
+		size_t out = sizeof(_32k_dictionary)-ext_wrapping_output_buf;
+		_error = tinfl_decompress(&decomp,buf,&underflow,_32k_dictionary,offset,&out/*,f*/);	
 		underflow = bufN-underflow;
 		const size_t bufN_underflow = bufN-underflow;
 		
-		decomp.ext.wrapping_output_buf+=out;
-		if(decomp.ext.wrapping_output_buf>=sizeof(_32k_dictionary))
+		ext_wrapping_output_buf+=out;
+		if(ext_wrapping_output_buf>=sizeof(_32k_dictionary))
 		{
-			decomp.ext.wrapping_output_buf-=sizeof(_32k_dictionary);
-			assert(0==decomp.ext.wrapping_output_buf);
+			ext_wrapping_output_buf-=sizeof(_32k_dictionary);
+			assert(0==ext_wrapping_output_buf);
 		}
 
 		_restart+=bufN_underflow;
 	
-		switch(status)
+		switch(_error)
 		{
-		case TINFL_STATUS_DONE: looping = false;
-		case TINFL_STATUS_HAS_MORE_OUTPUT:
-		case TINFL_STATUS_NEEDS_MORE_INPUT: break;		
+		//case TINFL_STATUS_DONE: 
+		case DAE_OK: looping = false;		
+		//case TINFL_STATUS_HAS_MORE_OUTPUT:
+		//case TINFL_STATUS_NEEDS_MORE_INPUT:
+		case DAE_NOT_NOW: 
+			
+			//Worried about returning 0+DAE_NOT_NOW.
+			//Might want to go back to returning OK.
+			assert(out!=0||_error==DAE_OK);
+			break;
 
 		default: _error = DAE_ERR_BACKEND_IO; return 0; 
 		}
@@ -1309,6 +861,727 @@ size_t daeGZ::inflate(const void *in, size_t in_chars)
 		else _data.insert(_data.end(),buf+bufN_underflow,buf+bufN);
 	}															   			
 	return _size;
+}
+daeOK daeZAE::io::readIn(void *in, size_t chars)
+{
+	bool coded = r.e_overflowed>=0;
+
+	if(coded&&!gz->empty()) inflated:
+	{
+		size_t cp = gz->size()-r.e_overflowed;
+		if(cp!=0)
+		{
+			cp = std::min<size_t>(chars,cp);
+			memcpy(in,(char*)*gz+r.e_overflowed,cp); 
+			r.e_overflowed+=(int)cp;								
+			(char*&)in+=cp;
+			chars-=cp; 					
+		}
+		if(r.e_overflowed==(int)gz->size())
+		{
+			r.e_overflowed = 0;
+			gz->clear();
+		}
+
+		if(0==chars) return OK;
+	}
+
+	char *buf = (char*)in, underflow[512];
+	size_t charz = chars; if(coded)
+	{
+		//This is just to keep the output buffer
+		//from being very large when reading in 
+		//an entire file. Maybe it should depend
+		//on the ratio of dsize and isize.
+		charz = std::min<size_t>(charz,4*4096);
+
+		charz = std::max(charz,sizeof(underflow));				
+		charz = std::min(charz,gz->getRemaining());				
+		if(charz>chars) buf = underflow;
+	}
+
+	if(OK) if(r.img!=nullptr)
+	{
+		//Note: Overflow is "undefined behavior."
+		size_t to = r.offset+chars;
+		if(to<=r.img->copy(r.offset,to,buf))
+		r.offset = to;
+		else OK = DAE_ERR_INVALID_CALL;	
+	}
+	else if(OK=r.IO->readIn(buf,charz))
+	{
+		if(coded)
+		{
+			if(0==gz->inflate(buf,charz))
+			{
+				OK = gz->getError(); assert(OK!=DAE_NOT_NOW);
+			}
+			else goto inflated;
+		}
+	}
+
+	return OK;			
+}		
+
+
+
+////WRITING ////WRITING ////WRITING ////WRITING ////WRITING ////WRITING
+////WRITING ////WRITING ////WRITING ////WRITING ////WRITING ////WRITING
+////WRITING ////WRITING ////WRITING ////WRITING ////WRITING ////WRITING
+		 
+
+
+//daeGZ.cpp is defining these minimal extern APIs.
+extern void *new_tdefl_compressor(bool(*flush)(const void*,size_t,void*),void*,void*init_or_delete);
+extern daeError tdefl_compress(void*,const void *in=nullptr,size_t chars=0);
+extern int tdefl_crc32(const unsigned char*,size_t,unsigned=0);
+
+daeOK daeZAE::io::writeOut(const void *out, size_t chars)
+{
+	#ifdef NDEBUG
+	#error should this write to daeZAE_inflated???
+	#endif
+	assert(0); return OK = DAE_ERR_NOT_IMPLEMENTED;
+}
+
+daeError daeZAE::getNames(daeArray<daeClientString> &o, daeName wc)const
+{
+	daeError err = DAE_OK;
+	size_t i = 0, m = CD.size(), n = m; if(wc!=nullptr)
+	{
+		cde *v = cde_cast(wc.string);
+		i = m = std::lower_bound(CD.begin(),CD.end(),v,cde::less)-CD.begin();
+		//&[0]: MSVC sees path as a 1-sized container (char[1].)
+		while(m<n&&std::equal(wc.begin(),wc.end(),&CD[m]->path[0]))
+		m++;		
+		if(m-i!=1||'\0'!=CD[i]->path[wc.extent]) //Exact match?
+		err = DAE_ERR_QUERY_NO_MATCH;
+	}
+	for(;i<m;i++) o.push_back(CD[i]->path); return err;
+}	 	
+daeError daeZAE::getValues(daeArray<int> &values, daeClientString named)const
+{
+	if(named==nullptr) return DAE_ERR_NOT_IMPLEMENTED;
+	
+	if(values.empty())
+	{
+		int d[] = {CODE,0,SMALL,0,LARGE,0,TIME,0};
+		values.assign(d,sizeof(d)/sizeof(*d));
+	}
+	
+	cde *e = cde_cast(named);
+
+	//REMINDER: SMALL/LARGE do not refer to daeImage backed 
+	//names. Callers must use daeImage::size() to determine
+	//their size, or @c daeIO::getLock().
+	for(size_t i=0;i<values.size();i+=2) 
+	{
+		unsigned &v = *(unsigned*)&values[i+1]; 
+		switch(values[i])
+		{
+		case CODE: v = e->dcode; break;
+		case SMALL: v = e->dsize; break;
+		case LARGE: v = e->isize; break;
+		case TIME: v = e->mtime; break;
+		}
+	}
+	return DAE_OK;
+}
+
+/**INTERNAL (HELL-ON-EARTH)
+ * Implements @c daeZAEPlugin::writeRequest().
+ *
+ * @warning in 15 years of programming I've never had a more
+ * miserable time than I have thinking about & planning this.
+ * To add insult to injury, @c Zipper only facilitates basic
+ * usage (archive->ZAE/ZIP.)
+ */
+class daeZAEPlugin::Zipper : daeAtlasValue 
+{		
+	daeZAEPlugin &in; 
+	daeIO &io;
+	daeZAE_vec cd; //std::deque<char>		
+	void *gz;
+
+	//write //write //write //write
+
+	struct zipIO : daeIO //I/O base & CRC-32 logic.
+	{	
+		daeOK OK; 
+		
+		Zipper &z;
+
+		int checksum;
+
+		size_t checksize;				
+		
+		zipIO(Zipper &z):z(z),checksum(),checksize(){}
+
+		virtual daeError getError()
+		{
+			return OK.error; 
+		}	
+		virtual size_t getLock(Range *I, Range *O)
+		{
+			assert(I==nullptr&&O==nullptr);
+			return 0;
+		}
+		virtual size_t setRange(Range *I, Range *O)
+		{
+			return getLock(I,O);
+		}
+		virtual daeOK writeOut(const void *in, size_t chars)
+		{
+			_write(in,chars); return OK;
+		}		
+		void _write(const void *in, size_t check)
+		{
+			checksum = tdefl_crc32((unsigned char*)in,check,checksum);
+			checksize+=check;
+			if(OK) crc32_write(in,check);
+		}		
+
+		virtual void crc32_write(const void *in, size_t chars)
+		{
+			//Reminder: Inner archives use this implementation.
+			//z.io is correct (not z.crc) otherwise this would
+			//be a pure-virtual method.
+			OK = z.io.writeOut(in,chars);
+		}
+	};
+	struct storedIO : zipIO //Uncompressed.
+	{
+		size_t smallsize; bool incomplete;
+
+		storedIO(Zipper &z):zipIO(z),smallsize(),incomplete()
+		{}
+		~storedIO(){ assert(!incomplete); }
+
+		virtual void crc32_write(const void *in, size_t chars) 
+		{
+			smallsize+=chars; OK = z.crc->writeOut(in,chars);
+		}
+
+		daeOK complete() //deflatedIO
+		{
+			if(incomplete)
+			{
+				incomplete = false;
+				if(OK) OK = tdefl_compress(z.gz); //flush op
+			}
+			return OK;
+		}
+	};
+	struct deflatedIO : storedIO //DEFLATE compressed.
+	{
+		deflatedIO(Zipper &z, int defIO=0):storedIO(z)
+		{
+			if(0==defIO) //deferredIO
+			{
+				incomplete = true;
+				z.gz = new_tdefl_compressor(tdefl_func,this,z.gz);
+			}
+		}
+
+		virtual void crc32_write(const void *in, size_t chars) 
+		{
+			//Reminder: tdefl_compress can set OK.
+			daeOK defOK = tdefl_compress(z.gz,in,chars);
+			if(OK) OK = defOK;
+		}
+
+		static bool tdefl_func(const void *in, size_t chars, void *w)			
+		{	
+			((deflatedIO*)w)->storedIO::crc32_write(in,chars);
+			return true;
+		}
+	};
+	struct deferredIO : deflatedIO //Maybe DEFLATE compressed.
+	{
+		deferredIO(Zipper &z):deflatedIO(z,1){}
+
+		std::vector<char> stored,deflated;
+
+		virtual void crc32_write(const void *in, size_t chars) 
+		{
+			stored.insert(stored.end(),(char*)in,(char*)in+chars);
+			deflatedIO::crc32_write(in,chars);
+		}		
+
+		static bool tdefl_func(const void *in, size_t chars, void *w)			
+		{
+			std::vector<char> *deflated = (std::vector<char>*)w;
+			deflated->insert(deflated->end(),(char*)in,(char*)in+chars);
+			return true;
+		}
+		 
+		void reset(int small, int large)
+		{
+			OK = DAE_OK; checksum = 0;			
+			checksize = smallsize = 0; 
+
+			deflated.reserve(small); stored.reserve(large); 
+
+			z.gz = new_tdefl_compressor(tdefl_func,&deflated,z.gz);
+		}
+		float ratio()
+		{
+			if(OK) OK = tdefl_compress(z.gz); //flush op
+			return (float)deflated.size()/stored.size();
+		}
+		int clear(int method)
+		{	
+			//POINTLESS? deflated needs to be flushed but
+			//callers wouldn't know which method to use if
+			//it's not already been flushed.
+			if(OK) OK = tdefl_compress(z.gz); //flush op
+
+			std::vector<char> &sel = method==0?stored:deflated;				 
+			int ret = (int)sel.size();			
+
+			if(OK&&0!=ret) if(ret!=sel.size()) //ZIP64?
+			{	
+				//TODO: daeZAE_HUGE_file_error(); 
+				assert(0); OK = DAE_ERR_NOT_IMPLEMENTED;
+			}
+			else OK = z.crc->writeOut(&sel[0],sel.size());			
+
+			deflated.clear(); stored.clear(); return ret;
+		}
+
+		bool empty(){ return stored.empty(); }
+
+	}defIO; char buf[8192]; daeURI uri;
+
+	daeOK write(daeIO &dest, const daeArchive &a, daeString path)
+	{	
+		daeOK OK = DAE_ERR_BACKEND_IO;
+		uri.setURI(a.getDocURI(),path);
+		uri.setIsResolved();
+		daeIORequest req(&a,nullptr,&uri,&uri);		
+		daeIOSecond<> I(req); daeIOEmpty O;		
+		daeRAII::CloseIO RAII(a.getIOController());
+		daeIO *inflate = RAII.p.openIO(I,O);
+		if(inflate!=nullptr)
+		{
+			size_t rem = inflate->getLock();
+			for(size_t rd;rem>0;rem-=rd)
+			{
+				rd = std::min(rem,sizeof(buf));
+				if(!inflate->readIn(buf,rd)) break;
+				dest.writeOut(buf,rd);
+			}
+			OK = inflate->getError();
+			if(OK) OK = RAII.close();
+		}
+		return !OK?OK.error:dest.getError();
+	}
+
+	//iter //iter //iter //iter //iter
+
+	struct doc //support
+	:
+	std::pair<daeString,const daeDoc*>
+	{
+		bool operator<(const doc &cmp)const
+		{
+			return strcmp(first,cmp.first)<0;
+		}
+	};
+
+	std::vector<doc> docs;
+
+	daeArray<daeClientString> directory;
+
+	//THOUGHTS
+	//Iterating over docs/atlas entries can be 
+	//complicated. Can this be simplified to a
+	//point that it can be offered by a header?
+	//Zipper's members must be templates if so.
+	struct iter : daeName 
+	{
+		Zipper &z;		
+		size_t i,idoc,_ipop,j,_jpop;		
+		iter(Zipper &z, const daeArchive &a)
+		:z(z)
+		,i(z.directory.size()),_ipop(i),idoc(i)
+		,j(z.docs.size()),_jpop(j)
+		{
+			daeAtlas &atlas = a.getAtlas();
+			atlas.getNames(z.directory);		
+			z.directory.push_back(nullptr); //SENTINEL
+			
+			z.docs.insert(z.docs.begin()+j
+			,a.getDocCount()+1,Zipper::doc()); //+1 SENTINEL
+
+			//This is mainly for sorting, but more importantly
+			//it's to efficiently solve a double-entry problem.			
+			for(size_t k=0,jN=z.docs.size()-1;j<jN;j++,k++)
+			{
+				const daeDoc *d = a.getDoc(k);
+				daeRefView diff = d->getDocURI()-a.getDocURI();
+				daeClientString name = atlas.name(diff);
+				doc().first = nullptr!=name?name:diff.view;
+				doc().second = d;
+			}
+			j = _jpop;
+			std::sort(z.docs.begin()+j,z.docs.end()-1);
+
+			_advance_idoc(); 			
+			daeStringCP tmp = '\0';
+			daeName::string = &tmp; iter::operator++(0);
+		}
+		~iter()
+		{
+			z.directory.setCountLess(_ipop);
+			z.docs.erase(z.docs.begin()+_jpop,z.docs.end());
+		}		
+		Zipper::doc &doc()
+		{
+			return z.docs[j];
+		}
+		daeClientString &name()
+		{
+			return z.directory[i];
+		}
+		void operator++(int)
+		{
+			assert(nullptr!=string);
+
+			//Hack: delay increment so that
+			//callers can make use of i & j.
+			if(daeName::string==name())
+			i++;
+			if(daeName::string==doc().first) 
+			{
+				j++; _advance_idoc();
+			}
+
+			//When i gets to idoc either there are docs
+			//that remain, or it's reached the last entry.
+			daeName::operator=(i==idoc?doc().first:name());
+		}
+		static bool _less(daeString a, daeString b)
+		{
+			return strcmp(a,b)<0;
+		}
+		void _advance_idoc()
+		{
+			if(nullptr!=doc().first) //SENTINEL
+			{ 
+				/*Could try with small directories?
+				for(size_t k=idoc;k<z.directory.size();k++)
+				if(doc().first==z.directory[k])
+				{
+					idoc = k; return;
+				}*/
+				idoc = std::lower_bound(z.directory.begin()+i
+				,z.directory.end()-1-i,doc().first,_less)
+				-z.directory.begin();
+			}
+			else idoc = z.directory.size();
+		}
+	};
+
+	//zip //zip //zip //zip //zip //zip 
+
+	daeIO *crc; int _now; int now()
+	{
+		if(_now!=0) return _now;
+		time_t utc; time(&utc); tm &t = *gmtime(&utc);
+		return _now = 
+		//(daeAtlasValue::decomposeTIME in reverse.)
+		t.tm_year-80<<25|t.tm_mon+1<<21|t.tm_mday<<16
+		|t.tm_hour<<11|t.tm_min<<4|t.tm_sec/2;
+	}
+
+	daeOK output_local_entries(const daeArchive &a, char eocd[22])
+	{	
+		//Reminder: 8 is a 2B field; int can detect 65535 overflow.
+		int &eocd_entered = (int&)eocd[8]; //short&
+		int &eocd_wrote2 = (int&)eocd[16]; 
+
+		daeOK OK;
+		enum{ vlistN=5*2 };
+		const int vlist[vlistN] = {CODE,0,TIME,0,SMALL,0,LARGE,0,DELETE,0};
+		daeArray<int,vlistN> values; 
+		values.assign(vlist,vlistN);
+		daeAtlas &atlas = a.getAtlas();
+		size_t j = 0; daeClientString jmg = atlas.nextImage(nullptr,j);
+		for(iter i(*this,a);i.string!=nullptr;i++)
+		{
+			//Presently there is no modification-time framework
+			//for docs. Users would have to use setValue.
+			//(Not that TIME's DOS timestamp is a good standard.)
+			if(i.string==i.name())
+			{
+				//DELETION?
+				//Can't wait for the I/O operation to fail since
+				//the header is outputted first, in a continuous
+				//stream. (setRange on write is virgin territory.)
+				if(i.string==jmg)
+				{
+					daeImage *img = atlas.getContained()[j];
+					atlas.nextImage(jmg,j);
+					if(img->getIsDeleted())
+					continue;
+				}
+				atlas.getValues(values,i.string);
+				if(0!=values[9]) //DELETE
+				continue;
+			}
+			else values[3] = now(); //TIME
+
+			int dt = 0;
+			//NOTE: daeAtlasValue doesn't have a CHECKSUM enum.
+			//Here the compressed data could be copied directly
+			//as an optimization in many cases, except checksums
+			//are based on the uncoded image. A CHECKSUM enum can
+			//be added, but it would not solve the general problem.
+			//
+			// So to make things simple, the data is taken uncoded
+			// from which a checksum is generated. This may mean it
+			// is decoded only to be recoded, but is straightforward.
+			if(i.string!=i.doc().first)
+			{	
+				defIO.reset(values[5],values[7]); //SMALL,LARGE
+				if(OK=write(defIO,a,i.string))
+				values[1] = defIO.ratio()>0.80f?0:8; //CODE
+				else return OK;
+			}
+			else //DOCUMENT/ARCHIVE
+			{
+				dt = i.doc().second->getDocType();
+				assert(dt!=0);				
+				values[1] = dt==daeDocType::ARCHIVE?0:8; //CODE
+			}
+			
+			struct padding //align8
+			{
+				char pad[8];
+				char lh[30];
+			}lh_padded = {{},"PK\x03\x04"};
+			char (&lh)[30] = lh_padded.lh;
+			daeZAE::BigEndian<16>((short&)lh[4]=63); //UTF-8 (6.3)
+			daeZAE::BigEndian<16>((short&)lh[6]=0x408); //UTF/"PK\x06\x07"
+			daeZAE::BigEndian<16>((short&)lh[8]=values[1]); //CODE
+			daeZAE::BigEndian<32>((int&)lh[10]=values[3]); //TIME			
+			daeZAE::BigEndian<16>((short&)lh[26]=(short)i.extent);
+
+			//Trying to facilitate mmap.
+			int header = 30+(int)i.extent;
+			int align8 = eocd_wrote2+header&8-1;
+			if(align8!=0) align8 = 8-align8;
+
+			crc->writeOut(lh-align8,align8+30);
+			crc->writeOut(i.string,i.extent);		
+
+			int checksum = 0;
+			if(!defIO.empty()) 
+			{
+				assert(dt==0);				
+				values[5] =	defIO.clear(values[1]); //SMALL,CODE
+				OK = defIO.OK;
+				values[7] = (int)defIO.checksize; //LARGE				
+				checksum = defIO.checksum;
+			}
+			else if(dt!=daeDocType::ARCHIVE)
+			{
+				//HACK! Should be OK regardless
+				//of which destructor gets used.
+				storedIO dest(*this);
+				if(8==values[1]) //CODE 
+				new(&dest) deflatedIO(*this); 
+				else assert(0==values[1]); //CODE
+				if(dt!=0)
+				{
+					uri.setURI(a.getDocURI(),i.string);
+					uri.setIsResolved();
+					daeIORequest req(&a,nullptr,&uri,&uri);		
+					daeDocRoot<> dr = 
+					const_cast<daeDoc*>(i.doc().second);					
+					req.fulfillRequestO(in._O,dr,&dest);
+					dest.OK = dr.error;
+				}
+				else dest.OK = write(dest,a,i.string);
+				OK = dest.complete();
+				values[5] = (int)dest.smallsize; //SMALL
+				values[7] = (int)dest.checksize; //LARGE
+				checksum = dest.checksum;				
+			}
+			else //RECURSIVE (ARCHIVE)
+			{
+				assert(0==values[1]); //CODE 
+				//It occurred to me that here the I/O object 
+				//could be passed onto a new I/O request. By
+				//the time I realized this there was nothing
+				//left to do. It's probably better like this.
+				daeIO *swap = crc;
+				zipIO crc32(*this);
+				crc = &crc32;
+				OK = zip((const daeArchive*)i.doc().second); 
+				crc = swap;				
+				values[5] = //SMALL
+				values[7] = (int)crc32.checksize; //LARGE
+				checksum = crc32.checksum;				
+			}
+			if(!OK) return OK;
+
+			//"PK\x06\x07" Data Descriptor (magic word optional.)
+			assert(checksum!=0||0==(values[5]|values[7])); //SMALL,LARGE
+			daeZAE::BigEndian<32>((int&)lh[14]=checksum);
+			daeZAE::BigEndian<32>((int&)lh[18]=values[5]); //SMALL
+			daeZAE::BigEndian<32>((int&)lh[22]=values[7]); //LARGE
+			crc->writeOut(lh+14,12); 
+
+			//Set position+method~size aside to be retrieved by
+			//output_central_directory().
+			(int&)lh[4] = eocd_wrote2+align8;
+			cd.insert(cd.end(),lh+4,lh+26);
+
+			eocd_entered++;
+			eocd_wrote2+=align8+header+values[5]+12; //SMALL
+		}	
+		
+		if(eocd_entered>65535) //Paranoia?
+		{
+			daeEH::Error<<"ZIP64? Exceeded 65535 entries: "<<eocd_entered;
+			return DAE_ERROR;
+		}
+		daeZAE::BigEndian<32>(eocd_entered); //Per disk (32 is BE magic.)
+		daeZAE::BigEndian<32>(eocd_wrote2);
+
+		return DAE_OK;
+	}
+	daeOK output_central_directory(const daeArchive &a, char eocd[22])
+	{			
+		//HACK: Figure out how many	output_local_entries.
+		short eocd_entered = (short&)eocd[8];
+		daeZAE::BigEndian<16>(eocd_entered);
+		daeZAE_vec::iterator it = cd.end()-eocd_entered*22;
+
+		short &eocd_entered2 = (short&)eocd[10];
+		int &eocd_wrote = (int&)eocd[12]; 				   
+
+		for(iter i(*this,a);i.string!=nullptr;i++)
+		{
+			char cde[46] = "PK\x01\x02";
+			daeZAE::BigEndian<32>((int&)cde[4]=63|63<<16); //UTF-8 (6.3)
+			daeZAE::BigEndian<16>((short&)cde[8]=0x408); //UTF-8/"PK\x06\x07"(8 is for 7-Zip)
+			//HACK: Copy position+method~size from data set aside by 
+			//output_local_entries().
+			int position = (int&)*it;
+			std::copy(it+4,it+22,cde+10);
+			it+=22;
+			daeZAE::BigEndian<16>((short&)cde[28]=(short)i.extent);			
+			daeZAE::BigEndian<32>((int&)cde[42]=position);
+			
+			#ifdef NDEBUG
+			#error Don't forget 8B alignment.		 			
+			#endif
+			crc->writeOut(cde,46);
+			crc->writeOut(i.string,i.extent);
+			eocd_entered2++;
+			eocd_wrote+=46+i.extent;			
+		}	
+
+		daeZAE::BigEndian<16>(eocd_entered2); //Total (1/1 disks.)		
+		daeZAE::BigEndian<32>(eocd_wrote);
+
+		return crc->getError();
+	}
+
+public: //writeRequest
+
+	Zipper(daeZAEPlugin &in, daeIO &io)
+	:in(in),io(io),gz(),defIO(*this),crc(&io),_now()
+	{}	
+	~Zipper()
+	{
+		new_tdefl_compressor(nullptr,nullptr,gz); //delete gz; 
+	}
+
+	daeOK zip(const daeArchive *a)
+	{	
+		char eocd[22] = "PK\x05\x06";
+		//daeZAE::BigEndian<32>((int&)eocd[4]=1); //0
+		size_t pop = cd.size();
+		daeOK OK = output_local_entries(*a,eocd);	
+		if(OK) OK = output_central_directory(*a,eocd);
+		if(OK) OK = crc->writeOut(eocd,sizeof(eocd));
+		cd.resize(pop); return OK;
+	}
+};
+static daeError daeZAE_write_lock_error(daeIO *r, daeIO *w)
+{
+	if(r!=nullptr);
+	daeEH::Error<<"Could not lock ZAE/ZIP for write-op.\n"
+	"(I/O platform may not implement write-to-temporary+move logic.)";
+	return w->getError();
+}
+daeOK daeZAEPlugin::writeRequest(daeIO &IO, const_daeURIRef &URI)
+{
+	const daeIORequest &req = getRequest();
+
+	if(URI==nullptr) unimplemented:
+	{
+		//daeEH::Error << "Something?";
+		return DAE_ERR_NOT_IMPLEMENTED; 
+	}
+	else if(*URI!=*req.localURI)
+	{
+		//daeEH::Error << "Something?";
+		//This plugin is just converting archives to ZAE or ZIP files.
+		goto unimplemented;
+	}
+
+	const daeArchive *a = 
+	URI->getParentObject()->a<daeArchive>(); if(a==nullptr) 
+	{
+		//Reminder: Could try to write other kinds of docs here.
+		goto unimplemented;
+	}
+
+	//HACK: The I/O framework doesn't have means to make a temporary
+	//URI, write to it, delete an existing URI, and move the new URI
+	//to its final resting place.
+	//So instead, a read-lock is placed on the URI, and the platform
+	//must recognize that the write-op is locked, and so prepare the
+	//temporary I/O target, and do some delete+move logic in closeIO.
+	//Normally a write-op sets the size of the file to be 0. In this
+	//case, that destroys the ZAE's source.	
+	#ifdef NDEBUG
+	//Reminder: daeDoc::_write2 has the same problem.
+	#error This only partly makes sense in the output context :(
+	#endif
+	daeRAII::CloseIO RAII(req.scope->getIOController());	
+	//Might want to add some methodology to daeAtlas to make it easy
+	//to implement this logic. "atlas->lockSource()?"
+	daeIORequest src; 
+	a->getAtlas().getSource(src); daeIOEmpty _; 
+	if(src.remoteURI!=nullptr&&req.remoteURI!=nullptr)
+	if(src.remoteURI->getURI()==req.remoteURI->getURI())
+	{
+		daeIO *readlock = RAII.p.openIO(*this,_);
+		RAII = readlock; 
+		if(00==readlock->getLock()&&DAE_OK!=readlock->getError())
+		return daeZAE_write_lock_error(readlock,readlock); 
+	}
+		
+	//This is the write-lock.
+	IO.getLock();
+	if(DAE_OK!=IO.getError())
+	return daeZAE_write_lock_error(RAII.IO,&IO); 
+
+	//RECURSIVE
+	daeZAEPlugin::Zipper root(*this,IO); return root.zip(a);
+}
+daeOK daeZAEPlugin::writeContent(daeIO &IO, const daeContents &content)
+{
+	#ifdef NDEBUG
+	#error Can this be meaningfully implemented?
+	#endif
+	assert(0); return DAE_ERR_NOT_IMPLEMENTED; 
 }
 
 //---.

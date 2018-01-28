@@ -17,7 +17,7 @@ COLLADA_(namespace)
 	enum daeError 
 	{
   ///////////////////////////////////
-  //STOP! Before adding, update daeErors.cpp's friendly message table.
+  //STOP! Before adding, update daeError.cpp's friendly message table.
   ///////////////////////////////////
 	/** Success */
 	DAE_OK=0, 
@@ -52,7 +52,7 @@ COLLADA_(namespace)
 	/** Function is not implemented. */
 	DAE_ERR_NOT_IMPLEMENTED=-1000,
   ///////////////////////////////////
-  //STOP! Before adding, update daeErors.cpp's friendly message table.
+  //STOP! Before adding, update daeError.cpp's friendly message table.
   ///////////////////////////////////
 	};
 

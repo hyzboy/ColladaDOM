@@ -227,7 +227,7 @@ virtual daeOK resolveURI(daeURI&, const daeDOM&){ return DAE_ERR_CLIENT_FATAL; }
 virtual daeOK openURI(const daeIORequest&,daeIOPlugin*,daeURIRef&){ return DAE_ERR_CLIENT_FATAL; }
 virtual daeOK closeURI(const daeURI&){ return DAE_ERR_CLIENT_FATAL; }
 virtual daeIO *openIO(daeIOPlugin&, daeIOPlugin&){ return nullptr; }
-virtual void closeIO(daeIO*){}
+virtual daeOK closeIO(daeIO*,daeOK){ return DAE_ERR_CLIENT_FATAL; }
 virtual int getLegacyProfile(){ return 0; }
 }dae_dummyPlatform;
 
@@ -401,7 +401,7 @@ daeElement *daeDOM::_addElement(daeMeta &meta)
 	meta._construct(obj,*this,*this); return obj;
 }
 
-daeError daeArchive::_read2(daeDocRef &out, daeMeta *rootmeta, const daeIORequest &reqI, daeIOPlugin *I)
+daeError daeArchive::_read2(daeDocRef &out, daeMeta *rootmeta, const daeIORequest &reqI, daeIOPlugin *I, daeIO *IO)
 {
   //This method is "static" because a "this" pointer is 
   //normally redundant, as reqI.scope should contain it.
@@ -480,7 +480,8 @@ daeError daeArchive::_read2(daeDocRef &out, daeMeta *rootmeta, const daeIOReques
 		{
 			daeIOEmpty O;
 			daeRAII::CloseIO RAII2(reqI.scope->getIOController()); //emits error	
-			daeIO *IO = RAII2 = RAII2.p.openIO(*I,O);
+			if(IO==nullptr)
+			IO = RAII2 = RAII2.p.openIO(*I,O);
 			if(IO==nullptr) 
 			return DAE_ERR_CLIENT_FATAL;	
 			OK = I->readContent(*IO,document->getContents());
@@ -497,38 +498,6 @@ daeError daeArchive::_read2(daeDocRef &out, daeMeta *rootmeta, const daeIOReques
 	//Close the document to curtail unexpected accidents for users?
 	if(!OK&&document!=nullptr) document->close(); return OK;
 }	 
-
-daeOK daeDOM::_write_this_DOM(const daeURI &URI, daeIOPlugin *O)const
-{
-	daeRAII::UnplugIO RAII(*_platform);
-	if(O==nullptr) RAII = O = RAII.p.pluginIO(getEmptyURI(),'w'); 
-	if(O!=nullptr)
-	{
-		daeOK OK;
-		daeIORequest reqO(this,nullptr,getEmptyURI(),URI);
-		daeRAII::Reset<const daeIORequest*> _O___request(O->_request);
-		O->_request = &reqO;	
-		daeIOEmpty I;
-		daeRAII::CloseIO RAII2(RAII.p);
-		daeIO *IO = RAII2 = RAII.p.openIO(I,*O);
-		OK = O->writeDOM(*IO,*this);
-		if(OK!=DAE_ERR_NOT_IMPLEMENTED)
-		return OK;
-	}
-	bool unfiltered = URI.empty();
-	if(!unfiltered) URI.resolve(this);
-	for(size_t i=0;i<_docs.size();i++)
-	{
-		daeDocument *doc = _docs[i]->_getDocument();		
-		if(unfiltered||doc->_uri.transitsURI(URI))
-		{
-			daeOK OK = doc->write(); 
-			if(!OK) 
-			return OK;
-		}
-	}
-	return DAE_OK;
-}
 
 void daeArchive::_uprootDoc(daeDoc *doc, daeDoc *uprooted_replacement)
 {	

@@ -340,7 +340,7 @@ COLLADA_(private) //OBJECT MEMBERS
 COLLADA_(public) //OPERATORS
 		
 	COLLADA_DOM_OBJECT_OPERATORS(daeURI)
-	
+		
 	/**
 	 * Cast to any @c daeURI, as the @c size_on_stack is irrelevant.
 	 */
@@ -349,6 +349,18 @@ COLLADA_(public) //OPERATORS
 	 * Cast to any @c daeURI, as the @c size_on_stack is irrelevant.
 	 */
 	inline operator const daeURI&()const{ return static_cast<const daeURI&>(*this); }
+
+	/**ZAE
+	 * Extract relative path given a URI that is known to be a base.
+	 * @param baseURI has a path that is a substring of @c this URI.
+	 */
+	inline daeRefView operator-(const daeURI_base &baseURI)const
+	{
+		size_t base = baseURI.getURI_uptoCP<'?'>()+1;		
+		size_t size = getURI_uptoCP<'?'>(); //Assuming ? is nonviable!!		
+		daeRefView o; assert(transitsURI(baseURI));
+		o.view = data()+base; o.extent = size-base; return o;
+	}
 
 	/**WARNING, LEGACY
 	 * @c std::string Assignment Operator. 
@@ -423,7 +435,7 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	 * to be in its canonical form. 
 	 * @see @c daePlatform::resolveURI().
 	 */
-	inline void setIsResolved(bool flag=true){ _getFlags().resolved = flag?1:0; }
+	inline void setIsResolved(bool y=true){ _getFlags().resolved = y?1:0; }
 
 	/** 
 	 * Gets a flag that tells @c daePlatform::openURI() that it
@@ -434,7 +446,7 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	 * Sets a flag that tells @c daePlatform::openURI() that it
 	 * can resort to opening a pure @c domAny based document.
 	 */
-	inline void setAllowsAny(bool flag=true){ _getFlags().any = flag?1:0; }
+	inline void setAllowsAny(bool y=true){ _getFlags().any = y?1:0; }
 
 	/** 
 	 * Gets a flag that makes @c this URI permanently attached to its
@@ -854,7 +866,14 @@ COLLADA_(public) //COMPONENT ACCESSORS & MUTATORS
 	template<int X, class T>
 	/**
 	 * Gets ill-defined component groups to a @a T. 
-	 * @tparam X can be ':', '/', '.', '?', or '#'.
+	 * @tparam X can be '@', ':', '/', '.', '?', '#', or '://'...
+	 * - '@' is the host part of the authority.
+	 * - ':' is the port part of the authority.
+	 * - '/' is the path part.
+	 * - '.' is the extension part of the path.
+	 * - '?' is the query part.
+	 * - '#' is the fragment part.
+	 * - '://' is equivalent to @c getURI_protocol(). (It is "Multichar.")
 	 * @tparam T can be daeRefView, daeArray, std::string, etc.
 	 * Here ':' is the port part. It's somewhat cryptic, but there are not
 	 * names for these things! 
@@ -867,13 +886,18 @@ COLLADA_(public) //COMPONENT ACCESSORS & MUTATORS
 		CP cp = (CP)from; //C4267
 		switch(X) //CP should be unsigned. So from=0 can be optimized away.
 		{
+		case '@': return _getURI(io,cp,'@',std::max<CP>(cp,_authority_host));
 		case ':': return _getURI(io,cp,':',std::max<CP>(cp,_authority_port));
 		case '/': return _getURI(io,cp,'\0',std::max<CP>(cp,_path));
 		case '.': return _getURI(io,cp,'.',std::max<CP>(cp,_path_extension));
 		case '?': return _getURI(io,cp,'?',std::max<CP>(cp,_query)); 
-		case '#': return _getURI(io,cp,'#',std::max<CP>(cp,_fragment)); 
+		case '#': return _getURI(io,cp,'#',std::max<CP>(cp,_fragment)); 			
+		//Just for parity with getURI_uptoCP and Doxygentation.
+		//worth it? will generate multi-char compiler warnings.
+		case '://': assert(0==from); return getURI_protocol(io);
 		}
-		assert(0); return io; daeCTC<X==':'||X=='/'||X=='.'||X=='?'||X=='#'>();
+		assert(0); return io; 
+		daeCTC<X=='://'||X=='@'||X==':'||X=='/'||X=='.'||X=='?'||X=='#'>();
 	}	
 	template<char X> 
 	/**OVERLOAD
@@ -1060,13 +1084,13 @@ COLLADA_(private) //INTERNAL SUBROUTINES
 		if(tolower(URI[i++])!=tolower(*cmp++)) return -1; return i;
 	}
 	
-	template<int doing_docLookup>
+	template<int docLookup>
 	/**
 	 * Implements @c docLookup() and doc insertion internally.
 	 * @param reinsert If @c nullptr, it's a matching/lookup procedure.
 	 * @tparam docLookup was added so @c docLookup can work with @c dae_default.
 	 */
-	inline void _docHookup(daeArchive&, daeDocRef &reinsert)const;
+	inline void _docHookup(daeArchive&,daeDocRef &reinsert)const;
 	/** Implements @c docLookup() */
 	LINKAGE void _docLookup(const daeArchive&,daeDocRef&)const;
 		

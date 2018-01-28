@@ -61,6 +61,11 @@ daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 		//case to signal success.
 		case DAE_ERR_NOT_IMPLEMENTED: //Finishing up.
 
+			#ifdef NDEBUG
+			#error Recursively correct nested URIs (avoiding moving.)
+			#endif
+			assert(!doc->isArchive()||0==((daeArchive*)doc)->getDocCount());
+
 			//Force document URIs to be absolute URIs.
 			if(0!=_rel_half!=0||0!=_rel_backtracks)
 			{			
@@ -69,7 +74,7 @@ daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 				_rel_half = _rel_backtracks = 0;
 			}
 			if(doc!=&DOM->_closedDocs) //Hack? This is a special archive.
-			{
+			{	
 				//"Front-door" into docLookup() doing re-insertion logic.
 				_docHookup<0>(const_cast<daeDOM&>(*DOM),(daeDocRef&)lock);
 			}
@@ -789,24 +794,24 @@ void daePlatform::_narrowURI_open_ZAE(daeIORequest &a)
 //This is old, crusty, legacy code. It's never been entirely sound, but is maintained.
 typedef struct //C++98/03 (C2918)
 {
-	daeAlloc<>* &valArray; size_t long_count; FILE *rawFile;
+	daeAlloc<>* &valArray; size_t count; daeIO *rawIO; size_t rawOffset;
 
-}daeURI_write_RAW_file_data_args;
+}daeURI_read_RAW_file_data_args;
 template<class S, class T>
-static void daeURI_write_RAW_file_data(const daeURI_write_RAW_file_data_args &in)
+static bool daeURI_read_RAW_file_data(const daeURI_read_RAW_file_data_args &in)
 {	
-	daeArray<T> &a = (daeArray<T>&)in.valArray; a.setCountMore(in.long_count);
-
+	size_t chars = sizeof(S)*in.count;
+	daeIO::Range r = { in.rawOffset,in.rawOffset+chars };
+	if(0==in.rawIO->getLock(&r,nullptr)||r.size()!=chars) 
+	return true;
+	daeArray<T> &a = (daeArray<T>&)in.valArray; a.setCountMore(in.count);
 	T *data = a.data();
-
-	if(sizeof(S)!=sizeof(T))
+	if(in.rawIO->readIn(data,chars)&&sizeof(S)!=sizeof(T))
 	{
-		S val; for(size_t i=0;i<in.long_count;i++)
-		{
-			fread(&val,sizeof(S),1,in.rawFile); data[i] = val;
-		}
+		S *sp = (S*)data+in.count; 
+		T *tp = data+in.count; while(tp-->data) *tp = *sp;
 	}
-	else fread(data,sizeof(S)*in.long_count,1,in.rawFile);
+	return false;
 }
 daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &uri, daeRefRequest &req)const
 {	
@@ -856,31 +861,19 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 			  
 			daeRefView fragment;
 			uri.getURI_fragment(fragment); daeStringCP *end;
-			long byteOffset = strtol(fragment.view,&end,10); 
+			size_t byteOffset = strtoul(fragment.view,&end,10); 
 			if(end-fragment.view!=(daeOffset)fragment.extent)
 			{
 				daeEH::Error<<
 				"daeRawResolver - URI does not have a numeric fragment.\n"
-				"Cannot be a file offest.";
+				"Cannot be a file offset.";
 				return DAE_ERR_INVALID_CALL;
 			}	
 
+			daeIOEmpty rawO; daeIOSecond<> rawI(rawReq); 
 			daeRAII::CloseIO closeIO(DOM->getPlatform()); //RAII
-			daeIOEmpty rawO;
-			daeIOSecond
-			<daeIOPlugin::Demands::CRT
-			|daeIOPlugin::Demands::unimplemented> rawI(rawReq); 
-			FILE *rawFile;
-			daeIO *_rawIO = closeIO = closeIO.p.openIO(rawI,rawO);
-			if(nullptr==_rawIO
-			 ||nullptr==(rawFile=_rawIO->getWriteFILE()))
-			{
-				if(_rawIO!=nullptr)
-				daeEH::Error<<"Raw FILE error: "<<uri.getURI();
-				daeEH::Error<<"RAW: Couldn't open secondary I/O channel for daeRawResolve::_resolve_exported.";
-				return DAE_ERR_BACKEND_IO;		
-			}
-
+			daeIO *rawIO = closeIO = closeIO.p.openIO(rawI,rawO);
+			
 			//NEW: Now, resume with the original algorithm, where the RAW data is so far unloaded.
 			array = source->add(int_type?"int_array":"float_array");
 			if(array==nullptr||!array->setAttribute("id",std::string(source->getID_id())+="-array"))
@@ -888,10 +881,10 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 				assert(0); return DAE_ERR_INVALID_CALL; //No damage done so far.
 			}
 
+			//There probably should be better APIs for this sort of thing.
 			#ifdef NDEBUG
 			#error The types are not guaranteed to be daeULong. (Or even to exist.)
-			#endif
-			//There probably should be better APIs for this sort of thing.
+			#endif			
 			daeAttribute *count = accessor->getAttributeObject("count");
 			daeAttribute *stride = accessor->getAttributeObject("stride");
 			assert(sizeof(daeULong)==count->getSize());
@@ -901,34 +894,43 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 		
 			daeCharData *arrayCD = array->getCharDataObject();
 			int atomic_type = arrayCD->getType()->where<daeAtom>().getAtomicType();			
-			fseek(rawFile,byteOffset,SEEK_SET); assert(long_count<COLLADA_UPTR_MAX);
-			daeURI_write_RAW_file_data_args args = { arrayCD->getWRT(array),(size_t)long_count,rawFile };
+						
+			daeURI_read_RAW_file_data_args args = 
+			{ arrayCD->getWRT(array),(size_t)long_count,rawIO,byteOffset };			
+			
+			//Dispensing with FILE based I/O.
+			bool oob,unknown = false;			
+			if(nullptr==rawIO) goto raw_error; 
 
 			//REMINDER: This shouldn't be a switch statement
 			//so that it will compile if the types are equal.
 			//switch(atomic_type)
 			if(atomic_type==daeAtomicType::UINT) //UINT
 			{
-				daeURI_write_RAW_file_data<int,daeUInt>(args); 
+				oob = daeURI_read_RAW_file_data<int,daeUInt>(args); 
 			}
 			else if(atomic_type==daeAtomicType::ULONG) //ULONG
 			{
-				daeURI_write_RAW_file_data<int,daeULong>(args); 
+				oob = daeURI_read_RAW_file_data<int,daeULong>(args); 
 			}
 			else if(atomic_type==daeAtomicType::FLOAT) //FLOAT
 			{
-				daeURI_write_RAW_file_data<float,daeFloat>(args); 
+				oob = daeURI_read_RAW_file_data<float,daeFloat>(args); 
 			}
 			else if(atomic_type==daeAtomicType::DOUBLE) //DOUBLE
 			{
-				daeURI_write_RAW_file_data<float,daeDouble>(args); 
+				oob = daeURI_read_RAW_file_data<float,daeDouble>(args); 
 			}
-			else goto type_unknown;
+			else{ unknown = true; assert(!unknown); } //INT? LONG?
 
-			if(0!=ferror(rawFile)) type_unknown:
+			if(unknown||oob||DAE_OK!=rawIO->getError()) raw_error:
 			{
-				daeEH::Error<<uri.getURI()<<"\n"
-				"Raw FILE error (ferror) after reading file. Possible data loss. Too late to back out.";
+				daeEH::Error<<"Raw I/O error: "<<uri.getURI()<<"\n";
+				if(rawIO==nullptr||DAE_OK==rawIO->getError())
+				daeEH::Error<<"RAW: Couldn't access secondary I/O channel for daeRawResolve::_resolve_exported.";
+				else 
+				daeEH::Error<<"Raw I/O error after reading file. Possible data loss. Too late to back out.";
+				return DAE_ERR_BACKEND_IO;		
 			}
 		}
 		req.object = array; //miss

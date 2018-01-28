@@ -22,8 +22,14 @@ static daeOK _1st_things_1st = DOM_process_share.grant();
 
 static struct daeStringRef_dummyAtlas : daeAtlas
 {
-virtual daeIO *openIO(daeIOPlugin&,daeIOPlugin&){ return nullptr; }
-virtual void closeIO(daeIO*){}
+virtual daeIO *openIO(daeIOPlugin&,daeIOPlugin&)
+{ return nullptr; }
+virtual daeOK closeIO(daeIO*,daeOK)
+{ return DAE_ERR_CLIENT_FATAL; }
+virtual daeError getNames(daeArray<daeClientString>&,daeName)const
+{ return DAE_ERR_NOT_IMPLEMENTED; }
+virtual daeError getValues(daeArray<int>&,daeClientString)const
+{ return DAE_ERR_NOT_IMPLEMENTED; }
 }_daeStringRef_dummyAtlas;
 extern daeAtlas &daeStringRef_dummyAtlas = _daeStringRef_dummyAtlas;
 
