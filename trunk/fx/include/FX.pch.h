@@ -67,6 +67,10 @@
 #define IMPORTING_COLLADA_DOM
 #endif
 
+//daeAtlasValue::DELETE?
+//WinNT.h #defines DELETE 0x00010000L
+#undef DELETE
+
 #ifndef COLLADA_DOM
 #define COLLADA_DOM 3
 #endif

@@ -72,6 +72,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\..\src\dae\daeGZ.cpp" />
     <ClCompile Include="..\..\src\dae\daeIOPluginCommon.cpp" />
     <ClCompile Include="..\..\src\dae\daeMetaElement.cpp" />
     <ClCompile Include="..\..\src\dae\daeMetaElementAttribute.cpp" />

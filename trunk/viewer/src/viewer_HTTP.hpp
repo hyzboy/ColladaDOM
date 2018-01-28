@@ -96,7 +96,10 @@ void HTTP_agent::resume_connect(int bytes)
 {	
 	char bytestr[33] = ""; if(bytes>=0)
 	{
-		if(bytes!=0) bytes-=1; //Inclusive. Must download at least 1?
+		//Inclusive. Must download at least 1?
+		//Reminder: Maybe there is an ",exclusive" 
+		//syntax that might be able to request 0 bytes.
+		if(bytes!=0) bytes-=1; 
 		itoa(content_range[0]+bytes,bytestr,10);
 	}
 
@@ -243,6 +246,13 @@ HTTP_agent::HTTP_agent(const daeIORequest *IO, daeIO::Range *rngI, bool cb(const
 					content_range[1] = std::max<int>(atoi(p),content_range[0]);
 					while(*p!='\0'&&*p++!='/');
 					content_range[2] = std::max<int>(atoi(p),content_range[1]);
+					//"and this second example illustrates when the complete length is
+					//unknown:
+					//Content-Range: bytes 42-1233/*"
+					//Can readIn return a positive bytes-read? Or should the entire
+					//file be pre-cached since openDoc doesn't exactly satisfy stream
+					//scenarios.
+					assert(0!=content_range[2]); 
 				}
 				else if(0!=statistics[1])
 				{

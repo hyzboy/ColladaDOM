@@ -47,10 +47,9 @@ typedef int intptr_t;
 #ifdef _DEBUG 
 /** Suppresses Visual Studio's warnings. */
 #define COLLADA_SUPPRESS_C(xxxx) __pragma(warning(suppress:xxxx))
-/** C4351 array 0 initialization going back to MVSC2005. */
-__pragma(warning(disable:4351))
 //warning C4520: "inherits via dominance" There's no spot fix.
-#pragma warning(disable: 4250)
+//warning C4351 array 0 initialization going back to MVSC2005.
+#pragma warning(disable:4250 4351)
 #define COLLADA_DEPRECATED(hint) __declspec(deprecated(hint))
 #endif //_DEBUG
 

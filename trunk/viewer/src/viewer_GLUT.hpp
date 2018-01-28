@@ -126,7 +126,11 @@ static bool CreateGLUTWindow(int LArgC, char **LArgV, const char *title, int wid
 	#endif
 
 	glutInit(&LArgC,LArgV);
-	glutInitDisplayMode(GLUT_DOUBLE|GLUT_DEPTH|GLUT_RGB);	
+	#ifdef FREEGLUT
+	glutSetOption(GLUT_MULTISAMPLE,4);
+	#endif
+	//GLUT_MULTISAMPLE isn't working.
+	glutInitDisplayMode(GLUT_DOUBLE|GLUT_DEPTH|GLUT_RGB/*|GLUT_MULTISAMPLE*/);		
 	
 	int cx = (glutGet(GLUT_SCREEN_WIDTH)-width)/2;
 	int cy = (glutGet(GLUT_SCREEN_HEIGHT)-height)/2;
@@ -188,6 +192,15 @@ static int COLLADA_viewer_main(int argc, char **argv, const char *default_dae)
 
 	//Load the file name provided on the command line
 	COLLADA_viewer_main2(argc>1?argv[argc-1]:default_dae,default_dae);
+
+	#if 0 //ZAE test
+	const daeArchive *a = RT::Main.DOM.getDoc(RT::Main.URL)->a<daeArchive>();
+	if(a!=nullptr)
+	{
+		daeEH::Warning<<"TESTING daeZAEPlugin BY WRITING TO external/test.zip.";
+		a->writeTo("external/test.zip");
+	}
+	#endif
 		  
 	//This block of code shows how to enumerate all the effects, get their parameters and then
 	//get their UI information.

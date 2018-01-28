@@ -43,13 +43,13 @@ static dae_fopen##_f dae_fopen = fopen;
 #endif
 COLLADA_DOM_FOPEN(dae_fopen)
 
-/**WARNING, NOT-RECOMMENDED 
+/**WARNING, NOT-RECOMMENDED, LEGACY-SUPPORT 
  * @warning The built-in plugins no longer use FILE handles
  * but they remain for now in case anyone wants to use them.
  */
 static struct daeCRT
 {
-	/**LEGACY-SUPPORT, NOT-RECOMMENDED
+	/**UNUSED, NOT-RECOMMENDED, LEGACY-SUPPORT
 	 * @c fread, @c fwrite & @c stats are only to make it 
 	 * easy to quickly write up a test @c daeIO. 
 	 * @c fopen and @c fclose are to initialize a modular
@@ -108,8 +108,9 @@ static struct daeCRT
 
 }daeCRT_default;
 
-/**EXPERIMENTAL
- * The daeIO class represents the OS's file network.
+/**
+ * The daeIO class is like C's FILE object for URIs.
+ * @see @c daeIOController::openIO().
  *
  * @remarks All of the different methods are provided
  * because of there being no standard way to do I/O, so 
@@ -118,8 +119,6 @@ static struct daeCRT
  *
  * @note Normal use entails @c getLock() and @c readIn().
  * Or @c writeOut() if writing.
- *
- * @see @c daePlatform::openIO().
  */
 class daeIO
 {	
@@ -159,9 +158,11 @@ COLLADA_(public)
 		{
 			if(first>s) first = s;
 			if(second>s) second = s; return s;
-		}
+		}		
 		size_t size(){ return second-first; }
 		bool empty(){ return first==second; }
+
+		void offset(daeOffset os){ first+=os; second+=os; }
 	};
 	/**
 	 * Gets read & write locks on the files.
@@ -244,22 +245,90 @@ COLLADA_(public) //LEGACY
 	 */
 	virtual FILE *getWriteFILE(int=0){ return nullptr; }
 };
+/**
+ * Basic @c daeIO wrapper for plugins that want to read strings.
+ */
+class daeStringI : public daeIO
+{
+COLLADA_(private)
 
-/**EXPERIMENTAL
- * Holds low-level request-info for @c daeIOPlugin/daeIOPlatform.
+	daeOK OK; daeIO *pass_throughO;
+
+	daeHashString _mem; size_t _pos; 
+
+COLLADA_(public)
+
+	inline bool empty(){ return _mem.empty(); }
+
+	daeStringI(const daeHashString &mem=nullptr, daeIO *O=nullptr)
+	:pass_throughO(O),_mem(mem),_pos(){}
+
+	virtual daeError getError(){ return OK.error; }
+
+	virtual size_t getLock(Range *I, Range *O)
+	{
+		return setRange(I,O);
+	}
+	virtual size_t setRange(Range *I, Range *O)
+	{
+		if(O!=nullptr)
+		{
+			if(nullptr!=pass_throughO)
+			pass_throughO->setRange(O);
+			else OK = DAE_ERR_INVALID_CALL; 
+		}
+		if(I!=nullptr)
+		{
+			I->limit_to_size(_mem.extent); 
+			_pos = I->first; 
+		}		
+		return _mem.extent;
+	}
+
+	virtual daeOK readIn(void *in, size_t chars)
+	{
+		const void *cp = (char*)_mem.string+_pos; 
+		
+		_pos+=chars; if(_pos<=_mem.extent) 
+		{
+			if(OK==DAE_OK) memcpy(in,cp,chars);
+		}
+		else OK = DAE_ERR_INVALID_CALL; return OK;
+	}
+	virtual daeOK writeOut(const void *out, size_t chars)
+	{
+		if(pass_throughO!=nullptr)
+		return pass_throughO->writeOut(out,chars);		
+		return OK = DAE_ERR_INVALID_CALL; 
+	}
+};
+
+/**
+ * Presently you need one of these to access any kind of data not represented
+ * by the DOM framework: e.g. if a COLLADA file wants to display a "texture."
+ * Actually it takes a lot more: You'll need 2 plugins, like @c daeIOSecond<> 
+ * and @c daeIOEmpty; and a @c daeIOController::openIO() to get a @c daeIO to
+ * read input from; Then you'll be in business!!
  *
- * Technically @c fulfillRequestI() can be used to workaround the
- * more limited @c daeArchive APIs. This feels more like feature
- * than oversight. Although, still, use-at-own-risk.
+ * Ultimately a @c daeIOPlugin or @c daeIOController must grapple with one of
+ * these objects. Likewise it's the most expressive I/O pathway for consumers.
  */
 class daeIORequest
 {	
-COLLADA_(public) //subject to change
-	/**SKETCHY
-	 * This is reserved memory. The back 8 bits are a version number denoting
-	 * the size/layout of @c this record.
+COLLADA_(public)
+	/**
+	 * @c version is @c sizeof(*this)/sizeof(void*).
+	 * @c batch informs the I/O controller that multiple requests are batched
+	 * together. The last request should set @c batch to 0. For example, when
+	 * outputting to a ZIP file, the file is typically written in full, so it 
+	 * helps if it's only written lastly.
+	 * @c image is for when requests are coded and the requester desires data
+	 * that is NOT decoded. This way plugins can avoid 2 steps: decode/encode.
+	 *
+	 * @see @c daeURI_base::getAllowsAny(). Notice that @c batch and @c image 
+	 * don't work on high-level open/write APIs of @c daeArchive or @c daeDoc.
 	 */
-	long long ops;
+	unsigned version:4, batch:1, image:1, _reserved:sizeof(int)*CHAR_BIT-6;
 	/**
 	 * For read (input) requests this the archive that the resource is loaded
 	 * into. For write (output) requests, it's simply the souce doc's archive.
@@ -275,18 +344,15 @@ COLLADA_(public) //subject to change
 	 */
 	daeHashString string;	
 	/**
-	 * For write (output) requests, localURI should be @c daeDoc::getDocURI().
-	 * The system is open-ended, for better or worse, but this is a guarantee,
-	 * -and is so if @c localURI->getDoc()->getDocType()==daeDocType::ARCHIVE,
-	 * then the I/O apparatus can intuit that it is to output an archive tree.
+	 * @c localURI is the DOM tree's URI. @c remoteURI is either where to get
+	 * the resource from, or where to output to. They are very often the same.
 	 */
 	const daeURI *localURI, *remoteURI;
 
-	static const long long vN = 1LL<<56;
-
 	daeIORequest(const daeArchive *a=nullptr, const daeHashString &b=nullptr, const daeURI *c=nullptr, const daeURI *d=nullptr)
-	:ops(vN),scope(const_cast<daeArchive*>(a)),string(b),localURI(c),remoteURI(d)
-	{
+	:version(sizeof(*this)/sizeof(void*)),batch(),image(),_reserved()
+	,scope(const_cast<daeArchive*>(a)),string(b),localURI(c),remoteURI(d)
+	{		 
 		//This is now built-in behavior if the scope is nonzero. 
 		if(!isEmptyRequest()){ resolve(); narrow(); }
 	}
@@ -358,20 +424,31 @@ COLLADA_(public) //daePlatform::openURI() support
 
 	template<class ROOT>
 	/**HELPER Helps @c daePlatform::openURI(). */
-	inline void fulfillRequestI(daeIOPlugin *I, daeDocRoot<> &doc)const 
+	inline void fulfillRequestI(daeIOPlugin *I, daeDocRoot<> &doc, daeIO*IO=nullptr)const 
 	{
-		return fulfillRequestI(daeGetMeta<ROOT>(),I,doc);
+		return fulfillRequestI(daeGetMeta<ROOT>(),I,doc,IO);
 	}
 	template<class LAZY>
 	/**HELPER Helps @c daePlatform::openURI(). */
-	inline void fulfillRequestI(daeMeta *meta, daeIOPlugin *I, daeDocRoot<LAZY> &doc)const 
+	inline void fulfillRequestI(daeMeta *meta, daeIOPlugin *I, daeDocRoot<LAZY> &doc, daeIO*IO=nullptr)const 
 	{
 		const COLLADA_INCOMPLETE(LAZY) daeArchive *a = scope; assert(!isEmptyRequest());
-		doc.error = a->_read2(doc,meta,*this,I);
+		doc.error = a->_read2(doc,meta,*this,I,IO);
+	}
+
+	template<class LAZY>
+	/**EXPERIMENTAL 
+	 * @remark This is admittedly awkward. It takes it lead from
+	 * the fulfillRequestI() API. What's important is it gives a
+	 * plugin more options without resorting to underscored APIs.
+	 */
+	inline void fulfillRequestO(daeIOPlugin *O, daeDocRoot<LAZY> &doc, daeIO*IO=nullptr)const 
+	{
+		doc.error = doc->_write2(*(const_daeDocRef*)&doc,*this,O,IO); 
 	}
 };
 
-/**EXPERIMENTAL
+/**
  * The @c daeIOPlugin class provides the input/output plugin interface, which is
  * the interface between the COLLADA runtime and the backend storage. A native
  * COLLADA XML plugin implementation is provided along with this interface.
@@ -380,9 +457,8 @@ class daeIOPlugin
 {	
 	const int _version;
 
-	friend class daeDOM;
+	friend class daeDoc;
 	friend class daeArchive;
-	friend class daeDocument;
 	/**
 	 * This is a pointer so that it can grow with each new version.
 	 */
@@ -458,7 +534,7 @@ COLLADA_(private)
 	 * way is to just read in the archive, before moving onto the
 	 * root-document. The following code extracts the archive from 
 	 * @a content, without risking anything:
-	 * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[C++]
+	 * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.C++}
 	 * //The only trouble is, content may not belong to a document.
 	 * daeArchive *a = content.getObject()->getDoc()->getArchive(); 
 	 */
@@ -467,41 +543,43 @@ COLLADA_(private)
 	/**
 	 * Writes a document/element's contents-array to an output.
 	 *
-	 * @see the @c readContent() instructions on how to do archives.
-	 * @note Archive operations are ambiguous. The user must choose
-	 * a plugin that meets their need. E.g. to write a full archive
-	 * an archive writing plugin must be chosen; To write a portion
-	 * of an archive only, a different plugin must be used, because
-	 * these arguments are inadequate to communicate which is which.
+	 * @see @c writeDoc() in cases where a @c daeDoc is an archive
+	 * or DOM or other "doc" that is not a @c daeDocument.
 	 */
 	virtual daeOK writeContent(daeIO &IO, const daeContents &content) = 0;	
 
 	/**
+	 * Previously "writeDOM."
+	 * @param URI is parented to @c daeDoc or @c daeObject or it is
+	 * @c nullptr. It's as close to @c getRequest().localURI as can
+	 * be. Otherwise the plugin is left to its own devices, and may
+	 * set @a URI if it likes.
+	 * @note THAT @c daeDocument::write() prefers @c writeContent()
+	 * to this more specialized interface.
+	 *
 	 * @return Returns @c DAE_ERR_NOT_IMPLEMENTED if the library is
 	 * to write each of the DOM's docs one-by-one as if each one is
-	 * written in an unspecified order.
-	 *
-	 * @remark Requesting to write the DOM itself is akin to asking
-	 * to write the entire-world--or that is the parts of it loaded
-	 * into the DOM. @c writeContent() is inadequate as there isn't
-	 * a root-document, as DOMs aren't true self-contained archives.
-	 *
+	 * written by a separate I/O operation.
 	 * @note There isn't a clear scheme for writing a DOM. Therefor
-	 * the default behavior is to use the URI as a mask. The plugin
-	 * --as always--is free to interpret any URI anyway it needs to.
-	 * @see @c daeDoc::writeTo().
+	 * the default behavior is to use the URI to select a domain by
+	 * greedily matching the parts of the URI. Archives are written
+	 * in full only and so do not match a URI that goes inside them.
+	 * ("URI" here is referring to @c getRequest().remoteURI.)
 	 */
-	virtual daeOK writeDOM(daeIO &IO, const daeDOM &DOM)
+	virtual daeOK writeRequest(daeIO &IO, const_daeURIRef &URI)
 	{
 		return DAE_ERR_NOT_IMPLEMENTED; 
 	}
 };
-
 //Note: There's no need for two parameters since the
 //simple/single-use I/O won't facilitate in & output.
 template<int IO=0>
-/**
+/**WARNING
  * Implements a complementary @c daeIOPlugin.
+ * @see @c daeIOEmpty.
+ *
+ * @warning This plugin doesn't do anything, but it doesn't have to
+ * because you just use it to get a @c daeIO and be your own plugin.
  */
 class daeIOSecond : public daeIOPlugin
 {
@@ -518,23 +596,38 @@ COLLADA_(public) //daeIOPlugin methods
 	//HACK: GCC 5 or so on Linux aggressively reuses the temporary's memory. SCHEDULED FOR REMOVAL?
 	static daeIORequest &_empty_request(){ static daeIORequest e(nullptr,nullptr,nullptr); return e; }
 };
-/**LEGACY
- * Implements an empty @c daeIOPlugin.
+/**
+ * Implements an empty @c daeIOPlugin. These just fill a hole where
+ * only input or output is required (which is almost all the time.)
  */
 typedef daeIOSecond<daeIOPlugin::Demands::unimplemented> daeIOEmpty;
 
 /**ZAE
- * @c daePlatform and @c daeAtlas implement this interface.
+ * @c daePlatform and @c daeAtlas implement this interface. They're
+ * @c daeIO factories.
  */
 class daeIOController
 {		
 COLLADA_(public)
-	/**
+	/**WARNING
+	 * @warning Care must be taken for archive (e.g. ZAE) like
+	 * operations where a file is overwritten while preserving
+	 * the original for the duration of the operation. Because
+	 * there is not a shared read/write model, what is advised
+	 * is to make a temporary file in the same directory until
+	 * the write operation is a success, until @c closeIO will
+	 * rename the written file and if necessary delete the old
+	 * file. Plugins should first open a read I/O channel that
+	 * should put a write-lock on that file, so that the write
+	 * attempt fails in lieu of this countermeasure on a local
+	 * file system. UNTIL a sharing model is in place, reading
+	 * and writing simultaneously is allowed only if @c &I==&O.
+	 *
 	 * Ostensibly begin a file/resource read/write operation.
 	 *
-	 * @param i contains arguments for reading, and the plugin
+	 * @param I contains arguments for reading, and the plugin
 	 * selected for doing the reading, if any.
-	 * @param o contains arguments for writing, and the plugin
+	 * @param O contains arguments for writing, and the plugin
 	 * selected for doing the writing, if any.
 	 *
 	 * @remarks The DOM object calls @c openIO(), providing
@@ -545,8 +638,17 @@ COLLADA_(public)
 	virtual daeIO *openIO(daeIOPlugin &I, daeIOPlugin &O) = 0;
 	/**
 	 * Manage/destruct IO objects provided by @c openIO().
+	 *
+	 * @param complete is an I/O plugin's status code which if
+	 * not OK should cancel a final write step where a partial
+	 * file is renamed to the final file name, deleting an old
+	 * file if necessary. I/O controllers can make note of the 
+	 * failure status codes.
+	 *
+	 * @return Returns either @c IO->getError() or any failure
+	 * code if a write operation was canceled or is incomplete.
 	 */
-	virtual void closeIO(daeIO *IO) = 0;
+	virtual daeOK closeIO(daeIO *IO, daeOK complete=DAE_OK) = 0;
 
 COLLADA_(public) //UTILITIES (use if you want)
 
@@ -811,7 +913,7 @@ COLLADA_(public)
 	 * purpose is to somehow repurpose the API. This is your platforms opportunity to
 	 * act upon a document before it's loaded with content.
 	 */
-	virtual void personalizeDocument(const daeDocument &doc){ (void)doc; /*NOP*/ }
+	virtual void personalizeDocument(const daeDocument&){ /*(void)doc;*C2027??? NOP*/ }
 
 	/**BITWISE-FLAGS, ENUM
 	 * This @c enum corresponds to @c getLegacyProfile() and @c setLegacyProfile().

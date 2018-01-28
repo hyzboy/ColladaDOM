@@ -933,13 +933,20 @@ COLLADA_(public)
 	 * contained. If an other container contains the object,
 	 * the object is first removed from the other container.
 	 */	
-	inline void contain(T *o)
+	inline void contain(T *o, size_t ins=-1)
 	{
 		daeContainedObject *upcast = (T*)o; (void)upcast;
 		_Vanilla *v = _plain_vanilla_this();
-		if(o->_container==v) return;
-		if(o->_container!=nullptr) o->_self_remove();
-		_contained.push_back(o); o->_container = v; 
+		if(v==o->_container) return;
+
+		if(o->_container!=nullptr) 
+		o->_self_remove();
+			size_t sz = _contained.size();
+			size_t mv = (sz-ins)*sizeof(o);
+		_contained.push_back(o);		
+			if(ins<sz)
+			((T**)memmove(&_contained[ins]+1,&_contained[ins],mv))[-1] = o;		
+		o->_container = v; 
 	}
 
 	/**
@@ -993,9 +1000,9 @@ COLLADA_(public)
 
 COLLADA_(protected) //Virtual method
 	/**PURE
-	 * @c __COLLADA__atomize() will calls this method.
+	 * @c __COLLADA__atomize() will call this method.
 	 */
-	virtual void __daeContainedObject__v1__atomize()=0;
+	virtual void __daeContainedObject__v1__atomize() = 0;
 	/**RESERVING
 	 * Reserving. In theory. Is this useful?
 	 */

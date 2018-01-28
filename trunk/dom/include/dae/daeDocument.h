@@ -9,8 +9,8 @@
 #ifndef __COLLADA_DOM__DAE_DOCUMENT_H__
 #define __COLLADA_DOM__DAE_DOCUMENT_H__
 
-#include "daeURI.h"
 #include "daeElement.h"
+#include "daeIOPlugin.h"
 
 COLLADA_(namespace)
 {//-.
@@ -35,7 +35,7 @@ struct daeDocType
 	 * @c _link member; though that could be a problem.
 	 * Probably @c daeDOM::_closedDocs._link is better.
 	 */
-	enum{ HARDLINK=0, SYMLINK, ARCHIVE, ORPHANAGE };	
+	enum{ ORPHANAGE=0,HARDLINK,SYMLINK,ARCHIVE };	
 };
 
 #include "../LINKAGE.HPP" //#define LINKAGE
@@ -85,13 +85,7 @@ COLLADA_(protected) //DATA-MEMBERS
 	 * If @c _archive==this, then this is the @c daeDOM.
 	 */
 	daeArchive *_archive; 
-	
-	/** 
-	 * Implements @c write() and @c writeTo(). 
-	 * @see @c daeDocument::_write().
-	 */
-	LINKAGE daeError _write(const daeURI&,daeIOPlugin*)const;
-	
+		
 COLLADA_(public) //OPERATORS
 
 	COLLADA_DOM_OBJECT_OPERATORS(daeDoc)
@@ -110,6 +104,28 @@ COLLADA_(public) //ABSTRACT INTERFACE
 	virtual void __daeDoc__v1__atomize(){ assert(0); /* = 0;*/ }
 	/** Pro-forma. Should never be called. */
 	inline void __COLLADA__atomize(){ return __daeDoc__v1__atomize(); }
+
+COLLADA_(public/*protected*/)
+	/** 
+	 * Implements @c write() and @c writeTo(). 
+	 * @see @c daeDocument::_write().
+	 */
+	inline daeError _write(const daeURI &URI, daeIOPlugin *O)const
+	{
+		const_daeDocRef _ = this;
+		return _write2(_,daeIORequest(_archive,nullptr,&getDocURI(),&URI),O);
+	}
+
+	/** 
+	 * Implements "write" analogue of @c daeArchive::_read2().
+	 *
+	 * ZAE
+	 * @param IO is to supply a privately arranged I/O channel for a
+	 * plugin to use. Perhaps a pass-through, or to fill up a buffer.
+	 * It is not closed.
+	 * @see @c daeIORequest::fulfillRequestO().
+	 */
+	LINKAGE static daeError _write2(const_daeDocRef&,const daeIORequest&,daeIOPlugin*,daeIO*IO=nullptr);
 
 COLLADA_(public)
 	/**
@@ -171,7 +187,7 @@ COLLADA_(public)
 	/**LEGACY-SUPPORT
 	 * Writes doc to its archive/document's URI.
 	 * If @c this is a @c daeDOM its docs are written. The library does this unless
-	 * @a O implements @c daeIOPlugin::writeDOM() or the default I/O plugin does so.
+	 * @a O implements @c daeIOPlugin::writeDoc() or the default I/O plugin does so.
 	 */
 	inline daeOK write(daeIOPlugin *O=nullptr)const{ return _write(_uri,O); }
 	/**WARNING, LEGACY-SUPPORT
@@ -376,16 +392,7 @@ COLLADA_(public) //DAEP::Object methods
 	virtual void __daeDoc__v1__atomize();
 
 COLLADA_(private) //INTERNALS	
-	/** 
-	 * The way this works is somewhat schizophrenic, but the
-	 * I/O request framework is slightly more flexible than a
-	 * straight URI would be otherwise.
-	 * The "scope" and "local URI" are required to match the
-	 * document unti further notice. They're double checked on
-	 * the inside.
-	 */
-	LINKAGE daeError _write(const daeIORequest&,daeIOPlugin*)const;
-
+	
 	NOALIAS_LINKAGE daePseudoElement &_getPseudoElement()const
 	SNIPPET( return *_pseudo.element(); )
 

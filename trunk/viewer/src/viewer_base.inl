@@ -610,7 +610,10 @@ struct TestIO : daeIO //QUICK & DIRTY
 	}
 	virtual daeOK writeOut(const void *out, size_t chars)
 	{
-		if(1!=fwrite(out,chars,1,w)&&chars!=0) OK = DAE_ERROR; return OK;
+		//MSVC (2010) fails when chars is 32977 (kind of large???)
+		//It tries to do a partial write, but returns 0 because it 
+		//can't devide by chars. Madness???
+		if(1!=fwrite(out,chars,1,w)&&chars!=0) OK = DAE_ERROR; return OK;		
 	}
 
 	//This is not the normal way to go about this.
@@ -738,6 +741,12 @@ static struct TestPlatform : daePlatform //SINGLETON
 		if(!req.localURI->getURI_extensionIs("dae"))		
 		if(!req.localURI->getURI_extensionIs("zae"))
 		{
+			if(req.localURI->getURI_extensionIs("zip"))
+			{
+				req.fulfillRequestI(nullptr,I,doc);
+				goto zip;
+			}
+
 			daeEH::Error<<"Unsupported file extension "<<req.localURI->getURI_extension();
 			req.unfulfillRequest(doc); return doc;
 		}
@@ -770,22 +779,23 @@ static struct TestPlatform : daePlatform //SINGLETON
 					index->getFragment() = fragment;
 				}
 			}
-			goto zae;			
+			goto zip;			
 		}
 		extern daeMeta *InitSchemas(int);
 		daeMeta *meta = InitSchemas(Peek_xmlns(req)=="http://www.collada.org/2005/11/COLLADASchema"?5:8);
 		req.fulfillRequestI(meta,I,doc); 
-zae:	if(doc==DAE_OK) URI = &doc->getDocURI(); return doc; 
+zip:	if(doc==DAE_OK) URI = &doc->getDocURI(); return doc; 
 	}
 	virtual daeIO *openIO(daeIOPlugin &I, daeIOPlugin &O)
 	{
 		return IO_stack.pop(std::make_pair(&I,&O));
 	}
-	virtual void closeIO(daeIO *IO)
+	virtual daeOK closeIO(daeIO *IO, daeOK cancel)
 	{
+		daeOK OK = IO->getError();
 		IO_stack.push(IO);
-
 		if(TestIO_HTTP_agent.connected()) TestIO_HTTP_agent.~HTTP_agent();
+		return OK;
 	}		
 	virtual int getLegacyProfile()
 	{

@@ -16,10 +16,7 @@ COLLADA_(namespace)
 daeOK daeDocument::setMeta(daeMeta &rm)
 {
 	if(getContents().empty()) 
-	{			
-		#ifdef NDEBUG
-		#error There ought to be a lock on the process-share
-		#endif		
+	{					
 		XS::Element &cm = 
 		const_cast<XS::Element&>(_pseudo->jumpIntoTOC(1));
 		assert(&cm==&_pseudo->getCMEntree());
@@ -183,53 +180,137 @@ daeOK daeDoc::_doOperation(int op, const const_daeDOMRef &DOM, const void *arg0)
 	return OK;
 }
 
-daeError daeDoc::_write(const daeURI &URI, daeIOPlugin *O)const
+daeError daeDoc::_write2(const_daeDocRef &in, const daeIORequest &reqO, daeIOPlugin *O, daeIO *IO)
 {
-	const_daeDocumentRef document = getDocument();
-	if(nullptr==document)
+	if(nullptr==reqO.remoteURI)
 	{
-		const daeDOM *DOM = this->a<daeDOM>();
+		if(nullptr!=reqO.localURI) //Flushing DOM?
+		return DAE_ERR_INVALID_CALL; //meaningful?
+	}
+	else if(!reqO.isEmptyRequest()) reqO.resolve();
+	else return DAE_ERR_INVALID_CALL; //meaningful?
 
-		if(nullptr==DOM)
+	daeDOMRef DOM = reqO.getDOM();	
+		
+	if(reqO.scope!=DOM
+	 &&reqO.localURI!=nullptr
+	&&!reqO.localURI->transitsDoc(reqO.scope))
+	{
+		return DAE_ERR_QUERY_NO_MATCH; //or DAE_ERR_INVALID_CALL?
+	}
+
+	//If a doc isn't specified then one should be
+	//found, but new docs should not be opened up
+	//in the process. A plugin can do that though. 
+	if(nullptr!=reqO.localURI&&!reqO.localURI->empty())
+	{
+		if(in!=nullptr)	
 		{
-			assert(0); return DAE_ERR_FATAL;
+			if(DOM!=in->getDOM()) return DAE_ERR_INVALID_CALL; 
 		}
-
-		//Note: it should be illegal to symlink a DOM.
-		return DOM->_write_this_DOM(URI,O);
+		else if(nullptr==reqO.localURI->docLookup(reqO.scope,in))
+		{
+			//TODO? Try _whatsupDoc? Or a soft _docHookup?
+			#ifdef NDEBUG
+			#error Exact match is inadequate if archive-like.		
+			#endif					
+		}
 	}
-	//HACK: _uri is used instead of document->_uri to hint to
-	//the plugin if it's a mass/archive write or single write.
-	daeIORequest reqO(document->_archive,nullptr,_uri,URI);
-	return document->_write(reqO,O);
-}
-daeError daeDocument::_write(const daeIORequest &reqO, daeIOPlugin *O)const
-{
-	//Kind of schizophrenic isn't it?
-	if(_archive!=reqO.scope||reqO.localURI->getDoc()->_getDocument()!=this) 
+	else if(in!=nullptr) 
 	{
-		assert(0); return DAE_ERR_INVALID_CALL;
-	}	
-	daeDOMRef DOM = const_cast<daeDOM*>(getDOM());	
-	if(reqO.remoteURI!=nullptr)
-	{
-		if(reqO.remoteURI!=reqO.localURI)
-		reqO.remoteURI->resolve(DOM);
+		if(in!=DOM) return DAE_ERR_INVALID_CALL; 		
 	}
-	else if(O==nullptr)	
-	return DAE_ERR_INVALID_CALL;
+	else in = DOM; 
+	
+	const daeDocument *document = nullptr;
+	if(in!=nullptr) if(!in->isDocument())
+	{
+		if(in->_link!=nullptr //RECURSIVE?
+		&&daeDocType::ARCHIVE!=in->getDocType())
+		{
+			in = in->_link;
+			daeIORequest req2 = reqO;
+			req2.scope = in->_archive;
+			req2.localURI = /*&*/in->_uri;
+			return _write2(in,req2,O);
+		}		
+	}
+	else document = (const daeDocument*)&*in;
+		
 	daeRAII::UnplugIO RAII(DOM->getPlatform());
-	if(O==nullptr) RAII = O = RAII.p.pluginIO(*reqO.remoteURI,'w'); 
+	if(O==nullptr) 
+	{
+		const daeURI *plugURI = reqO.remoteURI;
+		if(plugURI==nullptr) 
+		{
+			plugURI = DOM->getEmptyURI(); assert(in==DOM);
+		}
+		O = RAII = RAII.p.pluginIO(*plugURI,'w'); 
+
+		#ifdef __COLLADA_DOM__ZAE
+		if(O==nullptr)
+		if(plugURI->getURI_extensionIs("zae")
+		 ||plugURI->getURI_extensionIs("zip"))
+		{
+			static daeZAEPlugin zae; O = &zae;
+		}
+		#endif
+	}
 	daeRAII::InstantLegacyIO legacyIO; //emits error
-	if(O==nullptr) O = &legacyIO(RAII.p.getLegacyProfile(),*reqO.localURI);						
+	if(O==nullptr&&reqO.localURI!=nullptr)
+	O = &legacyIO(RAII.p.getLegacyProfile(),*reqO.localURI);						
 	daeRAII::Reset<const daeIORequest*> _O___request(O->_request);
 	O->_request = &reqO;	
 	daeIOEmpty I;
-	daeRAII::CloseIO RAII2(RAII.p); //emits error	
-	daeIO *IO = RAII2 = RAII.p.openIO(I,*O);
+	#ifdef NDEBUG
+	//Reminder: daeZAEPlugin::writeRequest has the same problem.
+	#error This only partly makes sense in the output context :(
+	#endif
+	//daeRAII::CloseIO RAII2(RAII.p); //emits error	
+	daeRAII::CloseIO RAII2(reqO.scope->getIOController()); //emits error		
+	if(IO==nullptr)
+	IO = RAII2 = RAII2.p.openIO(I,*O);
 	if(IO==nullptr)
 	return DAE_ERR_CLIENT_FATAL;
-	return O->writeContent(*IO,getContents());	
+	//NEW: Send cancel signal in case of plugin error and return
+	//write error in case where write operation did not complete.
+	//return O->writeContent(*IO,getContents());	
+	daeOK OK; if(nullptr==document)
+	{
+		//SKETCHY: Still figuring out how this is 
+		//supposed to work??
+		const_daeURIRef URI; if(in!=nullptr)
+		{
+			URI = &in->getDocURI();
+		}		
+		OK = O->writeRequest(*IO,URI);
+
+		//This is a way to write a subrange of the DOM tree.
+		//It's the best that can be done since it's unclear
+		//how to translate global URIs to a local directory.
+		if(OK==DAE_ERR_NOT_IMPLEMENTED)
+		if(in==DOM)
+		{
+			const daeURI *wc = reqO.remoteURI;
+			if(nullptr!=wc&&wc->empty()) 
+			wc = nullptr;	  
+			for(size_t i=0;i<DOM->_docs.size();i++)
+			{
+				//NOT LOOKING INSIDE ARCHIVES.
+				const daeDoc *doc = DOM->_docs[i];
+				if(wc==nullptr||doc->_uri.transitsURI(*wc))			
+				{
+					daeOK OK = doc->write();
+					if(!OK) return OK;
+				}
+			}
+			return DAE_OK;
+		}
+	}
+	else OK = O->writeContent(*IO,document->getContents());	
+	if(!OK) RAII2.OK = OK;
+	RAII2.close();
+	return OK?RAII2.OK:OK;
 }
   
 //// sid/idLookup //// sid/idLookup //// sid/idLookup //// sid/idLookup //// sid/idLookup 

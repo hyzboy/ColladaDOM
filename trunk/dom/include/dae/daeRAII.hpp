@@ -46,7 +46,7 @@ struct UnplugIO
 
 struct CloseIO
 {
-	daeIOController &p; daeIO *IO;
+	daeIOController &p; daeIO *IO; daeOK OK;
 
 	daeIO *operator=(daeIO *io)
 	{
@@ -58,7 +58,12 @@ struct CloseIO
 
 	CloseIO(daeIOController &p):p(p),IO(nullptr){}
 
-	~CloseIO(){ if(IO!=nullptr) p.closeIO(IO); } 	
+	daeOK close()
+	{
+		if(IO!=nullptr) OK = p.closeIO(IO,OK); IO = nullptr; return OK;
+	}
+
+	~CloseIO(){ close(); } 	
 };
 
 //ColladaDOM.inl is exposing daeRAII.hpp.

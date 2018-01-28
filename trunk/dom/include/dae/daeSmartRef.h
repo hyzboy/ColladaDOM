@@ -65,9 +65,7 @@ COLLADA_(public) //daeArray traits
 	static void __COLLADA__move(const daeObject *obj, daeSmartRef *lv, daeSmartRef *rv, size_t iN)
 	{
 		memcpy(lv,rv,iN*sizeof(daeSmartRef)); //raw-copyable style move.
-	}	
-
-	
+	}		
 
 COLLADA_(public) 
 
