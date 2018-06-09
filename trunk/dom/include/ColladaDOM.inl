@@ -13,6 +13,7 @@
 
 //This includes the entirety of the library.
 #include "dae.h"
+#include "dae/daeDomTypes.h"
 #include "dae/daeMetaSchema.h"
 #include "dae/daeErrorHandler.h"
 #include "dae/daeIOPluginCommon.h"
@@ -157,19 +158,26 @@ inline void daeArray<daeContent>::_clear2(daeContent*)
 	assert(_au->_offset!=0); ((daeElement*)getObject())->__clear(*this); 
 }
 template<>
-/** KISS, CIRCULAR-DEPENDENCY
+/**CIRCULAR-DEPENDENCY
+ * @param toCapacity_1 excludes the 0-terminator
+ * that holds the @c daeAtomicType::VOID element.
+ * Read: @c capacity()-1.
+ *
  * Implements @c daeArray<daeContent>::grow(). 
  * @c __COLLADA__move() was going to be used, but when 
  * @c daeCursor was made to be an iterator, it became necessary to adjust it.
  * @see ColladaDOM_3.inl header's implementation.
  */
-inline void daeArray<daeContent>::_grow2(size_t minCapacity,daeContent*)
+inline void daeArray<daeContent>::_grow2(size_t toCapacity_1,daeContent*)
 {
 	//If getObject() is nullptr it's likely to be @c XS::Choice::_solve().
 	//In that case, grow() is not supported; call _grow2<void>() directly.
 	assert(_au->_offset!=0); 
+	//WARNING
 	//>= is used to include the 0-terminator. __grow() adds 1 to minCapcity.
-	if(minCapacity>=getCapacity()) ((daeElement*)getObject())->__grow(*this,minCapacity); 
+	//(This diverges from capacity/getCapacity()!)
+	if(toCapacity_1>=getCapacity())
+	((daeElement*)getObject())->__grow(*this,toCapacity_1); 
 }
 
 /**LEGACY, CIRCULAR DEPENDENCY

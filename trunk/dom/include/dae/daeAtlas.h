@@ -9,6 +9,7 @@
 #ifndef __COLLADA_DOM__DAE_ATLAS_H__
 #define __COLLADA_DOM__DAE_ATLAS_H__
 
+#include "daeDocument.h" 
 #include "daeIOPlugin.h"
   
 COLLADA_(namespace)
@@ -227,8 +228,8 @@ COLLADA_(public) //HELPERS
 	 */
 	inline size_t assign(const void *cp, size_t len)
 	{
-		daeIO::Range r = {0,-1}; 
-		daeIO::Range r2 = {0,0+len}; 
+		daeIO::Range r = {0,size_t(-1)};
+		daeIO::Range r2 = {0,len};
 		return data(cp,&r2,&r);
 	}
 	/**	
@@ -246,7 +247,7 @@ COLLADA_(public) //HELPERS
 	inline size_t resize(size_t len)
 	{
 		size_t n = size();
-		daeIO::Range r = {len,-1};
+		daeIO::Range r = {len,size_t(-1)};
 		daeIO::Range r2 = {n,len}; 
 		return data(nullptr,n<len?&r2:nullptr,&r);
 	}

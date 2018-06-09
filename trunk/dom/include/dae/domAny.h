@@ -9,7 +9,6 @@
 #define __COLLADA_DOM__DOM_ANY_H__
 
 #include "daeElement.h"
-#include "daeDomTypes.h"
   
 COLLADA_(namespace)
 {//-.
@@ -19,125 +18,115 @@ COLLADA_(namespace)
 	//REMINDER: domAny IS COLLADA-DOM 2.x STYLE//
 	/////////////////////////////////////////////
 
-//TODO: IT WOULD BE	NICE IF THE CONTENTS-ARRAYS WERE EMBEDDABLE PER USUAL.
-/**LEGACY, VARIABLE-LENGTH
- * The @c domAny class allows for weakly typed XML elements. This class is 
- * used anywhere in the COLLADA schema where <xs:any> elements appear. 
+/**LEGACY
+ * The @c domAny class is used as a placeholder where there is not a schema
+ * that describes an element. This usually takes the form of pure @c domAny 
+ * documents, or sometimes imported elements do not have schema's; e.g. the
+ * case of COLLADA 1.5.0's MathML element without including MathML's schema.
+ * Alternatively an <xs:any> part of a schema will be filled with @c domAny
+ * elements as a last resort.
  *
- * Post-2.5 the only thing unique about @c domAny is its attributes. This is
- * more or less as it ever was. Really there just needs to be a solution for
- * <xs:anyAttribute> use cases. @c domAny is exclusive to COLLADA-DOM 2 code.
- * IOW: There shouldn't be a ColladaDOM 3 side to @c domAny. It can wait for
- * <xs:anyAttribute> support.
- * The pre-2.5 implementation relied on a @c virtual setAttribute() method. 
- * Post-2.5 waits until @c getAttribute() fails, checks if the element is a
- * @c domAny, and adds the attribute if so. The difference to this approach
- * is the attribute is added just by looking for it. This however seems more
- * correct, since a failed "get" communicates the attribute is not supported.
- * (@c setAttribute() uses @c getAttribute() to set the attribute.)
- * NOTE: This mechanism only works for @c domAny. It works by making a copy
- * of the the @c daeMeta record for every instance of @c domAny. This is how
- * it's always worked. It's not a good solution; escpecially just for to get
- * the attributes to work.
- *
- * @note The APIs removed from @c domAny were all deprecated. The notes that 
- * said as much were just to be found in the daeElement.h file instead. 2.5
- * removes all of the APIs said to be deprecated. 
- *
- * @remarks @c domAny instances do not have a proper @c daeMetaElement. Each 
- * instance creates and maintains its own. STILL, in static scenarios, there 
- * is a regular/dummy @c daeMetaElement, and so the class more or less works
- * identically. All @c domAny elements belong to the library's process-share.
+ * @note The content-model is technically MIXED, but but in this case it is
+ * ambiguous. In which case, the SIMPLE model is preferred, because it lets
+ * there be a value, and mixed-content will still go in the contents-arrays.
  */
-class domAny : public daeElemental<domAny>, public DAEP::Schema<64+32+3>
+class domAny : public daeElemental<domAny,64+32+1>
 {
-COLLADA_(public) //COLLADA-DOM 2
+public: //COLLADA-DOM 2
 	/**
 	 * These were deprecated; but are kept for switch-cases.
 	 */
 	enum{ elementType=daeObjectType::ANY };
 
-COLLADA_(public) //Parameters
+public: //Parameters
 
-	typedef struct:Elemental,Schema
-	{	DAEP::Value<0,xsAnySimpleType>
-	_0; COLLADA_WORD_ALIGN
+	typedef struct:Elemental
+	{	DAEP::Value<0,xsAnyAttribute>
+	_0; DAEP::Value<1,xsAnySimpleType>
+	_1; COLLADA_WORD_ALIGN
 		COLLADA_DOM_Z(0,0)
-	DAEP::Value<1,dae_Array<>> _Z; enum{ _No=1 };
-	DAEP::Value<2,daeContents> content; typedef void notestart;
+	DAEP::Value<2,dae_Array<>> _Z; enum{ _No=2 };
+	DAEP::Value<3,daeContents> content; typedef void notestart;
 	}_;
-						
-COLLADA_(public) //Content
+
+public: //Attributes
+	/**NO-NAMES
+	 * These attributes are invalid according to the schema. They may be user- 
+	 * defined additions and substitutes.
+	 *	
+	 * ANY, DOCUMENTATION-NOT-SUPPORTED
+	 * This member is a placeholder for an <xs:anyAttribute> element in the schema.
+	 * Feature support for <xs:anyAttribute> is limited. 
+	 */
+	DAEP::Value<0,xsAnyAttribute,_,(_::_)&_::_0> attrAny_et_cetera__value;
+
+public: //Content
 	/**WARNING
 	 * The @c xsAnySimpleType value of the text data of this element. 
-	 * @warning Post-2.5 "domAny" objects report a mixed-content-model.
-	 * In which case, @c value should not rightly be. Historically this is how it
-	 * has been done. It's probably not going anywhere.
-	 * IT MAY BE AN EITHER/OR SITUATION AT SOME JUNCTURE.
+	 * @warning Technically "domAny" should be using a mixed content
+	 * model. This is subject to change. But for now it advertises a
+	 * simple content-model, since handling of mixed-content is rare
+	 * and mixed-content is accepted even with simple-content models.
 	 */
-	DAEP::Value<0,xsAnySimpleType,_,(_::_)&_::_0> value;
+	DAEP::Value<1,xsAnySimpleType,_,(_::_)&_::_1> value;
 
 	COLLADA_WORD_ALIGN
 	COLLADA_DOM_Z(0,0) 
 	/**NO-NAMES
-	 * These elements are invalid according to the schema. They may be user-defined 
-	 * additions and substitutes.
-	 * @note This name uses the 2.4 convention because @c domAny is a legacy object.
+	 * These elements are invalid according to the schema. They may be user-
+	 * defined additions and substitutes.
+	 *	
+	 * ANY, DOCUMENTATION-NOT-SUPPORTED
+	 * This member is a placeholder for an <xs:any> element in the schema.
+	 * Feature support for <xs:any> is limited. 
 	 */
 	DAEP::Child<1,xsAny,_,(_::_)&_::_Z> elemAny_et_cetera__unnamed;
 	/**
 	 * Children, mixed-text, comments & processing-instructions.
 	 */
-	DAEP::Value<2,daeContents,_,(_::_)&_::content> content;
+	DAEP::Value<3,daeContents,_,(_::_)&_::content> content;
 
-COLLADA_(public) //Accessors and Mutators
+public: //COLLADA-DOM 2
 	/**
 	 * Gets the contents-array.
-	 * @return Returns a reference to the content element array.
+	 * @return Returns a reference to the contents-array.
 	 */
 	daeContents &getContents(){ return content; }
 	/**
 	 * Gets the contents-array.
-	 * @return Returns a constant reference to the content element array.
+	 * @return Returns a constant reference to the contents-array.
 	 */
 	const daeContents &getContents()const{ return content; }
 
-	#ifdef NDEBUG
-	#error Technically "domAny" is_of_mixed_type.
-	#error daeStringRef? Should this be housed in content? Or typed?
-	#error IT WOULD BE NICE IF THE CONTENTS-ARRAYS WERE EMBEDDABLE PER USUAL.
-	#endif
-	/**WARNING
+		////WARNING/////////////////////////////////////
+		//                                            //
+		// xsAnySimpleType is bare-bones at this time //
+		// xsAny should be used to access domAny data //
+		// xsAnySimpleType will see more methods soon //
+		//                                            //
+		////////////////////////////////////////////////
+
+	/**
 	 * Gets the value of this element.
-	 * @return Returns a @c xsAnySimpleType of the value.
-	 * @warning Post-2.5 "domAny" objects report a mixed-content-model.
-	 * In which case, @c value should not rightly be. Historically this is how it
-	 * has been done. It's probably not going anywhere.
-	 * IT MAY BE AN EITHER/OR SITUATION AT SOME JUNCTURE.
+	 * @return Returns a reference to the @c xsAnySimpleType of the value.
 	 */
-	xsAnySimpleType getValue()const{ return value; }
+	xsAnySimpleType &getValue(){ return value; }
+	/**
+	 * Gets the value of this element.
+	 * @return Returns a constant reference to the @c xsAnySimpleType of the value.
+	 */
+	const xsAnySimpleType &getValue()const{ return value; }
 	/**WARNING
 	 * Sets the value of this element.
-	 * @param val The new value for this element.
-	 * @warning Post-2.5 "domAny" objects report a mixed-content-model.
-	 * In which case, @c value should not rightly be. Historically this is how it
-	 * has been done. It's probably not going anywhere.
-	 * IT MAY BE AN EITHER/OR SITUATION AT SOME JUNCTURE.
+	 * @param val The new value for this element.	 
 	 */
-	void setValue(xsAnySimpleType val){ value = val; }
+	void setValue(const xsAnySimpleType &val){ value = val; }
  	   
   ///////////// END OF GENERATION (1) OUTPUT /////////////
 												
 #ifdef BUILDING_COLLADA_DOM
 
-	union //SHEDULED FOR REMOVAL (AND AS FOR _domAny_safe_model?)
-	{
-		void *_ALIGNER; char _[sizeof(daeMeta)];
-		daeMetaElement *operator->(){ return (daeMetaElement*)_; }
-	/** Copy of @c domAny::_master_meta with own attributes-array. */
-	}_meta;
-
-COLLADA_(public) 
+COLLADA_(public) //INVISIBLE
 		/**
 		 * Implements @c domAny::_master.
 		 */
@@ -151,59 +140,15 @@ COLLADA_(public)
 		 * the difference between regular static metadata and the 
 		 * manifold @c domAny metadata. 
 		 * @c XS::Any::findChild() use it for processContents="lax".
+		 * @see daeStringRef.cpp
 		 */
 		static _Master _master;
 
-COLLADA_(private) 
-
-		friend daeMetaElement;
-		/**
-		 * Prototype Constructor
-		 */
-		domAny()
-		{
-			(daeMeta*&)__DAEP__Element__data.meta = (daeMeta*)&_meta;
-		}
-		/**
-		 * Virtual Destructor
-		 */
-		virtual ~domAny();
-					
-		friend daeElement;
-		//EXPERIMENTAL
-		//This framework needs to evolve into <xs:anyAttribute> support.
-		/**
-		 * This needs to be persistent memory. @c std::deque
-		 * would do if its minimum size wasn't measured in KBs.		 
-		 * (Also deque would not be embedded.)
-		 * The number of refs in the last bucket is the remainder
-		 * of the attribute count divided by @c size.
-		 *
-		 * @note It doesn't strictly have to be persistent, although
-		 * attributes probably should have permanent addresses. Really
-		 * the only trouble is if the addresses change, the metadata has
-		 * to be updated; and metadata addresses wouldn't normally change.
-		 * (Alternatively the values could be in the reserved attribute
-		 * metadata; then all addresses change with the attribute array.)		 
-		 */
-		struct AttributeBucket
-		{
-			void _self_destruct(int);
-
-			enum{ size=16 }; daeString refs[size]; AttributeBucket *next;
-		};
-		/**
-		 * The array of @c daeString to hold attribute data for this element.
-		 * @todo These could be @c daeTypewriter/variant pairs, according to
-		 * if the string looks like a number or a string.
-		 */
-		AttributeBucket _attribs;
-
 #endif //BUILDING_COLLADA_DOM
-	
+
 COLLADA_(private)
 
-	friend class DAEP::Elemental<domAny>;
+	friend class DAEP::Elemental<domAny,64+32+1>;
 	/**
 	 * Reminder: This lets "math:math" default to @c domAny.
 	 */
@@ -216,7 +161,7 @@ namespace DAEP //GCC refuses to disable this (erroneous) warning
 	template<>
 	/**
 	 * Gets a @c domAny model for the purpose of making a new domAny/model.
-	 * @remarks This was added so @c DAEP::Schematic<domAny> can be of use.
+	 * @remarks This was added so @c DAEP::Generic<domAny> is able to work.
 	 */
 	inline DAEP::Model &DAEP::Elemental<domAny>::__DAEP__Object__v1__model()const
 	{

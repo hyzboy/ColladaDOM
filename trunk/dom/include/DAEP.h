@@ -68,7 +68,7 @@ COLLADA_(public) COLLADA_SUPPRESS_C(4624)
 /**NOP @c note is undefined. */
 template<> class Proto<void>{};
 
-/**ABSTRACT BASE-CLASS 
+/**ABSTRACT BASE-CLASS, 8B-ALIGNMENT 
  *
  * @class COLLADA::DAEP::Object
  *
@@ -410,8 +410,15 @@ COLLADA_(protected) //CONSTRUCTORS
  */
 enum VPTR{ VPTR=0 }; enum PTYPE{ PTYPE=0 };
 
+//NEW: Trying to eliminate DAEP::Schema by merging
+//it into DAEP::Elemental, to get Visual Studio to
+//do Empty-Base-Optimization so daeAnyAttribute is
+//predictable (and to shave off 4/8 unused bytes.)
+template<class T, 
+//Previously DAEP::Schema
+unsigned long long ULL=T::__DAEP__Schema,
 //NEW: Legacy is one of daeElement or DAEP Element.
-template<class T, class Legacy=typename daeLegacyOf<T>::type>
+class Legacy=typename daeLegacyOf<T>::type>
 /**
  * @class COLLADA::DAEP::Elemental
  *
@@ -435,6 +442,14 @@ template<class T, class Legacy=typename daeLegacyOf<T>::type>
  *	{
  *		<return daeModel by address.>
  *	}
+ *
+ *
+ * Previously "COLLADA::DAEP::Schema."
+ *
+ * @tparam ULL 
+ *
+ * DAEP Schema statically advertises XML Schema (XSD) parameters.
+ * @see @c DAEP::Generic Doxygentation.
  */
 class Elemental : public Legacy
 {
@@ -462,38 +477,7 @@ COLLADA_(public)
 	 * It's a pointer-to-nowhere that can be passed to setup templates.
 	 */
 	typedef T *TOC;
-
-COLLADA_(public) //UTILITIES
-	/**HELPER,
-	 * @struct @c COLLADA::DAEP::Elemental::Essentials
-	 *
-	 * All elements have these features, although names differ
-	 * according to how the generator is configured. Extracting
-	 * this information means generators don't have to ouptut it.
-	 *
-	 * @todo This could be implemented by @c XS::Schema and
-	 * @c daeMetaElement where it's used. It's slightly better
-	 * organized to have here. SFINAE might be required if <_> is
-	 * the name of one of some schema's children.
-	 */
-	struct Essentials
-	{
-		daeOffset content_offset;
-		daeFeatureID content_feature, union_feature;
-		template<class CC> void set(CC* &_)
-		{
-			//Clang won't use . (but it sets _MSC_VER.)
-			//Doing this santity test on VS builds only.
-			#ifdef _MSC_VER
-			daeCTC<(CC::_No==_->_Z.name)>();
-			#endif
-			union_feature = _->_Z.feature();
-			content_feature = _->content.feature();
-			content_offset = daeOffsetOf(CC,content);
-		}
-		Essentials(){ typename T::_ *C4700; set(C4700); }
-	};
-
+	
 COLLADA_(public) //Elemental constructor
 	/**
 	 * Classic/Non-Constructor
@@ -531,26 +515,19 @@ COLLADA_(public) //One more for the road!
 	 * @c DAEP::Element is an abstract class. So it can't be constructed.
 	 */
 	explicit Elemental(enum DAEP::PTYPE):COLLADA_SUPPRESS_C(4355)Legacy(this){}
-};
 
-template<unsigned long long ULL=~0ULL> 
-/** 
- * @class COLLADA::DAEP::Schema
- *
- * DAEP Schema statically advertises XML Schema (XSD) parameters.
- * @see @c DAEP::Schematic Doxygentation.
- */
-class Schema
-{
-COLLADA_(public)
+COLLADA_(public) //Previously "DAEP::Schema<ULL>."
 	/**
 	 * Enum of boolean-like traits.
 	 * These are nonzero if flagged.
 	 * If @a Traits is left to default to "~0" it forms bitmasks.
-	 * @see @c DAEP::Schematic Doxygentation.
+	 * @see @c DAEP::Generic Doxygentation.
 	 */
 	enum
 	{
+		//REMINDER: THESE MUST MATCH codeGen & daeMetaElement.h!
+		//And daeDocument::setMeta() too.
+
 	__DAEP__Schema__Traits
 	= ULL&0xFFFFFFFF,
 	/** One of: empty, simple, complex, or mixed XSD content type. */
@@ -591,8 +568,44 @@ COLLADA_(public)
 	/**
 	 * Bits 32 through 38 count the number of built-in attributes.
 	 * Value IDs greater-than-or-equal-to this value, are CONTENT.
+	 * @note This excludes the always present @c xs::anyAttribute.
 	 */
 	static const int __DAEP__Schema__extent_of_attributes = 0x3F&ULL>>32;
+};
+
+//SCHEDULED FOR REMOVAL
+/**HELPER,
+ * Previously "DAEP::Elemental::Essentials."
+ * This doesn't really need to be part of the DAEP namespace
+ * if at all. It's moved out in order to move @c DAEP::Schema
+ * into @c DAEP::Elemental so Visual Studio will do Empty-Base
+ * Optimization on it, and so @c daeAnyAttribute is predictable.
+ *
+ * All elements have these features, although names differ
+ * according to how the generator is configured. Extracting
+ * this information means generators don't have to ouptut it.
+ *
+ * @todo This could be implemented by @c XS::Schema and
+ * @c daeMetaElement where it's used. It's slightly better
+ * organized to have here. SFINAE might be required if <_> is
+ * the name of one of some schema's children.
+ */
+struct Parameters
+{
+	daeOffset content_offset;
+	daeFeatureID content_feature,union_feature;
+	template<class CC> 
+	Parameters(CC*&,typename CC::_*_=nullptr)
+	{
+		//Clang won't use . (but it sets _MSC_VER.)
+		//Doing this santity test on VS builds only.
+		#ifdef _MSC_VER
+		daeCTC<(CC::_::_No==_->_Z.name)>();
+		#endif
+		union_feature = _->_Z.feature();
+		content_feature = _->content.feature();
+		content_offset = daeOffsetOf(typename CC::_,content);
+	}
 };
 
 template<class SchemaType=class Undefined, int NoteID=-1> 
@@ -619,41 +632,27 @@ struct Note
 	 */
 	enum{ is_fixed=0,has_default=0 };
 	
-	/**C2838 @see @c DAEP::Schematic under MSVC2015. */
+	/**C2838 @see @c DAEP::Generic under MSVC2015. */
 	struct concern{ typedef void schema; };
 };
 
 template<class T> 
-/** 
- * @class COLLADA::DAEP::Schematic
+/**
+ * @class COLLADA::DAEP::InnerGeneric
  *
- * DAEP Schematic statically extracts DAEP Schema parameters.
- *
- * @note This class exposes unadvertised compile-time variables.
- * This is a necessary consequence of ceding the entire namespace
- * to the XML schema.
- *
- * VALIDATATION
- * ============
- * A Schematic represents what the generator believes a valid XML
- * -like document looks like. DAEP implementations that transform
- * the object-hierarchy in order to prepare a new "document" must
- * support/allow for "invalid" and/or intermediate configurations.
+ * DAEP Generic is implemented by this class on the off
+ * chance compilers do better with the smaller template
+ * narrowing down the type to @c __COLLADA__T to remove
+ * redundancy and avoid the artificial internal typedef.
  */
-class Schematic
+class InnerGeneric
 {
-COLLADA_(private)
-	/**
-	 * @note Assuming can ignore @c const qualifier.
-	 * __COLLADA__T is defined by @c daeSmartRef<T>.
-	 */
-	typedef typename T::__COLLADA__T _;
-
 COLLADA_(public)
-	/**
+	/**WARNING
+	 * @warning @c type is NOT @const qualified!!
 	 * The generated class, accessed via pointers. 
 	 */
-	typedef typename _::__COLLADA__Element type;
+	typedef T type;
 
 	/**
 	 * This is a way to form a C++ reference to a
@@ -661,7 +660,7 @@ COLLADA_(public)
 	 * for this @c type for a given name BUT ONLY
 	 * if that name is non-singular.
 	 */
-	typedef dae_Array<type> content;	
+	typedef dae_Array<T> content;	
 		
 	/**
 	 * This is a type-ID for an element type, that is valid for
@@ -669,42 +668,45 @@ COLLADA_(public)
 	 * from different generator sessions. It's provided because
 	 * the @case claues of @c switch statements can't do better.
 	 */
-	static const int genus = _::__DAEP__Schema__genus;
+	static const int genus = T::__DAEP__Schema__genus;
 
-	/** One of: empty (0), simple (1), complex (2), or mixed (3). */
+	/** One of: empty (0), simple (1), complex (2), or mixed (3). 
+	 * @note @c domAny is ambiguous with regard to value/content.
+	 * It can be distinguished by @c genus.
+	 */
 	static const int XSD_content_model
-	= _::__DAEP__Schema__g1__content_model;
+	= T::__DAEP__Schema__g1__content_model;
 	/** Empty models have only comments and processing-instructions. */
 	static const bool is_of_empty_type
-	= 0==_::__DAEP__Schema__g1__content_model;
+	= 0==T::__DAEP__Schema__g1__content_model;
 	/** Simple has value-content after comments/processing-instructions. */
 	static const bool is_of_simple_type
-	= 1==_::__DAEP__Schema__g1__content_model;
+	= 1==T::__DAEP__Schema__g1__content_model;
 	/** Complex has child-elements among comments/processing-instructions. */
 	static const bool is_of_complex_type
-	= 2==_::__DAEP__Schema__g1__content_model;
+	= 2==T::__DAEP__Schema__g1__content_model;
 	/** Mixed has text-and-elements among comments/processing-instructions. */
 	static const bool is_of_mixed_type
-	= 3==_::__DAEP__Schema__g1__content_model;
+	= 3==T::__DAEP__Schema__g1__content_model;
 
 	/** This means this is not a global type, within its XSD schema. */
 	static const bool is_local
-	= 0!=_::__DAEP__Schema__g1__is_local;
+	= 0!=T::__DAEP__Schema__g1__is_local;
 	/** This means this is pseudo type, like a wrapper of an xs:group. */
 	static const bool is_group
-	= 0!=_::__DAEP__Schema__g1__is_group;
+	= 0!=T::__DAEP__Schema__g1__is_group;
 	/** This means this is a placeholder for one or more concrete types. */
 	static const bool is_abstract
-	= 0!=_::__DAEP__Schema__g1__is_abstract;
+	= 0!=T::__DAEP__Schema__g1__is_abstract;
 	/** This means that any kind of element can be a child of the element. */
 	static const bool allows_any
-	= 0!=_::__DAEP__Schema__g1__allows_any;
+	= 0!=T::__DAEP__Schema__g1__allows_any;
 	/** This means that any attribute is allowed and their types are opaque. */
 	static const bool allows_any_attribute 
-	= 0!=_::__DAEP__Schema__g1__allows_any_attribute;
+	= 0!=T::__DAEP__Schema__g1__allows_any_attribute;
 	/** This means that the element uses the <xs:all> virtual content model. */
 	static const bool is_all 
-	= 0!=_::__DAEP__Schema__g1__is_all;
+	= 0!=T::__DAEP__Schema__g1__is_all;
 	/** This is a combinatorial statement to help write highly readable code. */
 	static const bool is_plain_old_element
 	//Should is_group be included? Can a group be a type-in-itself in other words?
@@ -713,12 +715,12 @@ COLLADA_(public)
 	/**EXPERIMENTAL
 	 * This provides a unique type for the code-generator schema of @a T.
 	 */
-	typedef typename DAEP::Note<typename _::_::notestart>::concern::schema schema;
+	typedef typename DAEP::Note<typename T::_::notestart>::concern::schema schema;
 };
 /**EXPERIMENTAL, TEMPLATE-SPECIALIZATION
  * @c xs::any (@c xsAny) requires this.
  */ 
-template<> class Schematic<daeElement>
+template<> class InnerGeneric<daeElement>
 { 
 COLLADA_(public)
 
@@ -727,8 +729,32 @@ COLLADA_(public)
 	/** This means this is a placeholder for one or more concrete types. */
 	static const bool is_abstract = true;	
 };
-/** Don't know if this is best, but it's simpler for now. */
-template<class T> class Schematic<const T> : Schematic<T>{};
+template<class T> 
+/** 
+ * @class COLLADA::DAEP::Generic
+ *
+ * DAEP Generic statically extracts DAEP Schema parameters, etc.
+ *
+ * @note This class exposes unadvertised compile-time variables.
+ * This is a necessary consequence of ceding the entire namespace
+ * to the XML schema.
+ *
+ * Originally called "Schematic" until "DAEP::Schema" was merged
+ * into @c DAEP::Elemental, at which point it became tempting to
+ * shorten its name to "Schema" however it actually digs down to
+ * the underly types of "smart-refs" and so has more than Schema
+ * did to offer. "Generic" evokes generic-programming, which the 
+ * class assists in, and the PHP Codegen step, that it takes its
+ * figures from, and the "drilling down" to the type @c T refers.
+ */
+class Generic 
+:
+public InnerGeneric<typename T::__COLLADA__T::__COLLADA__Element>
+{
+	//OPTIMIZATION? Definition moved to InnerGeneric in order to
+	//minimize the number of identical definitions of the larger
+	//template just in case this improves compilers' performance.
+};
 
 template<class Note=void, class Noted=Note, class Sig=signed>
 /**
@@ -986,12 +1012,13 @@ COLLADA_(private)
 	void _issue_change_if(typename DAEP::Concern<SFINAE>::VOID*){}
 
 	template<class LAZY>
-	//HACK: _meta_value is delaying evalution of incomplete types.
-	//Visual Studio's misapplication of templates is much simpler.
-	static daeAttribute &_value_or_attribute(LAZY e)
+	static daeData *_value_or_attribute(LAZY e)
 	{
-		if(1==S::is_content) return *dae(e)->getMeta().getValue();
-		if(0==S::is_content) return dae(e)->getMeta().getAttributes()[S::name];
+		if(1==S::is_content) return dae(e)->getMeta().getValue();
+		#ifdef NDEBUG
+		daeCTC<(S::name>0)>();
+		#endif
+		if(1!=S::is_content) return dae(e)->getMeta().getAttributes()[S::name];
 	}
 
 COLLADA_(public)
@@ -1020,11 +1047,16 @@ COLLADA_(public)
  * STILL IT'S USEFUL to have a minimal example of what is expected
  * of procedural class generators (in DAEP Nil.)
  */
-class Nil : public DAEP::Schema<>
+class Nil 
+//: public DAEP::Schema<> //Maybe can do without?
 {
 COLLADA_(public) Nil(){} enum notestart{ _No };
 
 	typedef char Nil::*_; typedef Nil __COLLADA__T;
+
+//Previously "DAEP::Schema<>."
+
+	enum{ __DAEP__Schema__extent_of_attributes=0 };
 };
 
 template<class Note, class Type=void>
@@ -1050,24 +1082,44 @@ template<int ID, class T, class CC, typename CC::_ PtoM, class EBO=dae_Array<T,I
  *
  * This class is an attempt to spare implementors of @c DAEP::Child
  * the torment and room for error in implementing their Child class.
+ *
+ * @note @a EBO must be a @c dae_Array and must be the same size as
+ * @c dae_Array. "EBO" means Microsoft "empty base optimization" is
+ * in effect. Not that the base is empty, but that it doesn't allow
+ * multiple inheritance... or, @c InnerChild can't have other bases.
  */
 class InnerChild : public EBO
 {	
-COLLADA_(public) //MAYBE PORTABLE
-	
-	typedef DAEP::Child<ID,T,CC,PtoM> type;
 	/**UNUSED?
 	 * Visual Studio won't use CC from the outer
 	 * scope or CC redefined (GCC won't override
 	 * template parameters at any level anyway.)
 	 */
 	template<int,class,class CCC,typename CCC::_>
-	friend class Child;
+	friend class Child;	
+
+COLLADA_(public) //TEMPLATE-METAPROGRAMMING
+
+	typedef DAEP::Child<ID,T,CC,PtoM> type;
+	
+	/**COURTESY
+	 * Ways to refer to the types variously
+	 * returned by @c dae_Array<T>.
+	 * @note These are low-level underlying
+	 * types.
+	 */
+	typedef T __COLLADA__T, &reference, *pointer;
+	/**CONST-FORM, COURTESY
+	 * Ways to refer to the types variously
+	 * returned by @c dae_Array<T>.
+	 * @note These are low-level underlying
+	 * types.
+	 */
+	typedef const T &const_reference, *const_pointer;	
 
 	static const int name = ID;		
 	static const bool is_element = true;
-	static const bool is_content = false;			
-	typedef DAEP::Schematic<T> schematic, XSD;
+	static const bool is_content = false;				
 	static const bool is_child_nonplural = ID<0;
 	static const bool is_children_plural = ID>0;
 	typedef DAEP::Note<typename CC::notestart,CC::_No-ID+1> note;
@@ -1099,6 +1151,8 @@ COLLADA_(public) //PUBLIC UTILITIES
 	 * there's already a hole where the nonplural bitfield is concerned, and
 	 * the contents-array's feature ID would have to be adjusted as well, to
 	 * justify filling the hole, since it's used as the total features count.
+	 *
+	 * @todo Elements might have some basic features?
 	 */
 	inline daeFeatureID feature()const{ return daeFeatureID(-CC::_No-2+ID); }
 
@@ -1202,6 +1256,10 @@ typename daeTypic<daeArrayAware<T>::is_class,T,DAEP::Class<T>>::type>
  *
  * This class is an attempt to spare implementors of @c DAEP::Value
  * the torment and room for error in implementing their Value class.
+ *
+ * @tparam EBO is the type of the wrapped value. It shares its name
+ * with @c InnerValue's @a EBO parameter. It seems like this is not
+ * the best name... but is there another that is better?
  */
 class InnerValue
 {
@@ -1262,7 +1320,7 @@ COLLADA_(public) //MAYBE PORTABLE
 	
 	static const int name = ID;			
 	static const bool is_element = false;	
-	static const bool is_content = ID>=CC::__DAEP__Schema__extent_of_attributes;	
+	static const bool is_content = ID>CC::__DAEP__Schema__extent_of_attributes;	
 	//wrapped_type is only to specialize on DAEP::Class. It's needed right now 
 	//to pick up the ColladaDOM 3 style enum datatypes. They are class wrapped.
 	typedef EBO wrapped_type;
@@ -1291,6 +1349,8 @@ COLLADA_(public) //PUBLIC UTILITIES
 
 	/**
 	 * Gets the model-feature identifier. 
+	 * @todo Negative IDs should converge on 0.
+	 * @todo Elements might have some basic features?
 	 */
 	inline daeFeatureID feature()const{ return daeFeatureID(-ID-1); }
 
@@ -1410,6 +1470,10 @@ COLLADA_(public) //CHANGE-NOTICE GUARANTEES
 	 * unless @c underlying_type implements @c size(). Not for the time being.
 	 */
 	size_t size()const{ return value.size(); }
+	/**
+	 * Tells if @c 0==size().
+	 */
+	inline bool empty()const{ return value.empty(); }
 	/**
 	 * This is for @c daeHashString. It's a common API, but isn't implemented
 	 * unless @c underlying_type implements @c data(). Not for the time being.

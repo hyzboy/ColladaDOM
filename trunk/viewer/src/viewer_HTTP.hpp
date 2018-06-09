@@ -99,8 +99,8 @@ void HTTP_agent::resume_connect(int bytes)
 		//Inclusive. Must download at least 1?
 		//Reminder: Maybe there is an ",exclusive" 
 		//syntax that might be able to request 0 bytes.
-		if(bytes!=0) bytes-=1; 
-		itoa(content_range[0]+bytes,bytestr,10);
+		if(bytes!=0) bytes-=1;
+		snprintf(bytestr,sizeof(bytestr),"%d",(int)content_range[0]+bytes); //itoa
 	}
 
 	if('\0'==resume_RFC1123[0]) //if(0==transferred())
@@ -118,7 +118,7 @@ void HTTP_agent::resume_connect(int bytes)
 	char headers[1024] = "", head[4096];
 	snprintf(headers,sizeof(headers),
 	"If-Unmodified-Since: %s\r\nRange: bytes=%d-%s\r\n"
-	,resume_RFC1123,content_range[0]+statistics[0],bytestr);	
+	,resume_RFC1123,int(content_range[0]+statistics[0]),bytestr);
 					
 	#ifdef _WIN32
 	static WSADATA data; WSAStartup(0x202,&data);	
@@ -240,7 +240,7 @@ HTTP_agent::HTTP_agent(const daeIORequest *IO, daeIO::Range *rngI, bool cb(const
 				char *p = strstr(buf,"\r\nContent-Range: ");
 				if(p!=nullptr)
 				{
-					while(*p!='\0'&&!isdigit(*p)) *p++;
+					while(*p!='\0'&&!isdigit(*p)) p++;
 					content_range[0] = atoi(p); 
 					while(*p!='\0'&&*p++!='-');
 					content_range[1] = std::max<int>(atoi(p),content_range[0]);

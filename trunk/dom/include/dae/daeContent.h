@@ -947,7 +947,7 @@ COLLADA_(public) //EXPERIMENTAL
 
 template<class C=daeContents>
 /**INTERNAL
- * Previously "daeCM::_Placement."
+ * Formerly "daeCM::_Placement."
  * @remarks This class was internal to @c daeCM.
  * It's here so @c daeContents_base::_operation
  * can use it to implement the DAEP Change note.
@@ -2747,7 +2747,7 @@ static daeCTC<COLLADA_PTR_CHAR==sizeof(void*)> COLLADA_PTR_CHAR_check;
  * @param words is the number of nonplural cursor-arrays divided by 32, so
  * that they are divided into groups of 32, each bit being a 0-or-1 counter.
  *
- * @remarks The name comes from the last/shared pointer-to-member called "_N."
+ * @remarks The name comes from the last/shared pointer-to-member called "_Z."
  * The need comes from packing the 32-bit values on 64-bit builds. Originally,
  * -the cursor-arrays would be behind the contents-array, but in order to have
  * an embedded contents-array, they must be placed in the front, so they aren't

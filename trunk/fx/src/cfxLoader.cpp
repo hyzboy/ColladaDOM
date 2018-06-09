@@ -93,7 +93,7 @@ struct FX::Loader::Load
 
 		for(size_t i=0;i<newparam.size();i++)
 		{
-			const typename T::XSD::type &newparam_i = *newparam[i];
+			typename T::const_reference newparam_i = *newparam[i];
 
 			#if YY==5
 			if(!newparam_i.surface.empty())
@@ -129,7 +129,7 @@ struct FX::Loader::Load
 	{
 		Load_annotate(np.annotate,c);
 	}
-	static void _try_annotate(const DAEP::Schematic<COMMON::newparam>::type&,FX::Annotatable*)
+	static void _try_annotate(const DAEP::Generic<COMMON::newparam>::type&,FX::Annotatable*)
 	{ /*NOP*/ }
 	template<class T> 
 	FX::Param *_try_connect_param(const T&,FX::Paramable*){ return nullptr; }
@@ -160,7 +160,7 @@ struct FX::Loader::Load
 	{		  
 		for(size_t i=0;i<setparam.size();i++)
 		{
-			const typename T::XSD::type &setparam_i = *setparam[i];
+			typename T::const_reference setparam_i = *setparam[i];
 
 			#ifdef NDEBUG
 			#error And setparam_i.program? (Not in <instance_effect>.)
@@ -249,7 +249,7 @@ struct FX::Loader::Load
 	{	
 		if(child.empty()) return 0; 
 	
-		const typename T::XSD::type &in = *child;				
+		typename T::const_reference in = *child;				
 		
 		if(!in.texture.empty())
 		{	
@@ -288,7 +288,7 @@ struct FX::Loader::Load
 	template<class T> 
 	bool _profile_shaders(typename T::technique::pass,FX::Pass*,FX::Effect*,xs::string);	
 };
-typedef DAEP::Schematic<ColladaYY::annotate>::content annotate;
+typedef DAEP::Generic<ColladaYY::annotate>::content annotate;
 static void Load_annotate(const annotate &annotate, FX::Annotatable *c)
 {
 	if(!annotate.empty())
@@ -495,7 +495,7 @@ struct FX::Loader::Load::Loading_gl_pipeline_setting : public Load::Loading
 		//Must use long (unsigned) for 64 bit platforms' xs:long.
 		#define i int(e->index->*0ULL)
 		#define _(x,y,t,z,...) \
-		case DAEP::Schematic<Lpass::z>::genus:\
+		case DAEP::Generic<Lpass::z>::genus:\
 		{ Lpass::z &e = *(Lpass::z*)&element;\
 		Loading::Setting<t>(__CreateStateAssignmentIndex\
 		(Cg_Pass,cgGetNamedState(Cg,#x),y),__VA_ARGS__);\
@@ -701,7 +701,7 @@ inline void FX::Loader::Load::profile_(T profile_, FX::Effect *e)
 
 	//Reminder: Cg must go first for this to work.		
 	CGcontext Cg = nullptr;
-	if(DAEP::Schematic<T>::genus==DAEP::Schematic<CG>::genus)
+	if(DAEP::Generic<T>::genus==DAEP::Generic<CG>::genus)
 	Cg = loading.Cg;
 		
 	_profile_ = profile_; //Save for '08 shaders?	

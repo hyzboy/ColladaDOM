@@ -167,6 +167,8 @@ COLLADA_(namespace)
 	//4*4 is anything to avoid 0. It's 3D matrix sized.
 	template<class=void,int=4*4> class daeAlloc;
 	class daeObject;	
+	class daeAnyAttribute;
+	typedef class daeAnySimpleType daeAST;
 	class daeText;
 	class daeEOText;
 	union daeContent;	
@@ -190,6 +192,7 @@ COLLADA_(namespace)
 	class daeIORequest;
 	class daeAtom{};
 	class daeTypewriter;
+	class daeTypewriter2;
 	template<int=0,int=0> class daeBinary;	
 	class daeModel;	
 	class daeFeature;
@@ -208,6 +211,7 @@ COLLADA_(namespace)
 	}	
 	class daeMetaObject;
 	typedef const class daeMetaElement daeMeta;
+	class daeData;
 	class daeProcessShare;		
 	namespace XS
 	{
@@ -215,8 +219,13 @@ COLLADA_(namespace)
 		class Schema; class Attribute; class Restriction; class Enumeration;
 	}				
 	class daeCM;
+	class daeAny; //daeMetaElementAttribute.h
 	namespace XS //This is to differentiate the "content-model" from "meta."
 	{	
+		/**Holds processContents & namespace attributes.
+		 */
+		typedef daeAny AnyAttribute;
+
 		class Choice; class Element; class Group; 
 		
 		//#ifndef COLLADA_NODEPRECATE typedef
@@ -229,10 +238,9 @@ COLLADA_(namespace)
 			SCHEMA=30,ATTRIBUTE, //miscellaneous
 		};
 	}
-	typedef XS::__daeXS daeXS;
-	//These three elevate low-level concepts.	
-	typedef const class daeValue daeCharData;
-	typedef const XS::Attribute daeAttribute;	
+	typedef XS::__daeXS daeXS;		
+	typedef const class daeDefault daeValue;
+	typedef const XS::Attribute daeAttribute;
 	typedef const daeArray<const XS::Element> daeTOC;
 	//Pseudonym is neither a proper NCName nor QName.
 	typedef class daeHashString daePseudonym,daeName;
@@ -418,6 +426,24 @@ COLLADA_(namespace) //maybe a separate support header someday
 {//-.
 //<-'
 
+/**HELPER
+ * Previously @c daeIO::Range, this class as @c daePartition
+ * is used by @c daeAnyAttribute::getAnyExtraPart().
+ */
+struct daePartition
+{
+	size_t first,second; 
+	size_t limit_to_size(size_t s)
+	{
+		if(first>s) first = s;
+		if(second>s) second = s; return s;
+	}		
+	size_t size()const{ return second-first; }
+	bool empty()const{ return first==second; }
+
+	void offset(daeOffset os){ first+=os; second+=os; }
+};
+
 /**WORKAROUND
  * "error: explicit specialization in non-namespace scope."
  * Visual Studio has long allowed method specializations in
@@ -440,7 +466,8 @@ template<class A, class B> struct daeTypic<false,A,B>
 	typedef B type; 
 };
 
-template<class> class daeElemental;
+template<class,unsigned long long> 
+class daeElemental;
 /**
  * This is pretty crazy. This is introduced after @c daeElement
  * was made to not inherit @c DAEP::Element. Still it's desired
@@ -454,7 +481,8 @@ template<class T> struct daeLegacyOf
 {
 	typedef char Yes; typedef long No;	
 	static Yes DAEP(...);
-	template<typename S> static No DAEP(daeElemental<S>*);
+	template<typename S,unsigned long long N> 
+	static No DAEP(daeElemental<S,N>*);
 	//error: explicit specialization in non-namespace scope.
 	enum{ is_legacy=sizeof(No)==sizeof(DAEP((T*)nullptr)) };
 	typedef typename daeTypic<is_legacy,daeElement,DAEP::Element>::type type;
@@ -615,12 +643,12 @@ struct dae3ool
 inline daeObj *operator->(){ return (daeObj*)this; }\
 /** COLLADA_DOM_OBJECT_OPERATORS Common interface, const-> operator. */\
 inline const daeObj *operator->()const{ return (daeObj*)this; }\
-template<class T>\
+template<class _>\
 /** COLLADA_DOM_OBJECT_OPERATORS Weak conversion to pointer. */\
-inline operator T*(){ T *upcast = (daeObj*)nullptr; return (T*)this; (void)upcast; }\
-template<class T>\
+inline operator _*(){ _ *upcast = (daeObj*)nullptr; return (_*)this; (void)upcast; }\
+template<class _>\
 /** COLLADA_DOM_OBJECT_OPERATORS Weak conversion to const-pointer. */\
-inline operator const T*()const{ T *upcast = (daeObj*)nullptr; return (T*)this; (void)upcast;  }
+inline operator const _*()const{ _ *upcast = (daeObj*)nullptr; return (_*)this; (void)upcast;  }
 
 #endif //__COLLADA_DOM__DAE_TYPES_H__
 /*C1071*/

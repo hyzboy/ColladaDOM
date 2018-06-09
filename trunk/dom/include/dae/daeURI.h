@@ -946,7 +946,8 @@ COLLADA_(public) //UTILITIES
 		docLookup(archive,matchingDoc);
 		if(matchingDoc==nullptr&&!getIsResolved())
 		{
-			if(DAE_OK==resolve(((daeObject*)archive)->getDOM()))
+			//daeArchive is undefined here.
+			if(DAE_OK==resolve((daeArchive*)((daeObject*)archive)->getDOM()))
 			docLookup(archive,matchingDoc,dae_default);
 		}
 		return matchingDoc;

@@ -34,8 +34,8 @@ typedef struct //daeSIDResolver_cpp
 			#ifdef NDEBUG //GCC doesn't like apostrophes.
 			#error "Sometimes it's \"target\" instead. E.g. <instance_material>"
 			#endif
-			daeName url = scope->getAttribute("url");			
-			if(!url.empty())
+			daeCharData_size<260> url;
+			if(!scope->getAttribute("url",url).empty())
 			{
 				daeURI_parser URI(url,scope);
 				const_daeElementRef e = URI.getTargetedFragment();
@@ -100,7 +100,7 @@ typedef struct //daeSIDResolver_cpp
 			//Pre-2.5 this worked differently, but the schema is ambiguous
 			//if it is not interpreted this way.
 			if("technique_common"==e->getNCName()&&!profile.empty()
-			 ||"technique"==e->getNCName()&&profile!=e->getAttribute("profile"))
+			 ||"technique"==e->getNCName()&&profile!=e->string("profile"))
 			return UINT_MAX;			
 			if(e==c) return distance; distance++;
 
@@ -182,21 +182,21 @@ daeOK daeDefaultSIDREFResolver::_resolve_exported
 
 hit: //fill out the request object
 	const daeElement *e = (daeElement*)&*req.object;
-	accessor_source:
-	daeCharData *cd = e->getCharDataObject();
-	if(cd!=nullptr)
+accessor_source:	
+	if(e->hasCharData()) //LOSSY!!
 	{
+		daeData &cd = e->getCharData();	
 		size_t n = 0;
-		req.type = &cd->getType(); 		
-		req.typeInstance = cd->getWRT(e);
-		if(cd->isArrayValue())
+		req.type = cd.getTypeWRT(e); 		
+		req.typeInstance = cd.getWRT(e);
+		if(req.type->hasListType())
 		{
 			const daeAlloc<> *AU =
 			(daeAlloc<>*const&)req.typeInstance;
 			n = AU->getCount();
 			req.typeInstance = AU->getRaw();
 		}
-		else switch(req.type->writer->getAtomicType())
+		else switch(req.type->getAtomicType())
 		{
 		case daeAtomicType::TOKEN: case daeAtomicType::STRING:
 			
@@ -234,7 +234,7 @@ hit: //fill out the request object
 		 &&nullptr!=(e=e->getChild("accessor")))
 		{	
 			daeArray<char,90> GCC; //SCHEDULED FOR REMOVAL
-			daeName source = e->getAttribute(GCC,"source");
+			daeName source = e->getAttribute("source",GCC);
 			if(!source.empty())
 			{
 				e = daeURI_parser(source,e).getTargetedFragment();

@@ -15,19 +15,105 @@ COLLADA_(namespace)
 {//-.
 //<-'
 
+//#include daeDomTypes.h
+//domAny and daeDocument
+//want these definitions
+typedef daeElement xsAny;
+typedef daeAnyAttribute xsAnyAttribute;
+typedef daeAST::TypedUnion xsAnySimpleType;
+		
 #ifndef COLLADA_NODEPRECATED
-/**LEGACY-SUPPORT, NOT-RECOMMENDED
- * @c getAttributes() uses @c attr to form its key/value pairs. 
- */
-struct daeAttributeKeyValuePair
-{
-	typedef void __COLLADA__atomize;
-	daeName name; daeArray<daeStringCP,96> value; 
-};
 //Just for getDocumentURI() API.
 template<int> class daeURI_size;
 typedef daeSmartRef<const daeURI_size<260>> const_daeURIRef;
 #endif //COLLADA_NODEPRECATED
+
+template<int size_on_stack>
+/**EXPERIMENTAL 
+ * Trying to add string-literal comparison operators to
+ * a @c daeArray.
+ */
+class daeCharData_size
+:
+public daeArray<daeStringCP,size_on_stack> 
+,
+public daeString_support<daeCharData_size<size_on_stack>>
+{
+	typedef daeArray<daeStringCP,size_on_stack> _1;
+	typedef daeString_support<daeCharData_size<size_on_stack>> _2;
+
+COLLADA_(public)
+
+	using _2::operator==;
+	using _2::operator!=;
+
+	daeCharData_size()
+	{
+		_1::clear_and_0_terminate();
+	}
+	daeCharData_size(const daeHashString &cp)
+	{
+		operator=(cp);
+	}
+	daeCharData_size &operator=(const daeHashString &cp)
+	{
+		_1::assign_and_0_terminate(cp.data(),cp.size()); 
+		return *this;
+	}
+
+	/**EXPERIMENTAL
+	 * Facilitating @c daeBoundaryStringIn construction.
+	 */
+	inline operator daeString()const
+	{
+		assert(_1::back()=='\0');
+		return _1::data(); 
+	}
+};
+/**EXPERIMENTAL 
+ * Trying to add string-literal comparison operators to
+ * a @c daeArray.
+ */
+typedef daeCharData_size<32> daeCharData;
+
+/**LEGACY-SUPPORT
+ * @c daeAttributes needs this defined outside of its body.
+ */
+struct daeAttribute2
+{
+	typedef void __COLLADA__atomize;
+	daeName name; daeCharData value; 
+};
+template<int size_on_stack>
+/**LEGACY-SUPPORT
+ * @see string pairs version of @c daeElement::getAttributes().
+ */
+struct daeAttributes_size : daeArray<daeAttribute2,size_on_stack>
+{
+	typedef daeArray<daeAttribute2,size_on_stack> _base;
+
+	daeAttributes_size(daeAnyAttribute &aa)
+	{
+		*this = aa;
+	}
+	daeAttributes_size &operator=(daeAnyAttribute &aa)
+	{
+		size_t iN = aa.size();
+		_base::resize(iN); //Or?
+		const daeElement *e = &aa.getElement();
+		for(size_t i=0;i<iN;i++)
+		{			
+			daeAttribute2 &a = _base::operator[](i);
+			a.name = aa[i]->getName();
+			aa[i]->memoryToStringWRT(e,a.value);
+		}
+		return *this;
+	}
+};
+/**LEGACY-SUPPORT
+ * @see string pairs version of @c daeElement::getAttributes().
+ */
+typedef daeAttributes_size<10> daeAttributes; 
 
 /**PLAIN-OLD-DATA
  * 32-bit structure that overlays with @c daeObject::_tags.
@@ -61,10 +147,10 @@ struct daeElementTags
 	 * (This is to work w/ @c daeMetaElement::createWRT()->placeWRT().)
 	 * When namespaceTag is 1, it is an undefined, document namespace. 
 	 */
-	const daeTag namespaceTag, nameTag, interfaceTag, moduleTag;
+	const daeTag namespaceTag,nameTag,interfaceTag,moduleTag;
 };
 
-template<class T>
+template<class T, unsigned long long ULL>
 /**
  * COLLADA C++ class that implements an instance of @c daeElement.
  *
@@ -80,11 +166,8 @@ template<class T>
  * parameter. Initially the hope was that virtual-inheritance could
  * be used to share the data/virtual-layout, but it didn't work out.
  */
-class daeElemental : public DAEP::Elemental<T,daeElement>
+class daeElemental : public DAEP::Elemental<T,ULL,daeElement>
 {
-	//Microsoft's Natvis can't seem to find namespaces???
-	typedef DAEP::Elemental<T,daeElement> __super_natvis;
-
 COLLADA_(public) //These may not work.
 	/**
 	 * Static version of @c daeObject::getObjectType().
@@ -131,7 +214,7 @@ class daeElement : public daeObject
 	friend class domAny;
 	friend class daeObject;
 	friend class daeDocument;
-	friend class daeMetaElement;
+	friend class daeMetaElement;	
 	//DAEP Element DATA-MEMBERS & CONSTRUCTORS
 	COLLADA_(protected)
 	//VIRTUAL-INHERITANCE DOESN'T LINE UP WITH 
@@ -271,7 +354,7 @@ COLLADA_(public)
 	 * @remarks This method predates 2.5, and so is repurposed.
 	 * @return Returns the daeObjectType class's typeless enum.
 	 */
-	inline int getElementType()const{ return getMeta()->getElementType(); }
+	inline int getElementType()const{ return getMeta().getElementType(); }
 
 	/**WARNING, LEGACY-SUPPORT
 	 * Gets this element's NCName.
@@ -375,7 +458,7 @@ COLLADA_(public)
 	 */
 	inline daeElement *add(const U &child)
 	{
-		return getMeta()->placeWRT(this,child)>=DAE_OK?child:nullptr; 
+		return getMeta().placeWRT(this,child)>=DAE_OK?child:nullptr; 
 	}
 	/**LEGACY, OVERLOAD
 	 * @param list_of_names is a space separated list of nested child 
@@ -409,7 +492,7 @@ COLLADA_(public)
 	 */
 	inline daeElement *addBetween(const S &after, const U &child, const T &before)
 	{
-		return getMeta()->placeBetweenWRT(this,after,child,before)>=DAE_OK?child:nullptr; 
+		return getMeta().placeBetweenWRT(this,after,child,before)>=DAE_OK?child:nullptr; 
 	}
 
 	template<class T, class U> //See daeContents::__cursorize().
@@ -426,7 +509,7 @@ COLLADA_(public)
 	 */
 	inline daeElement *addAfter(const U &child, const T &after)
 	{
-		return getMeta()->placeAfterWRT(after,this,child)>=DAE_OK?child:nullptr;
+		return getMeta().placeAfterWRT(after,this,child)>=DAE_OK?child:nullptr;
 	}
 
 	template<class T, class U> //See daeContents::__cursorize().
@@ -440,7 +523,7 @@ COLLADA_(public)
 	 */
 	inline daeElement *addBefore(const U &child, const T &before)
 	{
-		return getMeta()->placeBeforeWRT(before,this,child)>=DAE_OK?child:nullptr;
+		return getMeta().placeBeforeWRT(before,this,child)>=DAE_OK?child:nullptr;
 	}
 
 	template<class U> //See daeContents::__cursorize().
@@ -458,7 +541,7 @@ COLLADA_(public)
 	 */
 	inline daeOK removeChildElement(const U &element)
 	{
-		return getMeta()->removeWRT(this,element);
+		return getMeta().removeWRT(this,element);
 	}
 
 	template<class U> //See daeContents::__cursorize().
@@ -480,229 +563,362 @@ COLLADA_(public)
 		if(const daeElement*p=element->getParentElement()) 
 		return const_cast<daeElement*>(p)->removeChildElement(element); 
 		return DAE_ERROR;
-	};
+	}
 
-	/**LEGACY
-	 * Returns the number of attributes in this element.
-	 * @return The number of attributes this element has.
-	 * @remarks Returns the highest getAttributeIndex + 1.
-	 */
-	inline size_t getAttributeCount()const{ return getMeta()->getAttributes().size(); }
-
-	//SCHEDULED FOR REMOVAL (IT WORKS, BUT???)
-	#ifdef NDEBUG
-	#error NOALIAS_LINKAGE is a problem for domAny,
-	#error -as can be holding onto daeAttribute pointers.
-	#error There has to be an anyAttribute bucket-based system.
-	#endif	
-	/**LEGACY-SUPPORT
-	 * @param NCName Name of the got index's attribute.
-	 * @note The library doesn't (yet) support QNames properly.
-	 * Some attribute names are NCNames with a colon, or a pseudo QName.
-	 * @return Returns -1 if the attribute @a name is not present.
+COLLADA_(public) //NEW "blind faith" ACCESSORS	
+	/**WARNING
+	 * @warning The return string does not partake in reference count
+	 * tracking, and so should not be held onto to for long. Use this
+	 * at your own risk.
 	 *
-	 * @remarks 2.5 exposes this API. Previously many APIs received
-	 * this index. ALL APIs have been reorganized to flow through this
-	 * API. Unfortunately that sometimes means calling two exported APIs.
-	 * On the other hand, it's more flexible and easier to maintain. 
+	 * Gets this element's value IF-AND-ONLY-IF its underlying binary
+	 * representation matches that of xs:string.
+	 * @return Returns an empty string if the value is a number or an
+	 * other kind of non-string data.
+	 * @note This avoids copying the string into a new buffer if code
+	 * is highly confident about the value's underlying type, or does
+	 * not care if it is not a string.
+	 */
+	inline daeHashString string()const
+	{
+		return _string(getCharData());
+	}
+	template<class I>
+	/**WARNING
+	 * @warning The return string does not partake in reference count
+	 * tracking, and so should not be held onto to for long. Use this
+	 * at your own risk.
 	 *
-	 * At present @c getAttributeIndex() is required to implement @c domAny.
-	 * Eventually this will be obsolete, and can route through @c daeMetaElement.
-	 * At that point, none of this will matter.
+	 * Gets an attribute's value IF-AND-ONLY-IF its underlying binary
+	 * representation matches that of xs:string.
+	 * @return Returns an empty string if the value is a number or an
+	 * other kind of non-string data.
+	 * @note This avoids copying the string into a new buffer if code
+	 * is highly confident about the value's underlying type, or does
+	 * not care if it is not a string.
 	 */
-	template<class T> inline int getAttributeIndex(const T &pseudonym)const;
-	//THESE ARE MOVED OUTSIDE TO THE NAMESPACE IN ORDER TO SATISFY GCC/C++.
-	//#define _(x) template<> int getAttributeIndex<x>(const x &i)const{ return i; }
-	//COLLADA_SUPPRESS_C(4244) //This is only for size_t. short/char will be added upon request.
-	//_(signed)_(unsigned)_(signed long)_(unsigned long)_(signed long long)_(unsigned long long)
-	//#undef _
-	/** Implements @c getAttributeIndex(). */
-	NOALIAS_LINKAGE int _getAttributeIndex(daeString pseudonym)const
-	SNIPPET( return _getAttributeIndex(daeHashString(pseudonym)); )
-	/** Implements @c getAttributeIndex(). */
-	NOALIAS_LINKAGE int _getAttributeIndex(const daeHashString&)const;
-	
-	//JUST FOR THE RECORD, THIS CALLS 2 EXPORTED APIS AS REVISED.
-	template<class T>
-	/**LEGACY	 
-	 * @param i_or_NCName Name or index of the got attribute.
-	 * @note The library doesn't (yet) support QNames properly.
-	 * Some attribute names are NCNames with a colon, or a pseudo QName.
-	 * @return Returns the corresponding @c daeAttribute or @c nullptr if this element
-	 * doesn't have the specified attribute.
-	 */
-	inline daeAttribute *getAttributeObject(const T &i_or_NCName)const
+	inline daeHashString string(const I &i_or_Name)const
 	{
-		//WARNING//WARNING//WARNING
-		//This differs slightly from getMeta()->getAttribute(QName)
-		//because it can trigger _addAnyAttribute() to expand domAny.
-		//It may also need to support <xs:anyAttribute> and buckets.
-		return _getAttributeObject(getAttributeIndex(i_or_NCName));
+		return _string(getAttribute(i_or_Name));
 	}
-	/** Implements @c getAttributeObject(). */
-	NOALIAS_LINKAGE daeAttribute *_getAttributeObject(size_t)const;
-
-	template<class T>
-	/**LEGACY
-	 * Checks if this element can have the attribute specified.
-	 * @param NCName The name of the attribute to look for.
-	 * @note The library doesn't (yet) support QNames properly.
-	 * Some attribute names are NCNames with a colon, or a pseudo QName.
-	 * @return Returns true is this element can have an attribute with the name specified. False otherwise.
-	 */
-	inline bool hasAttribute(const T &NCName)const{ return nullptr!=getAttributeObject(NCName); }
-
-	/**LEGACY
-	 * Returns the name of the attribute at the specified index.
-	 * @param i The index of the attribute whose name should be retrieved.
-	 * @return Returns the name of the attribute, or "" if the index is out of range.
-	 */
-	inline daePseudonym getAttributeName(size_t i)const
+	/** Implements @c string(). */
+	inline daeHashString _string(daeData &d)const
 	{
-		daeAttribute *a = getAttributeObject(i); return a==nullptr?a->getName():"";
-	}
-	
-	//JUST FOR THE RECORD, THIS CALLS 2 EXPORTED APIS AS REVISED.
-	template<class T>
-	/**LEGACY-SUPPORT
-	 * @return Returns @a value.
-	 * @param i_or_NCName Name or index of the got attribute.
-	 * @note The library doesn't (yet) support QNames properly.
-	 * Some attribute names are NCNames with a colon, or a pseudo QName.
-	 * @param A string in which to store the value of the attribute. 
-	 * This will be set to "" if this element doesn't have the specified attribute.
-	 * @remarks The order is reversed because MSVC2010 resolves template arguments 
-	 * from left to right, and will crash on the single-argument form.
-	 */
-	inline daeArray<daeStringCP> &getAttribute(daeArray<daeStringCP> &value, const T &i_or_NCName)const
-	{
-		return _getAttribute(value,getAttributeIndex(i_or_NCName));
-	}
-	template<class T>
-	/**LEGACY-SUPPORT
-	 * This form creates a new array on the stack in the caller's context.
-	 * It's constant, and quite large.
-	 * @see 2 argument overload form's Doxygentation.
-	 */
-	inline const daeArray<daeStringCP> &getAttribute(const T &i_or_NCName, 
-	class undefined*_=0,const daeArray<daeStringCP>&def=daeArray<daeStringCP,96>())const
-	{
-		getAttribute<T>(const_cast<daeArray<daeStringCP>&>(def),i_or_NCName); return def;
+		if(d->getTypeWRT(this).hasStringType())
+		return (const daeStringRef&)d.getWRT(this); 		
+		return daeHashString("",0);
 	}	
-	/**Implements @c getAttribute(). */
-	LINKAGE daeArray<daeStringCP> &_getAttribute(daeArray<daeStringCP> &value, size_t i)const;
-	  	
-	#ifndef COLLADA_NODEPRECATED
-	/**LEGACY-SUPPORT, NOT-RECOMMENDED
-	 * @c getAttributes() uses @c attr to form its key/value pairs. 
-	 * @note "attr" must come from the prefix of the 2.x generated attribute member names.
-	 */
-	typedef daeAttributeKeyValuePair attr;
-	/**LEGACY-SUPPORT, NOT-RECOMMENDED
-	 * @return Returns @a attrs.
-	 * @param attrs Array of @c daeElement::attr (@c daeAttributeKeyValuePair) objects to 
-	 * return.
-	 */
-	inline daeArray<attr> &getAttributes(daeArray<attr> &attrs)const
-	{
-		const daeArray<daeAttribute> &attribs = getMeta()->getAttributes();
-		attrs.setCount(attribs.size());
-		for(size_t i=0,iN=attrs.size();i<iN;i++)
-		{
-			attrs[i].name = attribs[i].getName();
-			attribs[i].memoryToStringWRT(this,attrs[i].value);
-		}
-		return attrs;
-	}
-	/**WARNING, LEGACY-SUPPORT, NOT-RECOMMENDED
-	 * Gets a temporary array of attribute key/value pairs by reference.
-	 * @note The array will be destructed at the end of the calling scope.
-	 * @warning THE EMBEDDED-ARRAY IS CONSIDERABLY LARGE ON THE STACK: ~2KB.
-	 */
-	inline const daeArray<daeElement::attr> &getAttributes
-	(class undefined*_=0,const daeArray<daeElement::attr>&def=daeArray<daeElement::attr,20>())const
-	{
-		getAttributes(const_cast<daeArray<daeElement::attr>&>(def)); return def;
-	}
-	#endif //COLLADA_NODEPRECATED
 	
-	//JUST FOR THE RECORD, THIS CALLS 2 EXPORTED APIS AS REVISED.
-	template<class S, class T>
-	/**LEGACY
+COLLADA_(public) //TEMPORARY "glimpse" (red flag) ACCESSORS
+	
+	/**WARNING, LEGACY-SUPPORT, OVERLOAD
+	 * Formerly "getCharData."
+	 * Gets simple-content in the form of a TEMPORARY C++ object.
+	 * @warning THE ARRAY IS DESTRUCTED AT THE END OF THE CALL'S SCOPE!!!	 
+	 * @see @c string().
+	 */
+	inline daeCharData &glimpse(const daeCharData&def=daeCharData())const
+	{
+		return getCharData(const_cast<daeCharData&>(def));
+	}
+	template<int N>
+	/**WARNING, LEGACY-SUPPORT, OVERLOAD
+	 * Gets simple-content in the form of a TEMPORARY C++ object.
+	 * @warning THE ARRAY IS DESTRUCTED AT THE END OF THE CALL'S SCOPE!!!	 
+	 * @see @c string().
+	 */
+	inline daeCharData &glimpse(const daeCharData_size<N>&def=daeCharData_size<N>())const
+	{
+		return getCharData(const_cast<daeCharData&>(def));
+	}
+	template<class I>
+	/**WARNING, LEGACY-SUPPORT, OVERLOAD
+	 * Formerly "getAttribute."
+	 * Finds attribute value in the form of a TEMPORARY C++ object.
+	 * @warning THE ARRAY IS DESTRUCTED AT THE END OF THE CALL'S SCOPE!!!
+	 * @see @c string().
+	 */
+	inline daeCharData &glimpse(const I &i_or_Name, const daeCharData&def=daeCharData())const
+	{
+		return getAttribute<I>(i_or_Name,const_cast<daeCharData&>(def));
+	}
+	template<int N, class I>
+	/**WARNING, LEGACY-SUPPORT, OVERLOAD
+	 * Finds attribute value in the form of a TEMPORARY C++ object.
+	 * @warning THE ARRAY IS DESTRUCTED AT THE END OF THE CALL'S SCOPE!!!
+	 * @see @c string().
+	 */
+	inline daeCharData &glimpse(const I &i_or_Name, const daeCharData_size<N>&def=daeCharData_size<N>())const
+	{
+		return getAttribute<I>(i_or_Name,const_cast<daeCharData&>(def));
+	}
+
+COLLADA_(public) //NON-STATIC (careful) ATTRIBUTE ACCESSORS
+	
+	#ifndef COLLADA_NODEPRECATED
+	COLLADA_DEPRECATED("Post-2.5: END-OF-SUPPORT\n\
+	These APIs were unclear about their purpose WRT domAny\n\
+	Try getAttribute, findAttribute, and getCharData respectively.")
+	typedef void getAttributeObject,hasAttribute,getCharDataObject;
+	#endif
+
+	template<class I>
+	/**WARNING, OVERLOAD
+	 * Formerly "GetAttributeObject."	 
+	 * @warning Creates an attribute if one does not already
+	 * exist. 
+	 * Creates an attribute if one does not already
+	 * exist. 
+	 * @return Returns created attribute. 
+	 * @note All elements can create any attribute, whether it
+	 * is in their schema or not. So be careful. ALSO NOTE THAT
+	 * THIS IS BY DESIGN.
+	 * @see 2-argument form of @c getAttribute(). It will not
+	 * make attributes, but nothing suggests that it would.
+	 * @see @c findAttribute().
+	 */
+	inline daeData &getAttribute(const I &i_or_Name)
+	{
+		return *getAttributes()[i_or_Name];
+	}
+	template<class I>
+	/**CONST-FORM, OVERLOAD
+	 * Formerly "GetAttributeObject."
+	 * Gets a @c daeAtomicType::VOID attribute if
+	 * the attribute does not exist.
+	 * @return Returns a @c daeAtomicType::VOID attribute if
+	 * the attribute does not exist.
+	 * @warning Returns a @c daeAtomicType::VOID attribute if
+	 * the attribute does not exist.
+	 *
+	 * @remark This API is a special const-form that supposes
+	 * if @c this element is @c const, that there's no desire
+	 * to add attributes where they do not exist. Instead the
+	 * returned attribute is a read-only data-type that won't
+	 * have a name matching @a i_or_Name.
+	 */
+	inline daeData &getAttribute(const I &i_or_Name)const
+	{
+		return getAttributes()._maybe_get(i_or_Name);
+	}
+	 	
+	template<class I>
+	/**WARNING, LEGACY-SUPPORT
+	 * @warning Creates an attribute if one does not already
+	 * exist. 
+	 * Creates an attribute, returning its position in the attributes
+	 * array.	 
+	 * @see 2-argument form of @c findAttribute() if creation
+	 * is undesired.
+	 *
+	 * @remark The const-form of this API does not create an attribute
+	 * but instead returns an index equal to the size of the attribute
+	 * array, where a @c daeAtomicType::VOID attribute lives.
+	 */
+	inline size_t getAttributeIndex(const I &i_or_Name)
+	{
+		return &getAttributes()[i_or_Name]-getAttributes().begin();
+	}
+	template<class I>
+	/**CONST-FORM, LEGACY-SUPPORT
+	 * Returns the attribute-array index matching @c i_or_Name, unless
+	 * the attribute does not exist, in which case a special read-only
+	 * attribute index that is equal to attribute-array's @c size().
+	 * @see @c findAttribute()
+	 */
+	inline size_t getAttributeIndex(const I &i_or_Name)const
+	{
+		return &getAttributes()._maybe_get(i_or_Name)-getAttributes().begin();
+	}
+
+	template<class I, class T>
+	/**LEGACY, OVERLOAD
 	 * Sets the attribute to the specified value.
-	 * @param i_or_NCName Name or index of the set attribute.
+	 * @param i_or_Name Name or index of the set attribute.
 	 * @note The library doesn't (yet) support QNames properly.
 	 * Some attribute names are NCNames with a colon, or a pseudo QName.
 	 * @param value Value to apply to the attribute.
 	 * @return Returns true if the attribute was found and the value was set, false otherwise.
 	 */
-	inline daeOK setAttribute(const S &i_or_NCName, const T &value)
+	inline daeOK setAttribute(const I &i_or_Name, const T &value)
 	{
-		return _setAttribute(getAttributeIndex(i_or_NCName),typename daeBoundaryString2<T>::type(value));
+		return getAttribute(i_or_Name).stringToMemoryWRT(this,value);
 	}
-	/** Implements @c setAttribute(). */
-	LINKAGE daeOK _setAttribute(size_t,daeString);
-	/** Implements @c setAttribute(). */
-	LINKAGE daeOK _setAttribute(size_t,const daeHashString&);
-
-	/**LEGACY
-	 * Previously "getID."
-	 * Gets the element "id" if it exists.
-	 * @remarks The string--converted to a non-nullptr lvalue--can be @c (daeStringRef&) cast.
-	 * @return Returns @c nullptr if the "id" attribute does not exist. OTHERWISE SOME STRING
-	 * WITH AN UNSPECIFIED LIFETIME IS RETURNED. 
+	template<class I, class T, class U>
+	/**LEGACY-SUPPORT, OVERLOAD
+	 * Sets the attribute to the specified value.
+	 * @param i_or_Name Name or index of the set attribute.
+	 * @note The library doesn't (yet) support QNames properly.
+	 * Some attribute names are NCNames with a colon, or a pseudo QName.
+	 * @param value Value to apply to the attribute.
+	 * @return Returns true if the attribute was found and the value was set, false otherwise.
 	 */
-	NOALIAS_LINKAGE daeString getID_id()const
-	SNIPPET( daeAttribute *a = getMeta()->getID_id(); return a==nullptr?nullptr:(const daeString&)a->getWRT(this); )
+	inline daeOK setAttribute(const I &i_or_Name, const T &value, U len_or_end)
+	{
+		return getAttribute(i_or_Name).stringToMemoryWRT(this,value,len_or_end);
+	}	
+
+COLLADA_(public) //STATIC ATTRIBUTE ACCESSORS  
+	/**OVERLOAD
+	 * Gets <xs:anyAttributes> map, including static attributes.
+	 * All elements may have any-like attributes.
+	 * @note This works on a copy-on-write basis.
+	 */
+	inline daeAnyAttribute &getAttributes()const
+	{
+		return *(daeAnyAttribute*)&this[1]; 
+	}
+	/**LEGACY-SUPPORT, OVERLOAD
+	 * Lets users know @c daeAttributes is availabe to them.
+	 * @remarks Identical to (@a attrs=this->getAttributes()).
+	 * @c getAttributes() in the form of key/value string pairs. 
+	 */
+	inline daeAttributes &getAttributes(daeAttributes &attrs)const
+	{
+		return attrs = getAttributes();
+	}	
+
+	/**LEGACY-SUPPORT
+	 * Formerly "getAttributeCount."
+	 * Returns the number of attributes in this element.
+	 * @return The number of attributes this element has.
+	 * @remarks Returns the highest getAttributeIndex + 1.
+	 */
+	inline size_t getAttributesCount()const{ return getAttributes().size(); }
+	
+	/**OVERLOAD
+	 * Finds the attribute without adding it to the attributes array.
+	 * @return Returns @c nullptr if @c name is not found.
+	 */
+	inline daeData *findAttribute(const daeName &name)const
+	{
+		daeAnyAttribute &aa = getAttributes();
+		for(size_t i=0;i<aa.size();i++)
+		if(name==aa[i]->getName()) return aa[i]; return nullptr;
+	}
+	/**OVERLOAD
+	 * Finds the attribute without adding it to the attributes array.
+	 * @return Returns a @c bool value to be more orthodox/avoid the
+	 * need to do @c nullptr checks, since @a i returns an index and
+	 * the other overload returns a @c daeData pointer. For instance
+	 * this overload is for use with @c getAttribute().
+	 */
+	inline bool findAttribute(const daeName &name, size_t &i)const
+	{
+		daeAnyAttribute &aa = getAttributes();
+		for(i=0;i<aa.size();i++) 
+		if(name==aa[i]->getName()) return true; return false;
+	}	
 	
 	/**LEGACY
-	 * Returns the @c daeValue object corresponding to the character data for this element.
-	 * @return Returns a @c daeValue object or @c nullptr if this element doesn't have
-	 * character data.
+	 * Returns the name of the attribute at the specified position.
+	 * @param i The index of the attribute whose name should be retrieved.
+	 * @return Returns the name of the attribute, or "" if the index is out of range.
 	 */
-	inline daeCharData *getCharDataObject()const{ return getMeta()->getValue(); }
-
-	/**LEGACY-SUPPORT, NOT-RECOMMENDED
-	 * Checks if this element can have character data.
-	 * @return Returns true if this element can have character data, false otherwise.
+	inline daePseudonym getAttributeName(size_t i)const
+	{
+		daeAnyAttribute &aa = getAttributes(); return aa.size()<=i?"":aa[i]->getName();
+	}
+		
+	/**LEGACY-SUPPORT
+	 * Formerly "getID."
+	 * Gets the element "id" if it exists.
+	 * @return Returns @c nullptr if the "id" attribute does not exist.
+	 * @remarks A pointer is returned (versus a view) because often ID
+	 * strings are compared by the value of the pointer instead of the
+	 * content of the string (and printing C strings is pretty trivial.)
 	 */
-	inline bool hasCharData()const{ return getCharDataObject()!=nullptr; }
+	NOALIAS_LINKAGE daeString getID_id()const
+	SNIPPET
+	(
+		daeAttribute *a = getMeta().getID_id();
+		return a==nullptr?nullptr:(const daeString&)a->getWRT(&*this); 
+	)
+	
+	template<class I>
+	/**LEGACY-SUPPORT, OVERLOAD
+	 * @return Returns @a val as @c daeCharData C++ reference.
+	 * @param i_or_Name Attribute's name or position to get.
+	 * @note Positions must not be out-of-bounds. Names don't
+	 * have to exist. In which case, they yield empty strings.
+	 *
+	 * @note The library doesn't (yet) support QNames properly.
+	 * Some attribute names are NCNames with a colon, or a pseudo QName.
+	 * @param A string in which to store the value of the attribute. 
+	 * This will be set to "" if this element doesn't have the specified attribute.
+	 *
+	 * @see @c glimpse() for a simpler, yet dangerous alternative.
+	 * @see 0-argument form of @c getAttribute() for a completely
+	 * different kind of API from this one.
+	 */
+	inline daeCharData &getAttribute(const I &i_or_Name, daeArray<daeStringCP> &val)const
+	{
+		getAttributes()._maybe_get(i_or_Name).memoryToStringWRT(this,val);
+		return *(daeCharData*)&val;
+	}
 
+COLLADA_(public) //CONTENT ACCESSORS	
 	/**LEGACY
-	 * @return Returns @a inout.
+	 * @return Returns @c true if this element is supposed to have character data.
+	 * @note Since 2.5 elements that shouldn't have data are allowed to, in order
+	 * to facilitate lossless processing in the face of errors or unorthodox use.
+	 * @note A mixed-text (with inline elements) content-model says NOT @c true.
+	 */
+	inline bool hasCharData()const
+	{
+		return daeContentModel::SIMPLE==getMeta().getContentModel(); 
+	}
+
+	/**
+	 * Formerly "getCharDataObject."
+	 * (Changed the name since "getAttributeObject" is removed, and "object" suggests
+	 * that it is somehow related to @c daeObject.)
+	 *
+	 * Returns the @c daeData object corresponding to the character data for this element.
+	 * @return No longer returns @c nullptr. If it returns a bad reference, it's because 
+	 * @c daeMetaElement::getValue() is not fully implemented.
+	 * @see hasCharData().
+	 */
+	inline daeData &getCharData()const
+	{
+		//TODO: Should work even if !hasCharData().
+		return const_cast<daeDefault&>(getMeta().getValue()); 
+	}
+	/**LEGACY-SUPPORT
+	 * @return Returns @a val.
 	 * @param data The string to be filled with this element's character content. The
 	 * string is set to an empty string if this element can't have character data.
 	 */
-	LINKAGE daeArray<daeStringCP> &getCharData(daeArray<daeStringCP> &inout)const;
-	/**LEGACY-SUPPORT
-	 * This form creates a new array on the stack in the caller's context. It's constant, and quite large.
-	 * "daeAtom" is bogus. (It's for overload resolution.)
-	 * The stack-allocated buffer is slightly larger than @c daeGetAttribute() since such data is often so.
-	 * Still, for very large data buffers, use/reuse a fully dynamic buffer with the other form, reserving
-	 * space comparable to the amount of data if possible.
-	 */
-	inline const daeArray<daeStringCP> &getCharData
-	(class undefined*_=0,const daeArray<daeStringCP>&def=daeArray<daeStringCP,256>())const
+	inline daeCharData &getCharData(daeArray<daeStringCP> &val)const
 	{
-		getCharData(const_cast<daeArray<daeStringCP>&>(def)); return def;
+		getCharData().memoryToStringWRT(this,val); return *(daeCharData*)&val;
 	}
+
 	template<class T>
 	/**LEGACY
 	 * Sets this element's character data.
-	 * @param data The new character data of this element.
+	 * @param value The new character data of this element.
 	 * @return Returns true if this element can have character data and the character data
 	 * was successfully changed, false otherwise.
 	 */
-	inline daeOK setCharData(const T &data)
+	inline daeOK setCharData(const T &value)
 	{
-		return _setCharData(daeBoundaryString2<T>::type(data)); 
+		//TODO: Should work even if !hasCharData().
+		return getCharData().stringToMemoryWRT(this,value);
 	}
-	/** Implements @c setCharData(). */
-	LINKAGE daeOK _setCharData(daeString value)
-	SNIPPET( return _setCharData(daeHashString(value)); )
-	/** Implements @c setCharData(). */
-	LINKAGE daeOK _setCharData(const daeHashString&);
-	
+	template<class T, class U>
+	/**LEGACY-SUPPORT
+	 * Sets this element's character data.
+	 * @param value The new character data of this element.
+	 * @return Returns true if this element can have character data and the character data
+	 * was successfully changed, false otherwise.
+	 */
+	inline daeOK setCharData(const T &value, U len_or_end)
+	{
+		//TODO: Should work even if !hasCharData().
+		return getCharData().stringToMemoryWRT(this,value,len_or_end);
+	}
+
 	/**LEGACY
 	 * Gets the container element for @c this element.
 	 * If @c createAndPlace() was used to create the element, its parent is the the caller of @c createAndPlace().
@@ -797,7 +1013,7 @@ COLLADA_(public)
 		:sid(daeBoundaryStringRef(*e,SID)){}		
 		virtual bool operator()(const daeElement *e)const
 		{
-			for(daeAttribute *ID=e->getMeta()->getFirstID();ID!=nullptr;ID=ID->getNextID())
+			for(daeAttribute *ID=e->getMeta().getFirstID();ID!=nullptr;ID=ID->getNextID())
 			if(sid==(const daeStringRef&)ID->getWRT(e)&&"sid"==ID->getName()) 
 			return true; return false; 
 		}
@@ -938,7 +1154,7 @@ COLLADA_(public)
 	/**LEGACY
 	 * Gets the COLLADA schema type name.
 	 */
-	inline const daePseudonym &getTypeName()const{ return getMeta()->getName(); }
+	inline const daePseudonym &getTypeName()const{ return getMeta().getName(); }
 	
 	/**KISS
 	 * Implements @c getContents().grow(). It's needed to adjust the iterator.
@@ -962,13 +1178,13 @@ COLLADA_(public)
 	 * Gets the contents-array.
 	 * @remarks Pre-2.5 not all elements had contents-arrays.
 	 */
-	inline const daeContents &getContents()const{ return getMeta()->getContentsWRT(this); }		
+	inline const daeContents &getContents()const{ return getMeta().getContentsWRT(this); }		
 
 	/**
 	 * @return Returns what @c getChildren().size() would be.
 	 */
 	NOALIAS_LINKAGE size_t getChildrenCount()const
-	SNIPPET( return getMeta()->getChildrenCountWRT(this); )
+	SNIPPET( return getMeta().getChildrenCountWRT(this); )
 
 	/**WARNING, LEGACY 
 	 * @warning historically, does NOT clear the input array!
@@ -980,7 +1196,7 @@ COLLADA_(public)
 	 * @return Returns @a result.
 	 */
 	LINKAGE daeArray<daeElementRef> &getChildren(daeArray<daeElementRef> &result)
-	SNIPPET( return getMeta()->getChildrenWRT(this,result); )
+	SNIPPET( return getMeta().getChildrenWRT(this,result); )
 	/**CONST-FORM */
 	inline daeArray<const_daeElementRef> &getChildren(daeArray<const_daeElementRef> &result)const
 	{
@@ -1090,33 +1306,7 @@ COLLADA_(public)
 	 * Same as the previous function, but returns a full compare_Result object.
 	 */
 	NOALIAS_LINKAGE static compare_Result compareWithFullResult(const daeElement &elt1, const daeElement &elt2);
-
-#ifdef BUILDING_COLLADA_DOM
-
-COLLADA_(protected) //domAny.cpp
-	
-		//2.5: Fall back to domAny if getAttribute fails.
-		//TODO: daeMetaElement requires an xs:anyAttribute indicator.
-		//TODO: change enum{ xs_anyAttribute_is_still_not_implemented=1 } to 0.
-		bool _addAnyAttribute(const daePseudonym&)const;
-		//daeElement::clone() calls this instead.
-		void _cloneAnyAttribute(const daePseudonym&)const;
-
-#endif //BUILDING_COLLADA_DOM
-COLLADA_(public)
-	enum{ xs_anyAttribute_is_still_not_implemented=1 };
 };
-//GCC/C++ want explicit specializations in the namesapce.
-template<class T>
-inline int daeElement::getAttributeIndex(const T &pseudonym)const
-{
-	return _getAttributeIndex(typename daeBoundaryString2<T>::type(pseudonym));
-}
-#define _(x) template<>\
-inline int daeElement::getAttributeIndex<x>(const x &i)const{ return i; }
-COLLADA_SUPPRESS_C(4244) //This is only for size_t. short/char will be added upon request.
-_(signed)_(unsigned)_(signed long)_(unsigned long)_(signed long long)_(unsigned long long)
-#undef _
 
 #include "../LINKAGE.HPP" //#undef LINKAGE
 

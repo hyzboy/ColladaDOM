@@ -402,28 +402,37 @@ COLLADA_(private) //INTERNALS
 		mutable daeStringRef _fragment;
 
 		//GCC (template parameter lists.)
-		template<class,class> friend class DAEP::Elemental;
+		template<class,unsigned long long,class> 
+		friend class DAEP::Elemental;
 
 		struct _PseudoElement 
 		:
-		public daeElemental<_PseudoElement>, public DAEP::Schema<32+2>
+		public daeElemental<_PseudoElement,32+2>
 		{
-		COLLADA_(public) //DAEP::Object method
-			/**
-			 * Constructs the virtual-method-table.
-			 */
-			_PseudoElement(){}
+		public: //Parameters
 
-		COLLADA_(public) //Parameters
-
-			typedef struct:Elemental,Schema
-			{	COLLADA_WORD_ALIGN
+			typedef struct:Elemental
+			{	DAEP::Value<0,xsAnyAttribute>
+			_0; COLLADA_WORD_ALIGN
 				COLLADA_DOM_Z(0,0)
-			DAEP::Value<0,dae_Array<>> _Z; enum{ _No=0 };
-			DAEP::Value<1,daeContents> content; typedef void notestart;
+			DAEP::Value<1,dae_Array<>> _Z; enum{ _No=1 };
+			DAEP::Value<2,daeContents> content; typedef void notestart;
 			}_;
 
-		COLLADA_(public) //Content
+		public: //Attributes
+
+			//FOR THE RECORD
+			//Technically software could use these, and even I/O plugins
+			//could interpret them. But they are not XML and so will not
+			//be written out into the document. (They've nowhere to go.)
+
+			/**NO-NAMES
+			 * These attributes are invalid according to the schema. They may be user- 
+			 * defined additions and substitutes.
+			 */
+			DAEP::Value<0,xsAnyAttribute,_,(_::_)&_::_0> padding;
+
+		public: //Content
 
 			COLLADA_WORD_ALIGN
 			COLLADA_DOM_Z(0,0) 
@@ -431,7 +440,7 @@ COLLADA_(private) //INTERNALS
 			 * These elements are invalid according to the schema. They may be user-defined 
 			 * additions and substitutes.
 			 */
-			DAEP::Child<1,daeElement/*xsAny*/,_,(_::_)&_::_Z> unnamed;
+			DAEP::Child<1,xsAny,_,(_::_)&_::_Z> unnamed;
 			/**
 			 * Children, mixed-text, comments & processing-instructions.
 			 */
@@ -439,7 +448,7 @@ COLLADA_(private) //INTERNALS
 		};	  
 		struct _Pseudo
 		{
-			daeFeature features[2];
+			daeFeature features[3];
 			char model[sizeof(_PseudoElement)];
 			char meta[sizeof(daeMeta)+sizeof(_PseudoElement)];			
 			daeElement *element()const{ return operator->()->_prototype; }
@@ -705,7 +714,7 @@ COLLADA_(public) //LEGACY-SUPPORT
 	 * to @c daeDatabase::_v1_note(). Databases are not obliged to do so. Notification
 	 * is required to go to the database. It's this way so that there aren't duplicate paths.
 	 */
-	LINKAGE void _carry_out_change_of_ID_or_SID(const DAEP::Change&, const XS::Attribute*)const;
+	LINKAGE void _carry_out_change_of_ID_or_SID(const DAEP::Change&, daeData*)const;
 	/**LEGACY
 	 * Not only is it necessary to capture changes of the attributes, whenever an
 	 * element having an "id" or "sid" attribute is inserted or removed from a document

@@ -214,16 +214,16 @@ namespace CrtPhysics //EXPERIMENTAL
 			
 			switch(e->getElementType())
 			{
-			case DAEP::Schematic<Collada05::rotate>::genus:
-			case DAEP::Schematic<Collada08::rotate>::genus:		
+			case DAEP::Generic<Collada05::rotate>::genus:
+			case DAEP::Generic<Collada08::rotate>::genus:		
 			{
 				if(1!=e.name())
 				if(4==COLLADA_RT_cast(rotate,e)->value->get4at(0,x,y,z,a))
 				MatrixRotateAngleAxis(m,x,y,z,a);
 				break;		
 			}
-			case DAEP::Schematic<Collada05::translate>::genus:
-			case DAEP::Schematic<Collada08::translate>::genus:
+			case DAEP::Generic<Collada05::translate>::genus:
+			case DAEP::Generic<Collada08::translate>::genus:
 			{
 				if(1!=e.name())
 				if(3==COLLADA_RT_cast(translate,e)->value->get3at(0,x,y,z))

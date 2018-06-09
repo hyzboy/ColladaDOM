@@ -27,6 +27,7 @@ COLLADA_(namespace)
 class SimpleType
 {
 	friend class XS::Schema;
+	friend class XS::Attribute;
 
 COLLADA_(private) //LEADING DATA-MEMBERS
 
@@ -230,11 +231,13 @@ COLLADA_(public) //<xs:min/maxInclusive>, <xs:min/maxExlusive>
 	 */
 	daeTypewriter &getMinMaxTypewriter()const
 	{
-		return getRestrictedType().getValueTypewriter().where<daeArray>();
+		daeTypewriter &tw = getRestrictedType().getValueTypewriter();
+		assert(!tw.isAnySimpleType()); //Can be problem?
+		return tw.where<daeArray>();
 	}
 
 	/**
-	 * Previously "getMinAU."
+	 * Formerly "getMinAU."
 	 * Unfortunately <xs:minInclusive> and <xs:minExclusive> are not so simple.
 	 * This API provides access to the binary form. 
 	 * @return Returns an empty AU if @c hasMin()==false. A referenced pointer
@@ -242,7 +245,7 @@ COLLADA_(public) //<xs:min/maxInclusive>, <xs:min/maxExlusive>
 	 */
 	const daeAlloc<>*const &getMinValueTypeAU()const{ return _minmax[0]; }
 	/**
-	 * Previously "getMaxAU."
+	 * Formerly "getMaxAU."
 	 * Unfortunately <xs:maxInclusive> and <xs:maxExclusive> are not so simple.
 	 * @see getMinValueTypeAU() Doxygentation.
 	 */
@@ -897,7 +900,7 @@ COLLADA_(protected) //OFFLINE-GENERATOR-MUTATORS
 	}
 	
 	friend class COLLADA::domAny;
-	template<class T, class>
+	template<class T, unsigned long long, class>
 	friend class DAEP::Elemental;
 	template<class T, int N> //DAEP::Elemental::TOC
 	/**GENERATOR-SIDE API
@@ -909,7 +912,7 @@ COLLADA_(protected) //OFFLINE-GENERATOR-MUTATORS
 	inline daeMetaElement &addElement(T*&/*C4700*/toc, daeClientStringCP (&QName)[N])
 	{
 		//First the model is allocated/layed out, and added to the roster.
-		typename T::Essentials ee; daeMetaElement &e = 
+		DAEP::Parameters ee(toc); daeMetaElement &e = 
 		_addElement(toc->__DAEP__Schema,sizeof(T),ee.content_feature,QName);
 		#ifdef _DEBUG
 		//This is to get a visual on the prototype.
@@ -944,7 +947,16 @@ COLLADA_(protected)
 	{
 		operator daeTypewriter*(){ static daeType<T,Typist> loc; return loc; }		
 	};
-};				
+	/**GCC wants explicit-specializations outside classes...
+	template<> struct _typewrit<daeAnySimpleType::TypedUnion> //xs:anySimpleType
+	{
+		operator daeTypewriter*(){ return (daeTypewriter*)0;  }		
+	};*/
+};//GCC
+template<> struct XS::Schema::_typewrit<daeAnySimpleType::TypedUnion> //xs:anySimpleType
+{
+	operator daeTypewriter*(){ return (daeTypewriter*)0;  }
+};
 
 #include "../LINKAGE.HPP" //#undef LINKAGE
 

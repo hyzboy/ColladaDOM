@@ -61,6 +61,66 @@ COLLADA_(namespace)
 		inline daeMeta &getOnlyChild()const;
 	};
 
+	/**INTERNAL
+	 * @c XS::Any and @c XS::AnyAttribute are derived from this 
+	 * class.
+	 */
+	class daeAny
+	{	
+		int _processContents;
+
+		daeHashString _namespace;
+
+	COLLADA_(public)
+		/**UNUSED
+		 * Get the "namespace" attribute as set by the generator.
+		 */
+		const daeHashString &getNamespaceString()const
+		{
+			return _namespace;
+		}
+
+		/**C++98 SCOPED ENUM 
+		 * Possible values returned by @c getProcessContents().
+		 */
+		struct processContents{ enum{ lax=3,skip=4,strict=6 }; };
+		/**UNUSED
+		 * Get the "processContents" attribute as set by the generator.
+		 */
+		inline int getProcessContents()const{ return _processContents; }
+
+	COLLADA_(public) //GENERATOR-SIDE APIs
+	
+		template<int N>
+		/**WARNING, UNUSED
+		 * This is just being used to detect if schemas require
+		 * a feature that is not implemented.
+		 * @warning Currently the library assumes "##any" values.
+		 */
+		inline daeAny &setNamespaceString(const daeStringCP (&ns)[N])
+		{
+			_namespace = ns; return *this;
+		}
+
+		template<int N>
+		/**WARNING, UNUSED
+		 * This is just being used to detect if schemas require
+		 * a feature that is not implemented.
+		 * @warning Currently the library assumes "lax" values.
+		 */
+		inline daeAny &setProcessContents(const daeStringCP (&pc)[N])
+		{
+			_processContents = N-1; return *this;
+		}
+
+	COLLADA_(public)
+		/**
+		 * Default Constructor
+		 */
+		daeAny():_processContents(processContents::strict),_namespace("##any")
+		{}
+	};
+
 	namespace XS
 	{//-.
 //<-----'
@@ -130,14 +190,8 @@ COLLADA_(protected) //daeCM methods
  * a special path: e.g. "_placeUnnamedElement" in order to consider ambiguity.
  * Of course, before this is done, support for <xs:any> features must improve.
  */
-class Any : public daeElementCM
+class Any : public daeElementCM, public daeAny
 {	
-COLLADA_(private) //XML Schema members
-
-	int _processContents;
-
-	daeHashString _namespace;
-
 COLLADA_(public)
 
 	COLLADA_DOM_OBJECT_OPERATORS(XS::Any)
@@ -145,58 +199,13 @@ COLLADA_(public)
 	//addCM<T>() still uses this to validate T.
 	static const daeXS __daeCM__XS_enum = XS::ANY;
 
-COLLADA_(public)
-	/**UNUSED
-	 * Get the "namespace" attribute as set by the generator.
-	 */
-	const daeHashString &getNamespaceString()const
-	{
-		return _namespace;
-	}
-
-	/**C++98 SCOPED ENUM 
-	 * Possible values returned by @c getProcessContents().
-	 */
-	struct processContents{ enum{ lax=3,skip=4,strict=6 }; };
-	/**UNUSED
-	 * Get the "processContents" attribute as set by the generator.
-	 */
-	inline int getProcessContents()const{ return _processContents; }
-
-COLLADA_(public) //GENERATOR-SIDE APIs
-	
-	template<int N>
-	/**WARNING, UNUSED
-	 * This is just being used to detect if schemas require
-	 * a feature that is not implemented.
-	 * @warning Currently the library assumes "##any" values.
-	 */
-	inline XS::Any &setNamespaceString(const daeStringCP (&ns)[N])
-	{
-		_namespace = ns; return *this;
-	}
-
-	template<int N>
-	/**WARNING, UNUSED
-	 * This is just being used to detect if schemas require
-	 * a feature that is not implemented.
-	 * @warning Currently the library assumes "lax" values.
-	 */
-	inline XS::Any &setProcessContents(const daeStringCP (&pc)[N])
-	{
-		_processContents = N-1; return *this;
-	}
-
 #ifdef BUILDING_COLLADA_DOM
 
 COLLADA_(public) //INVISIBLE
 	/**
 	 * Default Constructor
 	 */
-	Any():_processContents(processContents::strict),_namespace("##any")
-	{
-		_maxOrdinals = 1; 
-	}
+	Any(){ _maxOrdinals = 1; }
 
 #endif //BUILDING_COLLADA_DOM
 };
@@ -401,7 +410,7 @@ COLLADA_(public) //OPERATORS
 
 COLLADA_(public) //Previously of XS::Attribute
 	/**
-	 * Previously "isArrayAttribute," although the meaning is
+	 * Formerly "isArrayAttribute," although the meaning is
 	 * slightly different this time.
 	 * @see @c isArrayChildID() for a use-case that is closer
 	 * to the old "isArrayAttribute."
@@ -464,7 +473,7 @@ COLLADA_(public) //Previously of XS::Attribute
 	inline void isArrayAttribute()const;
 	#endif //COLLADA_NODEPRECATED
 	/**WARNING, LEGACY
-	 * Previously "isArrayAttribute."
+	 * Formerly "isArrayAttribute."
 	 * Tells if this child is a @c dae_Array contained child.
 	 * @return Returns @c true if this child shares an array.
 	 * @warning The array in question can include other @c XS::Element.
@@ -482,7 +491,7 @@ COLLADA_(public) //Previously of XS::Attribute
 	inline bool hasNamedChildID()const{ return getChildID().isNamed(); }
 
 	/**LEGACY
-	 * Previously "getElementType."
+	 * Formerly "getElementType."
 	 * Gets the shared metadata for the children that share this schema element.
 	 * @remark The name "getChild" is used to be in keeping with @c findChild().	 
 	 */
@@ -505,7 +514,7 @@ COLLADA_(public) //GENERATOR-SIDE APIs
 	{
 		//Perhaps _setChild2() should have its body put here?
 		//(For a short while substitution-groups had their own implementation.)
-		_setChild2<typename T::XSD::type>(nul,name);		
+		_setChild2<typename T::__COLLADA__T>(nul,name);		
 	}
 
 COLLADA_(private) //DELICATE-MACHINERY
@@ -674,7 +683,7 @@ COLLADA_(public) //This is really not required.
 
 	COLLADA_NOALIAS
 	/**LEGACY
-	 * Previously "getElementType" or "getChild."
+	 * Formerly "getElementType" or "getChild."
 	 * Gets the shared metadata for the <xs:group> "ref" attribute.
 	 */
 	COLLADA_DOM_LINKAGE daeMeta &getGroup()const

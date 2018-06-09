@@ -31,6 +31,7 @@ class xsAnnotation extends _elementSet //require_once('om/xsAnnotation.php');
 		$this->_addElement('xsDocumentation',array('minOccurs'=>0,'maxOccurs'=>unbounded));
 		$this->_addElement('xsAppinfo',array('minOccurs'=>0,'maxOccurs'=>unbounded));
 		$this->type[] = "xsAnnotation";	parent::_elementSet();
+		//Note? _elementSet() sets minOccurs to 1, for optional elements??
 		//Set bounds on number of elements allowable in annotation element
 		$this->setAttribute('minOccurs',0); $this->setAttribute('maxOccurs',unbounded);
 	}//UNUSED
@@ -42,10 +43,6 @@ class xsAny extends _elementSet //_typedData //require_once('om/xsAny.php');
 	{
 		$this->_addAttribute('namespace',array('type'=>'xs:anyURI'));
 		$this->_addAttribute('processContents',array('type'=>'xs:string'));
-		$this->_addAttribute('minOccurs',array('type'=>'xs:integer'));
-		$this->setAttribute('minOccurs',1);
-		$this->_addAttribute('maxOccurs',array('type'=>'xs:integer'));
-		$this->setAttribute('maxOccurs',1);
 		$this->type[] = 'xsAny'; parent::_elementSet();
 	}
 }

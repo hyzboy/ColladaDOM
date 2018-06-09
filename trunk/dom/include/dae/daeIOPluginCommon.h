@@ -74,7 +74,7 @@ COLLADA_(public) //These status APIs are new in 2.5.
 
 	enum
 	{
-	_readFlag_unattributed_is_data_loss=1,
+	_readFlag_data_loss=1,
 	_readFlag_unattributed=2,
 	_readFlag_unordered=4,
 	_readFlag_unmixed=8,
@@ -85,8 +85,21 @@ COLLADA_(public) //These status APIs are new in 2.5.
 	 * LEGACY plugins provide a modicum of feedback.
 	 */
 	NOALIAS_LINKAGE int _getReadFlags()
-	SNIPPET( return _readFlags; )
-	/**TODO
+	SNIPPET( return _readFlags; )		
+	/**
+	 * @return Returns @c true if a value could not be converted to
+	 * its schema prescribed data type. Currently typed data is ABI
+	 * bound. To workaround this there would need to be an override
+	 * mechanism that would no matter what be in conflict with data
+	 * in the element's own body.
+	 * (For simple-type content it's possible to cram the data into
+	 * the content-array as mixed-text, but not so for attributes.)
+	 */
+	inline bool getReadLostData()
+	{
+		return (_getReadFlags()&_readFlag_data_loss)!=0?true:false; 
+	}
+	/**
 	 * @return Returns @c true if a read element could not be placed
 	 * into the metadata's content-model. 2.5 retains these elements
 	 * as unnamed/unordered children. Pre-2.5 they had been discared.
@@ -96,29 +109,16 @@ COLLADA_(public) //These status APIs are new in 2.5.
 	{
 		return (_getReadFlags()&_readFlag_unordered)!=0?true:false; 
 	}
-	/**WARNING, TODO
+	/**
 	 * @return Returns @c true if a read attribute could not be made.
-	 * @warning Currently this is data-loss. As soon as <xs:anyAttribute>
-	 * is supported by the library, it will be used to record attributes
-	 * whether or not the schema specifies <xs:anyAttribute>.
-	 * @todo Maybe an option can dictate what action to take?
+	 * @note This currently cannot occur. But there might be options
+	 * added to ignore "invalid" attributes/elements.
 	 */
 	inline bool getReadUnattributableAttribute()
 	{
 		return (_getReadFlags()&_readFlag_unattributed)!=0?true:false; 
 	}
-	/**WARNING, TODO
-	 * @return Returns @c true if a read attribute could not be made,
-	 * -and the attribute had to be discarded.
-	 * @c daeElement::xs_anyAttribute_is_still_not_implemented informs
-	 * this.
-	 */
-	inline bool getReadAndLostUnattributableAttribute()
-	{
-		int f = _readFlag_unattributed_is_data_loss|_readFlag_unattributed;
-		return (_getReadFlags()&f)==f?true:false; 
-	}
-	/**WARNING
+	/**
 	 * @return Returns @c true if a read simple content model value
 	 * could not be set because of schema mismatch.
 	 * The text SHOULD appear in the contents-array as if mixed-text.
@@ -174,7 +174,7 @@ COLLADA_(protected)
 		//NEW, OPTIMIZATION
 		//Returns false if nullptr==_encoder.
 		//Char-set recoding is an old feature request; this avoids it for ASCII types.
-		bool _maybeExtendedASCII(daeCharData&);
+		bool _maybeExtendedASCII(const daeData&, const daeElement&);
 
 		/**ABSTRACT INTERFACE 
 		 * The two loaders implement reading via this method. Writing is independent.
@@ -303,7 +303,7 @@ COLLADA_(private)
 		int _readContent2(daePseudoElement&);
 
 		void _writeElement(const daeElement &element);
-		void _writeAttribute(daeAttribute &attr, const daeElement &element);
+		void _writeAttribute(daeData &attr, const daeElement &element);
 		void _writeValue(const daeElement &element);
 		void _writeContent2(const daeContents&);
 		void _writeRawSource(const daeElement &source, const daeElement &array, const daeElement &technique_common);

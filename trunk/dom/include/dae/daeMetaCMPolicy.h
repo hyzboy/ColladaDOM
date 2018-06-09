@@ -145,7 +145,7 @@ COLLADA_(public)
 	}
 
 	/**
-	 * Previously "__subtrahend."
+	 * Formerly "__subtrahend."
 	 * Cross-access of this comes up often.
 	 * It's a public API in case it needs to be related to 
 	 * @c XS::Element::hasSubstitutes(). 

@@ -27,8 +27,10 @@ daeOK daeDocument::setMeta(daeMeta &rm)
 		//an XS::Any entry-point.
 		//This changes the ordinal from 0 to the root.
 		if(_pseudo->getAllowsAny()!=rm.getAllowsAny())		
-		_pseudo->_DAEP_Schema^=
-		DAEP::Schema<>::__DAEP__Schema__g1__allows_any;
+		{
+			//DAEP::Schema<>::__DAEP__Schema__g1__allows_any;
+			_pseudo->_DAEP_Schema^=32;
+		}	 
 	}
 	else return DAE_ERR_INVALID_CALL; return DAE_OK;
 }
@@ -37,7 +39,7 @@ namespace DAEP //GCC refuses to disable this (erroneous) warning
 	template<> inline DAEP::Model &DAEP::Elemental
 	<daeDocument::_PseudoElement>::__DAEP__Object__v1__model()const
 	{
-		return dae(this)->getMeta()->getModel();
+		return dae(this)->getMeta().getModel();
 	}
 }
 extern const daeStringCP _daePseudoElement_[] = ":daePseudoElement:";
@@ -51,13 +53,12 @@ daeDocument::daeDocument(daeDOM *DOM):daeDoc(DOM,daeDocType::HARDLINK),_fragment
 	meta._name.string = _daePseudoElement_;
 	(daeMeta*&)model.__DAEP__Model__meta = &meta;
 	meta._processShare = domAny::_master.meta._processShare;	
-	meta._sizeof = sizeof(_PseudoElement);
-	meta._domAny_safe_model = &model;	
-	meta._domAny_safe_prototype = meta._prototype;
-	meta._finalFeatureID = daeFeatureID(-2);
+	meta._sizeof = sizeof(_PseudoElement);	
+	meta._finalFeatureID = daeFeatureID(-3);
 	meta._DAEP_Schema = 0; //NOT SURE???
-	meta._bring_to_life(meta._attribs);
-	_PseudoElement::Essentials ee;
+	meta._bring_to_life(meta._attribs());
+	//_PseudoElement::Essentials ee;
+	_PseudoElement *_; DAEP::Parameters ee(_);
 	model.setObjectType(1); //HACK: get around assert.
 	meta._continue_XS_Schema_addElement<_PseudoElement>(ee);
 	model.setObjectType(0); //HACK: got around assert.
@@ -266,8 +267,32 @@ daeError daeDoc::_write2(const_daeDocRef &in, const daeIORequest &reqO, daeIOPlu
 	//Reminder: daeZAEPlugin::writeRequest has the same problem.
 	#error This only partly makes sense in the output context :(
 	#endif
-	//daeRAII::CloseIO RAII2(RAII.p); //emits error	
-	daeRAII::CloseIO RAII2(reqO.scope->getIOController()); //emits error		
+	//Writing archives is an open question. This bit of code is
+	//grasping for a way forward :(
+	//daeRAII::CloseIO RAII2(RAII.p); //emits error
+	//daeRAII::CloseIO RAII2(reqO.scope->getIOController()); //emits error	
+	daeArchive *HACK = reqO.scope;
+	if(nullptr!=document)
+	{
+		//No clue how this ought to work, but let's try and see.
+		if(reqO.remoteURI!=nullptr
+		&&!reqO.remoteURI->transitsDoc(HACK))
+		{
+			//UNIMPLEMENTED?
+			//No archive implements write operations. It's hard
+			//to say what the hell it means to write. Should an
+			//archive be searched for? And opened if necessary?
+			//And to what end? Writing just isn't as simplistic
+			//as reading.
+			
+			//TODO? Give the "platform" a chance to load a best
+			//matching archive. Here no matching is done so the
+			//document has a chance to be saved where otherwise
+			//there's little chance.
+			HACK = DOM;
+		}
+	}
+	daeRAII::CloseIO RAII2(HACK->getIOController()); //emits error		
 	if(IO==nullptr)
 	IO = RAII2 = RAII2.p.openIO(I,*O);
 	if(IO==nullptr)
@@ -332,24 +357,20 @@ void daeDocument::_sidLookup(daeString ref, daeArray<daeElementRef> &matchingEle
 	for(_sidMapIter cit=range.first;cit!=range.second;cit++)	
 	matchingElements.push_back(cit->second);
 }
-void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, const XS::Attribute *a)const
+void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, daeData *a)const
 {	
 	//Should this be allowed? For symmetry?
 	assert(this!=nullptr); //if(this==nullptr) return;
 
 	const daeElement *e = dae(c.element_of_change);
-
-	//REMINDER: THIS IS NOT DESIGNED TO HANDLE ELEMENT MOVEMENT.
-	switch(a->getType()->getAtomicType())
-	{
-	case daeAtomicType::TOKEN: break;
-	case daeAtomicType::STRING: assert(e->_isAny()); break;
-	default: assert(0); return;
-	}
+			
 	bool id = a->getName().string[0]=='i';
 	assert(daeName(id?"id":"sid")==a->getName());
 
-	daeString got = (const daeString&)a->getWRT(e); if(got[0]!='\0')
+	daeTypewriter *tw = a->getTypeWRT(e);
+	daeString got = (const daeString&)a->getWRT(e); 
+	if(!tw->hasStringType()) assert(tw->hasStringType());
+	else if(got[0]!='\0')
 	{
 		if(!id) //sid?
 		{
@@ -364,7 +385,10 @@ void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, const XS
 		}
 		else _idMap.erase(daeDocument_ID_id(got)); 
 	}
-	c.carry_out_change(); got = (const daeString&)a->getWRT(e); if(got[0]!='\0') 
+	c.carry_out_change();
+	got = (const daeString&)a->getWRT(e); 
+	if(!tw->hasStringType()) assert(tw->hasStringType());
+	else if(got[0]!='\0') 
 	{
 		if(id)
 		{
@@ -386,14 +410,11 @@ void daeDocument::_migrate_ID_or_SID(const daeDocument *destination, const daeEl
 	const daeDocument *source = this;
 	assert(source!=destination); //Callers should avoid this.
 
-	switch(a->getType()->getAtomicType())
-	{
-	case daeAtomicType::TOKEN: break;
-	case daeAtomicType::STRING: assert(e->_isAny()); break;
-	default: assert(0); return;
-	}
+	daeTypewriter *tw = a->getTypeWRT(e);
+	assert(tw->hasStringType()); 
 	daeString got = (const daeString&)a->getWRT(e);
-	if(got[0]=='\0') return; 
+	if(!tw->hasStringType()||got[0]=='\0') 
+	return; 
 
 	bool id = a->getName().string[0]=='i';
 	assert(daeName(id?"id":"sid")==a->getName());		

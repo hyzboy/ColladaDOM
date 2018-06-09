@@ -26,14 +26,14 @@ template<class Change>
  * to notifications. This form is mainly if the caller
  * "just knows" that notifications are enabled.
  */
-inline Change &daeNoteChange(Change &note, daeAttribute *attrib=nullptr)
+inline Change &daeNoteChange(Change &note, daeData *attrib=nullptr)
 {
 	dae(note.element_of_change)->getDatabase()._v1_note(note,attrib); return note;
 }
 
 namespace DAEP{ class Change; }
 
-/**ABSTRACT BASE-CLASS
+/**ABSTRACT, NEVER-CONST
  * The @c daeDatabase class defines the COLLADA runtime database interface.
  * Pre-2.5 the database had access to the DOM, and controlled the documents.
  * Conceptually the database shouldn't be positioned to alter data/structure.
@@ -53,7 +53,8 @@ COLLADA_(private) //VIRTUAL METHOD TABLE
 	friend class daeObject;
 	friend class daeElement;
 	friend class daeDatabase;
-	friend class DAEP::Object;		
+	friend class DAEP::Object;
+	friend class daeAnyAttribute;
 	template<class> friend class daeDB;	
 	 									   
 	inline void **_userptrptr(const daeObject &obj)
@@ -97,7 +98,7 @@ COLLADA_(private) //VIRTUAL METHOD TABLE
 	}	
 	
 	template<class Change> //DAEP::Change
-	friend Change &daeNoteChange(Change&,daeAttribute*);
+	friend Change &daeNoteChange(Change&,daeData*);
 
 	//ADD to _vN_ if introducing new interfaces//
 	//AND check against _vN_ before calling it.//
@@ -113,7 +114,7 @@ COLLADA_(private) //VIRTUAL METHOD TABLE
 	virtual void _v1_delete(const daeDocument&) = 0; 
 	virtual	daeAlloc<> &_v1_new(size_t &newT, const daeAlloc<>&, const daeObject&) = 0;
 	virtual void _v1_delete(const daeAlloc<>&, const daeObject&) = 0;	
-	virtual void _v1_note(const DAEP::Change&, const daeAttribute*) = 0;	
+	virtual void _v1_note(const DAEP::Change&, daeData*) = 0;	
 	virtual bool _v1_atomize_on_note(daeContainedObject&) = 0;	
 	/**
 	 * The current interface version is _v1_.
@@ -151,7 +152,7 @@ COLLADA_(public) //OPERATORS
 	}
 };
 
-/**
+/**NEVER-CONST
  * @c daeDatabase_base has been separated out to give the user/client
  * control over their database class's look-and-feel.
  */
@@ -180,7 +181,7 @@ COLLADA_(public)
 #error For example, checking for whitespace could beat scanning.
 #error One field can mark the presence of <![CDATA[]]> sections.
 #endif
-/**
+/**NEVER-CONST
  * A @c daeStringRef is really a pointer into a @c daeDBaseString.
  */
 class daeDBaseString
@@ -279,7 +280,7 @@ class W=daeDOM> struct daeDBaseTraits
  */
 #define daeDBaseOK(UserObject,object) \
 assert(daeOffsetOf(UserObject,object)==sizeof(UserObject)-daeSizeOf(UserObject,object));
-/**
+/**NEVER-CONST
  * @c daeDB must be used to instantiate a @c daeDatabase, as its members are all private.
  * @tparam DBase is a class with a member: @c typedef @c daeDBaseTraits<> @c _DBaseTraits.
  * From there, you must implement each of the @a DBase:: methods, until the class compiles.
@@ -411,7 +412,7 @@ COLLADA_(private)
 		//Here the DB deallocates its memory block from before.
 		return DBase::_deallocating(_(Alloc,AU),_(Object,obj));
 	}
-	virtual void _v1_note(const DAEP::Change &note, const daeAttribute *attrib)
+	virtual void _v1_note(const DAEP::Change &note, daeData *attrib)
 	{
 		const COLLADA_INCOMPLETE(DBase) DAEP::Change &i = note;
 		//Don't forget to call note.carry_out_change().		

@@ -663,6 +663,8 @@ COLLADA_(private) //DATA-MEMBER
 
 COLLADA_(private) //daeStringRef.cpp business
 
+	friend class daeAnySimpleType;
+
 	//Every permutation is implemented.
 	//It's impenetrable, but there's nothing to gain by restating it.
 	COLLADA_DOM_LINKAGE void _release();
@@ -1372,7 +1374,7 @@ struct daeStringRefMultiMap:map::allocator_type::Alligator,map
  || defined(COLLADA_DOM_UNORDERED_SET)
 template<class DBaseString=daeDBaseString, class A=daeStringAlligator<DBaseString>>
 /**
- * Previously "daeStringTable."
+ * Formerly "daeStringTable."
  * The @c daeSmallStringTable is a simple string table class to hold a list of strings
  * without a lot of allocations.
  * 
@@ -1443,7 +1445,7 @@ COLLADA_(public) //INTERFACE
 	#endif
 
 	/**LEGACY-SUPPORT
-	 * Previously "clear."
+	 * Formerly "clear."
 	 * Clears the storage. Sort of.
 	 */
 	inline void reset(size_t stringDBufferSize=1024)

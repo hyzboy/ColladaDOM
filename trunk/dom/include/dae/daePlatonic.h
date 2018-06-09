@@ -457,19 +457,13 @@ COLLADA_(protected) //VISIBLE DATA-MEMBERS
 	 * all of this, databases may store data before or after their
 	 * @c this pointer.
 	 */
-	size_t _sizeof;
+	daeOffset _sizeof;
 
 	/**
 	 * Negative value, marking the heighest @c daeFeatureID.
 	 * @c -_rendFeatureID is equal to their number.
 	 */
 	daeFeatureID _finalFeatureID;
-
-	/**SCHEDULED FOR REMOVAL?
-	 * "(char*)this-_sizeof" is normally the model, except for how
-	 * @c domAny::_meta works. 
-	 */
-	const daeModel *_domAny_safe_model;
 
 	/**
 	 * @c daeProcessShare uses this to delete its models. It holds
@@ -509,7 +503,7 @@ COLLADA_(protected) //INACCESSIBLE
 	 * Disabled Destructor
 	 * @c _self_destruct() should be used instead.
 	 */
-	~daeMetaObject(){ assert(_domAny_safe_model!=nullptr); }
+	~daeMetaObject(){}
 
 COLLADA_(public) //PUBLIC OPERATORS
 
@@ -529,12 +523,7 @@ COLLADA_(public) //PUBLIC ACCESSORS
 	/**
 	 * Gets at the @c daeModel.
 	 */
-	inline daeModel &getModel()
-	{
-		//This would be unsafe as long as domAny::_meta exists.
-		//return (daeModel&)daeOpaque(this)[-daeOffset(_sizeof)]; 
-		return (daeModel&)*_domAny_safe_model; 		
-	}
+	inline daeModel &getModel(){ return daeOpaque(this)[-_sizeof]; }
 	/**CONST-FORM
 	 * Gets at the @c daeModel (as DAEP Model. See remarks.)
 	 * @remarks This returns @c DAEP::Model because @c daeModel
@@ -543,12 +532,7 @@ COLLADA_(public) //PUBLIC ACCESSORS
 	 * It doesn't work to do "getModel().x." But it's rarely useful to
 	 * do that. (dae(getModel()).x is one option.)
 	 */
-	inline DAEP::Model &getModel()const
-	{
-		//This would be unsafe as long as domAny::_meta exists.
-		//return (DAEP::Model&)daeOpaque(this)[-daeOffset(_sizeof)]; 
-		return (DAEP::Model&)*_domAny_safe_model;
-	}
+	inline DAEP::Model &getModel()const{ return daeOpaque(this)[-_sizeof]; }
 	
 	/**
 	 * Gets the name of this element type.

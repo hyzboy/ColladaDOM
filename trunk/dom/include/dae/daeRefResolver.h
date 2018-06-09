@@ -47,7 +47,7 @@ COLLADA_(public) //THIS CLASS IS STRUCT-LIKE
 	 * @warning @c typeInstance does not factor in @c rangeMin.
 	 */
 	daeObjectRef object; daeOpaque typeInstance;	
-	/**WARNING
+	/**
 	 * If @c type is a @c daeAtomicType::STRING the system reserves
 	 * the right to set @c rangeMin and @c rangeMax to capture items
 	 * in the list on a code-point to code-point basis. 
@@ -55,8 +55,14 @@ COLLADA_(public) //THIS CLASS IS STRUCT-LIKE
 	 * for whitespace between the items. 
 	 * @note An xs:string cannot be items in a list. Therefore it should
 	 * be thought of as a pseudo-array (or xs:list.)
+	 *
+	 * TODO? @c type was @c daePrototype* but @c daeData cannot guarantee
+	 * That, so it can be either be a @c daeTypewriter, or it can provide
+	 * even more information by being a @c daeData. SID usage always goes
+	 * by element values, but other refs may retreive attributes or child
+	 * elements, or even more exotic/arbitrary data.
 	 */
-	const daePrototype *type; size_t rangeMin, rangeMax;
+	daeTypewriter *type; size_t rangeMin,rangeMax;
 
 	//SCHEDULED FOR REMOVAL
 	/**
@@ -104,12 +110,12 @@ COLLADA_(public) //THIS CLASS IS STRUCT-LIKE
 	 */
 	inline int getAtomicType()const
 	{
-		return &typeInstance==nullptr?0:type->writer->where<daeAtom>().getAtomicType();
+		return &typeInstance==nullptr?0:type->where<daeAtom>().getAtomicType();
 	}
 	/**
 	 * @return Returns @c daeAtomicType::EXTENSION!=getAtomicType().
 	 */
-	inline int isAtomicType()const{ return daeAtomicType::EXTENSION!=getAtomicType(); }
+	inline bool hasAtomicType()const{ return daeAtomicType::EXTENSION!=getAtomicType(); }
 			
 COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 
@@ -138,7 +144,7 @@ COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 	#endif
 	template<typename T> COLLADA_NOINLINE
 	/**UNUSED
-	 * Previously "getVector."
+	 * Formerly "getVector."
 	 * This operation is provided because the COLLADA user manual seems
 	 * to suggest that values are to be "cast" or "directly cast" given
 	 * an initial value.
@@ -168,7 +174,7 @@ COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 		{
 			//This is here to support anySimpleType (domAny) or union
 			//data. An array of strings is typed, and won't be casted.
-			if(at==type->writer->getAtomicType())
+			if(at==type->getAtomicType())
 			{
 				const daeStringRef &s = typeInstance;				
 				daeString p = s.data(); daeStringCP *e;
@@ -445,7 +451,7 @@ COLLADA_(public) //LEGACY QUERY API
 	//
 	template<class T> //element or element smart-ref or a scalar type
 	/**LEGACY-SUPPORT 
-	 * Previously "getElement."
+	 * Formerly "getElement."
 	 * @warning Resolution is based on @c getDOM()->getRefResolvers().
 	 * @see @c daeRefRequest::getVector().
 	 *

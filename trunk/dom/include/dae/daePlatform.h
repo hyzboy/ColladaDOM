@@ -266,20 +266,17 @@ includes the C++98 set. daeStringSet, etc. require one or the other.
 #include <stddef.h> //ptrdiff_t
 #include <stdlib.h>
 #include <stdarg.h>
-#include <iostream>
-#include <iomanip>
 #include <assert.h>
 #include <wchar.h>
 #include <limits.h>
 #include <string.h>
-#include <string>
+#include <iostream>
+#include <iomanip>
+#include <limits> //not limits.h (GCC)
+#include <string> //not string.h (GCC)
 #include <map> //ref caches
 #include <algorithm>
-
-#ifdef BUILDING_COLLADA_DOM
-#include <limits>
-#include <vector>
-#endif //BUILDING_COLLADA_DOM
+#include <vector> //daeIOController
 
 //Assuming this is set by the CMake build script.
 #ifdef COLLADA_DOM_NEED_NULLPTR
@@ -321,6 +318,9 @@ includes the C++98 set. daeStringSet, etc. require one or the other.
 //Replaces "int compile[N]; (void)compile; //quiet the warning"
 template<int N> struct daeCTC{ char compile[N>0?1:/*-1*/N-1]; daeCTC(const void*_=0){} };
 
+//COLLADA_(public)
+//COLLADA_(private)
+//COLLADA_(protected)
 //Disable access-control in Release builds, or if they are causing problems.
 //This is because The C++ Standard allows implementations to reorder layouts.
 //This permits librarians to not have to think in terms of an extra dimension!
@@ -348,15 +348,16 @@ template<int N> struct daeCTC{ char compile[N>0?1:/*-1*/N-1]; daeCTC(const void*
 //https://connect.microsoft.com/VisualStudio/feedback/details/3101668
 #define COLLADA_(keyword,...) COLLADA__##keyword##__##__VA_ARGS__
 
-#ifndef COLLADA__extern__
-/**GCC STFU
+//COLLADA_(extern)
+/**GCC, DECORATIVE
  * This silences warning: initialized and declared 'extern'
  * 'extern' variables should be used sparingly and so need
  * to be marked.
+ * @note Also eliminates the need to provide a contruction.
  */
 #define COLLADA__extern__
-#endif
 
+//COLLADA_(nullptr)
 //SCHEDULED FOR REMOVAL?
 #ifndef COLLADA__nullptr__
 /**COLLADA_(nullptr)

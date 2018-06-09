@@ -70,57 +70,80 @@ daeModel &daeProcessShare_base::_addModel(int size, daeFeatureID finalID, int ex
 	
 	out._processShare = static_cast<daeProcessShare*>(this);
 	out._sizeof = size;
-	out._domAny_safe_model = &mod;
 	out._finalFeatureID = finalID;	
 	if(0!=finalID)
 	mod[daeFeatureID(-1)]._flags.feature_1 = 1;
 	out._deleteList = _deleteList; _deleteList = &out; return mod;
 }
+extern daeAlloc<XS::Attribute*,1> domAnyAttributeThunk;
 daeMetaElement &XS::Schema::_addElement(long long schema, int size, daeFeatureID finalID, daeName name)
 {
-	assert((int)finalID<=-2);	
+	assert((int)finalID<=-3);	
 	//The calling method checks these formulas.
 	int genus = 1+int(schema>>48);
-	int attribs = 0x3F&int(schema>>32);
+	int attribsN = 0x3F&int(schema>>32);
 	//FYI: Thunks are not being assigned to the DAEP::Child features.
 	//domAny has a "value" member even though it's saying it's MIXED.
-	int thunks = attribs, addvalue = 0;
-	if(genus==daeObjectType::ANY||(schema&3)==daeContentModel::SIMPLE) 
+	int thunks = 1+attribsN, addvalue = 0;
+	int addAny = schema&64?sizeof(daeAny):0; //This is checked below.
+	if((schema&3)==daeContentModel::SIMPLE) 
 	{
-		thunks++; addvalue = sizeof(daeValue);
-	}
+		thunks++; addvalue = sizeof(daeDefault);
+	}	
+	else assert(genus!=daeObjectType::ANY); //mixed?
 	int diff = sizeof(daeMetaElement)-sizeof(daeObject);
-	daeModel &mod = _addModel(size,finalID,diff+size+addvalue+thunks*sizeof(daeAllocThunk));
+	int back = addAny+addvalue+thunks*sizeof(daeAllocThunk);
+	back+=attribsN*sizeof(XS::Attribute);
+	daeModel &mod = _addModel(size,finalID,diff+size+back);
 	mod.setObjectType(genus);
 
-	daeMetaElement &out = const_cast<daeMetaElement&>(mod.__DAEP__Model__elements_meta());	
+	daeMetaElement &out = 
+	const_cast<daeMetaElement&>(mod.__DAEP__Model__elements_meta());	
 	{
 		//_addModel() set up the daeMetaObject ones.
-		out._name = name; 		
-		out._domAny_safe_prototype = out._prototype;		
+		out._name = name;
 		out._feature_completeID = daeFeatureID(-thunks);
 		out._DAEP_Schema = schema;
+		assert((0==addAny)==!out.getAllowsAnyAttribute());
 	}	
-	//This just communicates the count to daeMetaElement.
-	out._bring_to_life(out._attribs).setCountMore(attribs);
-	memset(out._attribs.data(),0x00,sizeof(out._attribs[0])*attribs);
-
+	
 	union //HEADS UP!
 	{
-		char *behind_prototype; daeAllocThunk *thunkp; 
+		char *behind_prototype;
+		daeAllocThunk *thunkp; 
+		XS::Attribute *attrib;
 	};	
 	daeFeatureID fit = out._feature_completeID;
 	behind_prototype = &daeOpaque(out._prototype)+size;
+	if(0!=addAny)
+	behind_prototype+=sizeof(out._bring_to_life(out._any()));
 	if(0!=addvalue) 
 	{
-		out._value = (daeValue*)behind_prototype; 
-		behind_prototype+=sizeof(daeValue);
+		out._value = (daeDefault*)behind_prototype; 
+		behind_prototype+=sizeof(daeDefault);
 		//HACK: setAllocThunk() expects initialized memory.
 		mod[fit++]._localthunk = thunkp++; //setAllocThunk();
 	}
 	while(fit) mod[fit++]._localthunk = thunkp++; //setAllocThunk();
 		
-	if(!out.getIsLocal()) _globalTypes[name] = &out; return out;
+	if(!out.getIsLocal()) _globalTypes[name] = &out; 
+	
+	memset(attrib,0x00,sizeof(XS::Attribute)*attribsN);
+	daeArray<XS::Attribute*> &attribs = out._attribs();	
+	if(0!=attribsN)
+	{
+		//HACK: Allocate an exact amount since single pointers
+		//have a minimum capacity of 16 at the time of writing.
+		//out._bring_to_life(attribs).grow(attribsN+1);		
+		out._bring_to_life(attribs);
+		((daeObject*)0)->reAlloc(attribs.getAU(),attribsN+1);
+		//The _offset holds the number of static attributes.
+		(*attribs.getAU())->_offset = attribsN; 
+		for(int i=0;i<attribsN;i++) attribs.push_back(attrib++);
+		attribs.push_back(domAnyAttributeThunk._varray[0]);
+		attribs.getAU()->setInternalCounter(attribsN);
+	}
+	else attribs.getAU() = domAnyAttributeThunk.unit(); return out;
 }
  
 static void daeMetaSchema_deleteAllocThunk(daeMetaObject *self) 
@@ -220,12 +243,13 @@ XS::SimpleType &XS::Schema::_addAtom(daeTypewriter *writ, daeName base, daeName 
 		}
 		else xs = daeStringRef_xs_(name);
 		int t = 0; //HACK: Assuming string->token is alright.
-		if((xs==nullptr||(t=xs->getAtomicType())!=system_type)
-		&&(t!=daeAtomicType::TOKEN||system_type!=daeAtomicType::STRING))
+		if(xs==nullptr||((t=xs->getAtomicType())!=system_type)
+		&&(t!=daeAtomicType::TOKEN||system_type!=daeAtomicType::STRING)
+		&&0!=system_type) //HACK: xs:anySimpleType?
 		xs = daeStringRef_sys_typewrit(system_type);		
 		out->_value_typewriter = xs;	
 	}
-	else out->_value_typewriter = writ; //should be a real typewriter.
+	else out->_value_typewriter = writ; //Should be a real typewriter.
 		
 	return *out;
 }
@@ -244,6 +268,10 @@ XS::SimpleType &XS::Schema::_addList(daeTypewriter *writ, daeName base_or_item, 
 	//Note, _addAtom() inherits "itemType" if <xs:list> based.
 	if(base_or_item==nullptr) out._itemType = base;
 	assert(out.hasList()||out.getRestriction()); 
+		
+		//This problem will have to be dealt with one day.
+		assert(!out._value_typewriter->isAnySimpleType());
+
 	out._value_typewriter = out._value_typewriter->where<daeArray>(); return out;
 }
 

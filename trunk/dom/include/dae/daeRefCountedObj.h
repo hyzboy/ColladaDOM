@@ -706,9 +706,9 @@ COLLADA_(public) //daeArray AU allocators
 	 * @remarks @c this CAN be @nullptr. For purposes of 
 	 * managing allocation-units, @c nullptr is a pseudo object.
 	 */	
-	inline void reAlloc(daeAlloc<T>* &au, size_t newT, _(fn,T))
+	inline void reAlloc(daeAlloc<T>* &au, size_t newT, _(fn,T)=nullptr)
 	{
-		_reAlloc<0>((daeAlloc<>*&)au,newT,(_(,))fn); //"loses qualifiers" 
+		_reAlloc<0,0>((daeAlloc<>*&)au,newT,(_(,))fn); //"loses qualifiers" 
 	}	
 	template<class T>
 	/**WARNING
@@ -722,23 +722,23 @@ COLLADA_(public) //daeArray AU allocators
 	 */
 	inline void reAlloc(daeDatabase &db, daeAlloc<T>* &au, size_t newT, _(fn,T)=nullptr)
 	{
-		return _reAlloc<1>((daeAlloc<>*&)au,newT,(_(,))fn,&db); //"loses qualifiers" 
+		return _reAlloc<1,0>((daeAlloc<>*&)au,newT,(_(,))fn,&db); //"loses qualifiers" 
 	}
-	template<int DB> //INTERNAL
+	template<bool DB, bool AO> //INTERNAL
 	COLLADA_NOINLINE	
 	/** Implements reAlloc(). */
-	inline void _reAlloc(daeAlloc<>* &au, size_t newT, _(fn,), daeDatabase *db=nullptr)
+	inline void _reAlloc(daeAlloc<>* &au, size_t newT, _(fn,)=nullptr, daeDatabase *db=nullptr)
 	{	
 		assert(newT>au->getCapacity()); //This is one-way.
 		daeAlloc<> &recycling = *au;
-		bool wasFree = daeAlloc<>::isFreeAU(au);
+		bool wasFree = AO?false:daeAlloc<>::isFreeAU(au);
 		if(!DB) db = this==nullptr?nullptr:_getDBase();	
 		au = !DB&&db==nullptr?&au->newThis(newT):&db->_new(newT,*au,*this);
 		assert(au!=&recycling);
 		recycling.moveThunk(au,newT);
 		//Copy/move the old memory over to the new memory?
-		if(!DB||fn!=nullptr) fn(this,*au,recycling); 
-		if(wasFree)
+		if(fn!=nullptr) fn(this,*au,recycling); 
+		if(!AO&&wasFree)
 		if(!DB&&db==nullptr) 
 		recycling.deleteThis();
 		else db->_delete(recycling,*this);						

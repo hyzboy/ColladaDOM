@@ -59,10 +59,11 @@ else $classname = getIntelliSenseName($meta);
 //about; where -- simply does the const-cast; but that
 //seemed like too much baggage to take on to play with
 //experiments that violate the C++ One Definition Rule.
-$lo = layoutTOC($meta);
-$extent_of_attributes = count($meta['attributes']);
+$lo = layoutTOC($meta); 
+$count_of_attributes = count($meta['attributes']);
 $value = !empty($meta['content_type']);
-$extent_of_values = $extent_of_attributes+$value;
+//1+ for anyAttribute
+$extent_of_values = 1+$count_of_attributes+$value;
 reset($lo); $k0 = key($lo);
 $_No = $extent_of_values+max($k0-1,0);
 echoNotesCPP($meta,$notes,$_No);
@@ -76,13 +77,13 @@ if($meta['mixed']) $schema = 3; //mixed
 if($meta['parent_meta']!=NULL) $schema|=4; //inline
 $schema|=$meta['flags'];
 $baseclass = ($COLLADA_DOM==2?'dae':'DAEP::').'Elemental';
-$schema = sprintf('0x%04x%04x%08xULL',$genus++,$extent_of_attributes,$schema);
+$schema = sprintf('0x%04x%04x%08xULL',$genus++,$count_of_attributes,$schema);
 //DOCUMENTATION
 echoClassDoxygentation($indent,$meta); 
 echoCode("
 class $1
 : 
-public $baseclass<$2>, public DAEP::Schema<$schema>
+public $baseclass<$2,$schema>
 {",$classname,isset($typedef)?$typedef:$classname);
 
 if(2===$COLLADA_DOM)
@@ -122,14 +123,16 @@ if(!empty($meta['classes']))
 		echo "\n";
 	}	
 }
-
-$i = 0; 
+ 
+//The first value is expected to be anyAttribute.
 echoCode("
 public: //Parameters
 
-	typedef struct:Elemental,Schema");
+	typedef struct:Elemental
+	{   DAEP::Value<0,$1nyAttribute>",2===$COLLADA_DOM?'xsA':'xs::a');
 echo $indent,
-"	{   ";
+"	_0; ";
+$i = 1;
 foreach($meta['attributes'] as $ea)
 {
 	$at = getGlobalType($meta,$ea['type']);
@@ -190,14 +193,19 @@ $notes+=$i+1;
 //ATTRIBUTES
 if(2!==$COLLADA_DOM) 
 $nc = $meta['elements']; else $nc = array();
+echoCode("
+public: //Attributes");
+	//TODO: will need a union{} here to implement
+	//attributeGroup or to prioritize low likelihood 
+	//attributes where there are large/sparse attributes
+	if($schema&ElementMeta::hasAnyAttribute)
+	echoAnyEtcCPP('Attribute'); else echoNoNameCPP('Attribute');
 if(!empty($meta['attributes']))
 {
 	if($_attr=2===$COLLADA_DOM?'attr':'')
 	$nc2 = array(); else $nc2 = $meta['attributes'];
-	echoCode("
-public: //Attributes");
-
-	$i = 0;		
+	
+	$i = 1;		
 	foreach($meta['attributes'] as $k=>$ea)
 	{
 		$type = $ea['type'];
@@ -208,9 +216,10 @@ public: //Attributes");
 		echoCode("
 	DAEP::Value<$i,$preType,_,(_::_)&_::_$i> $name;"); 
 		$i++;
-	}echo "\n";
+	}
 }
 else $nc2 = array();
+	echo "\n";
 
 if($el_less=$count_lo==0&&!$any)
 echoCode("
@@ -224,7 +233,7 @@ if(!empty($value))
 	 * The $value value of the text data of this element. 
 	 */
 	DAEP::Value<$1,$value,_,(_::_)&_::_$1> value;"
-	,$extent_of_attributes);
+	,$extent_of_values-1);
 }
 //ELEMENTS
 //Reminder: all kinds hold comments and/or processing-instructions.

@@ -7,20 +7,6 @@ add_definitions(-DEXPORTING_COLLADA_DOM)
 
 ####EXTERNAL-LIBS############################
 
-try_package(zlib ZLIB)
-if(ZLIB_FOUND)	
-	string(APPEND PC_LIBS " -lz") #OBSOLETE?
-else()
-	try_external_libs(z zlib/trunk ZLIB)
-endif()
-
-try_package(minizip MINIZIP)
-if(MINIZIP_FOUND)	
-	string(APPEND PC_LIBS " -lminizip") #OBSOLETE?
-else()
-	try_external_libs(minizip minizip/trunk MINIZIP)
-endif()
-
 if(COLLADA_DOM__LEGACY_TINYXML)
 	try_external_lib(tinyxml tinyxml/trunk TINYXML)
 	include_directories(${TINYXML_INCLUDE_DIRS})
@@ -53,9 +39,8 @@ set(PC_LIBS "${PC_LIBS}" PARENT_SCOPE) #OBSOLETE?
 
 ####BUILD/INSTALL############################
 
-#old note: declare minizip/zlib before libxml2!
 # (for some reason the precompiled libxml2 libraries have zlib.h/zconf.h)
-include_directories(${MINIZIP_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIRS} ${LIBXML2_INCLUDE_DIRS})
+include_directories(${LIBXML2_INCLUDE_DIRS})
 
 #Headers will never work with CMakePCHCompiler :(
 file(GLOB files "src/dae/*.cpp") #"include/*.*" "include/dae/*.h" "include/modules/*.h") 
@@ -81,7 +66,7 @@ set_target_properties(colladadom25 PROPERTIES
 	COMPILE_FLAGS "${_wincompile}"
 	LINK_FLAGS "${_winlink}")
 
-target_link_libraries(colladadom25 ${MINIZIP_LIBRARIES} ${ZLIB_LIBRARIES} ${LIBXML2_LIBRARIES})
+target_link_libraries(colladadom25 ${LIBXML2_LIBRARIES})
 
 #### Monkey see, monkey do??? ################
 

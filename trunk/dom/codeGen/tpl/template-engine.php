@@ -546,23 +546,31 @@ function layoutTOC(& $meta)
 	return $lo;
 }
 
-function echoNoNameCPP($name='extra_schema',$doc='/')
+function echoNoNameCPP($attr='',$name='extra_schema',$doc='/')
 {
-	global $COLLADA_DOM;
-	if(2==$COLLADA_DOM) $name = 'elem'.ucfirst($name);
+	global $COLLADA_DOM; if(2==$COLLADA_DOM) 
+	{
+		$any = 'xsAny'; $name = ($attr?'attr':'elem').ucfirst($name);
+	}
+	else $any = 'xs::any'; $any.=$attr;
 	echoCode("
 	/**NO-NAMES
-	 * These elements are invalid according to the schema. They may be user-defined 
-	 * additions and substitutes.
-	 *$doc
-	DAEP::Child<1,xs::any,_,(_::_)&_::_Z> {$name}__unnamed;");
+	 * These $1 are invalid according to the schema. They may be user- 
+	 * defined additions and substitutes.
+	 *$doc",$attr?'attributes':'elements');
+	if(!$attr)
+	echoCode("
+	DAEP::Child<1,$any,_,(_::_)&_::_Z> {$name}__unnamed;");
+	else
+	echoCode("
+	DAEP::Value<0,$any,_,(_::_)&_::_0> {$name}__value;");
 }
-function echoAnyEtcCPP()
+function echoAnyEtcCPP($attr='')
 {
-	echoNoNameCPP('any_et_cetera',"	
+	echoNoNameCPP($attr,'any_et_cetera',"	
 	 * ANY, DOCUMENTATION-NOT-SUPPORTED
-	 * This member is a placeholder for an <xs:any> element in the schema. Feature 
-	 * support for <xs:any> is limited. 
+	 * This member is a placeholder for an <xs:any$attr> element in the schema.
+	 * Feature support for <xs:any$attr> is limited. 
 	 */");
 }
 function echoElementsCPP(&$meta,$elementsPtoMs,$N,$any) 
@@ -1226,7 +1234,10 @@ function echoNotesCPP($meta,$notestart,$_No)
 	
 	$context = getAlias(strtr($meta['element_name'],'.-','__'));		
 	
-	$i = $notestart; 
+	//+1 for anyAttribute. Will have to factor in negative value
+	//IDs somehow, which will be union'ed with the anyAttribute
+	//because they are to be stored like anyAttribute values
+	$i = $notestart+1; 
 	foreach($a as $k=>$ea) echoNotesCPP_short($i++,$context,$k,$ea);
 	
 	//this is where the "value" note should go if one is needed

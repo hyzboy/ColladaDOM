@@ -285,7 +285,7 @@ COLLADA_(public) //I/O
 				}
 				else if(0==I->first)
 				{
-					ext = std::min(r.e->dsize,I->second);
+					ext = std::min<size_t>(r.e->dsize,I->second);
 					I->second = ext;
 				}
 				else ext = 0; enum{extraN=64};
@@ -473,7 +473,7 @@ daeError daeZAE::maybe_init(daeIO &IO)
 
 	//ZIP files (which ZAE is) are organized in reverse.
 	//Conceptually eof is requesting the Content-Length.
-	daeIO::Range r = {-1,-1};
+	daeIO::Range r = {(size_t)-1,(size_t)-1};
 	size_t eof = IO.getLock(&r); if(eof!=0) 
 	{
 		r.first = std::max<size_t>(eof,_8192)-_8192; 
@@ -1288,6 +1288,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 	daeIO *crc; int _now; int now()
 	{
 		if(_now!=0) return _now;
+		COLLADA_SUPPRESS_C(4996)
 		time_t utc; time(&utc); tm &t = *gmtime(&utc);
 		return _now = 
 		//(daeAtlasValue::decomposeTIME in reverse.)
@@ -1511,7 +1512,7 @@ public: //writeRequest
 };
 static daeError daeZAE_write_lock_error(daeIO *r, daeIO *w)
 {
-	if(r!=nullptr);
+	if(r!=nullptr)
 	daeEH::Error<<"Could not lock ZAE/ZIP for write-op.\n"
 	"(I/O platform may not implement write-to-temporary+move logic.)";
 	return w->getError();

@@ -837,8 +837,14 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 			"daeRawResolver - URI is not <source><technique_common><accessor> embedded.";
 			return DAE_ERR_INVALID_CALL;
 		}
+		if(domAny::elementType==source->getElementType())
+		{
+			daeEH::Error<<
+			"daeRawResolver - Element is of domAny type. Not implemented on legacy path.";
+			return DAE_ERR_NOT_IMPLEMENTED;
+		}
 		const_daeElementRef param = accessor->getChild("param");				
-		bool int_type = param!=nullptr&&"int"==daeHashString(param->getAttribute("type"));
+		bool int_type = param!=nullptr&&"int"==param->string("type");
 		//NEW: The original code didn't do this. But it probably never cleared its cache??
 		daeElementRef array = source->getChild(int_type?"int_array":"float_array");
 		if(array==nullptr) //There's no data (potentially modified) that can be clobbered?
@@ -883,20 +889,22 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 
 			//There probably should be better APIs for this sort of thing.
 			#ifdef NDEBUG
+			//REMINDER: domAny is returning DAE_ERR_NOT_IMPLEMENTED above. 
 			#error The types are not guaranteed to be daeULong. (Or even to exist.)
 			#endif			
-			daeAttribute *count = accessor->getAttributeObject("count");
-			daeAttribute *stride = accessor->getAttributeObject("stride");
-			assert(sizeof(daeULong)==count->getSize());
-			daeULong &long_count = array->getAttributeObject("count")->getWRT(array);
-			long_count = (const daeULong&)count->getWRT(accessor);
-			long_count*=(const daeULong&)stride->getWRT(accessor);			
+			daeData &count = accessor->getAttribute("count");
+			daeData &stride = accessor->getAttribute("stride");
+			assert(sizeof(daeULong)==count.getDefaultSize());
+			daeULong &long_count = array->getAttribute("count").getWRT(array);
+			long_count = (const daeULong&)count.getWRT(accessor);
+			long_count*=(const daeULong&)stride.getWRT(accessor);			
 		
-			daeCharData *arrayCD = array->getCharDataObject();
-			int atomic_type = arrayCD->getType()->where<daeAtom>().getAtomicType();			
+			daeData &arrayCD = array->getCharData();
+			int atomic_type = 
+			arrayCD.getTypeWRT(array).where<daeAtom>().getAtomicType();			
 						
 			daeURI_read_RAW_file_data_args args = 
-			{ arrayCD->getWRT(array),(size_t)long_count,rawIO,byteOffset };			
+			{ arrayCD.getWRT(array),(size_t)long_count,rawIO,byteOffset };			
 			
 			//Dispensing with FILE based I/O.
 			bool oob,unknown = false;			
@@ -939,12 +947,12 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 
 hit: //fill out the request object
 	const daeElement &e = (daeElement&)*req.object;
-	daeCharData *cd = e.getCharDataObject();
-	daeAlloc<>*AU = (daeAlloc<>*const&)cd->getWRT(&e);
+	daeData &cd = e.getCharData();
+	daeAlloc<>*AU = (daeAlloc<>*const&)cd.getWRT(&e);
 	size_t n = AU->getCount();
 	if(n!=0)
 	{
-		req.type = &cd->getType();
+		req.type = cd.getTypeWRT(&e);
 		req.typeInstance = AU->getRaw();		
 		req.rangeMin = 0;
 		req.rangeMax = n-1;

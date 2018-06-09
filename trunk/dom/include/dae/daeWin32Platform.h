@@ -57,8 +57,5 @@ typedef int intptr_t;
 #define COLLADA_H(h) __pragma(message("COLLADA-DOM: In " COLLADA_STRINGIZE(h) " ..."))
 #endif
 
-//Visual Studio doesn't complain about mixing extern with initialization.
-#define COLLADA__extern__ extern
-
 #endif //__COLLADA_DOM__DAE_WIN32_PLATFORM_H__
 /*C1071*/

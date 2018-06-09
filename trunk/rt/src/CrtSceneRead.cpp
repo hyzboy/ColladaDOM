@@ -107,7 +107,7 @@ struct AccessorYY<float> : RT::AccessorYY<ColladaYY::const_float_array>
 template<class T>
 inline void RT::Frame_Asset::_OverrideWith(const daeElement *e)
 {
-	typename DAEP::Schematic<T>::schema yy;
+	typename DAEP::Generic<T>::schema yy;
 
 	T &t = *(T*)&e; if(!t->asset.empty()) 
 	{	
@@ -138,7 +138,7 @@ void RT::Frame_Asset::_operator_YY
 	else switch(e->getElementType())
 	{
 	#define _(x) \
-	case DAEP::Schematic<ColladaYY::x>::genus:\
+	case DAEP::Generic<ColladaYY::x>::genus:\
 	return _OverrideWith<ColladaYY::const_##x>(e);
 	//This list is concerned with up_axis/unit.
 	//(It may be incomplete.)		
@@ -182,9 +182,9 @@ struct RT::DBase::LoadTargetable_of
 	LoadTargetable_of(S &in, RT::Matrix &v)
 	{
 		//This is tortured to avoid loading an identity matrix.
-		const typename S::XSD::type *e;
+		typename S::const_pointer e;
 		if(b=!in.empty()) e = in;
-		else e=0; //-Wmaybe-uninitialized
+		else e = 0; //-Wmaybe-uninitialized
 		if(!b||e->value->size()<16) RT::MatrixLoadIdentity(v); 
 		if(b) e->value->get4at(0,v[M00],v[M10],v[M20],v[M30]);
 		if(b) e->value->get4at(4,v[M01],v[M11],v[M21],v[M31]);
@@ -280,7 +280,7 @@ struct RT::DBase::LoadCamera_technique_common
 		out->Xmag*=RT::Asset.Meter;
 		out->Ymag*=RT::Asset.Meter;
 	}
-	void Load_shape_2(const DAEP::Schematic<ColladaYY::orthographic>::type &in)
+	void Load_shape_2(const DAEP::Generic<ColladaYY::orthographic>::type &in)
 	{
 		#ifdef NDEBUG //GCC can't stand apostrophes.
 		#error "It should be easy to fix this since X/Ymag shouldn't be 0."
@@ -289,7 +289,7 @@ struct RT::DBase::LoadCamera_technique_common
 		LoadTargetable_of(in.xmag,out->Xmag); out->Xfov = 0;
 		LoadTargetable_of(in.ymag,out->Ymag); out->Yfov = 0;
 	}
-	void Load_shape_2(const DAEP::Schematic<ColladaYY::perspective>::type &in)
+	void Load_shape_2(const DAEP::Generic<ColladaYY::perspective>::type &in)
 	{
 		LoadTargetable_of(in.xfov,out->Xfov); out->Xmag = 0; 
 		LoadTargetable_of(in.yfov,out->Yfov); out->Ymag = 0;
@@ -315,10 +315,10 @@ template<class T> //sampler or control_vertices
 struct CrtSceneRead_spline
 {
 	static const bool is_animation =
-	DAEP::Schematic<ColladaYY::const_sampler>::genus==
-	DAEP::Schematic<T>::genus;
+	DAEP::Generic<ColladaYY::const_sampler>::genus==
+	DAEP::Generic<T>::genus;
 
-	typedef const typename DAEP::Schematic<typename T::input>::type 
+	typedef const typename DAEP::Generic<typename T::input>::type 
 	SamplerInput;
 
 	const daeDocument *doc; bool fat;
@@ -559,7 +559,7 @@ CrtSceneRead_spline<ColladaYY::const_sampler>
 	{	
 		daeRefRequest req;
 		SIDREF = in->target;
-		if(!SIDREF.get(req)||!req.isAtomicType())
+		if(!SIDREF.get(req)||!req.hasAtomicType())
 		{
 			#ifdef NDEBUG //GCC can't stand apostrophes.
 			#error "If there is an element but no data, then use the value's capacity."
@@ -572,7 +572,7 @@ CrtSceneRead_spline<ColladaYY::const_sampler>
 		//This check is needed, because if a selection is not applied, the returned
 		//length is the length of the string itself, which will treat each codepoint
 		//as a keyframe parameter.
-		switch(req.type->writer->getAtomicType())
+		switch(req.getAtomicType())
 		{
 		case daeAtomicType::STRING: case daeAtomicType::TOKEN:
 
@@ -786,7 +786,7 @@ struct RT::DBase::LoadEffect_profile_COMMON
 	{	
 		if(child.empty()) return; 
 		
-		const typename T::XSD::type &in = *child;				
+		typename T::const_reference in = *child;				
 		if(LoadTargetable_of(in.color,o)) return;
 	
 		typedef ColladaYY::const_profile_COMMON::newparam Lnewparam;
@@ -1142,7 +1142,7 @@ struct RT::DBase::LoadGeometry_technique_common
 	{
 		for(size_t i=0;i<in.size();i++)
 		{
-			const typename T::XSD::type &in_i = *in[i];	
+			typename T::const_reference in_i = *in[i];	
 			if(in_i.p.empty()) continue;
 
 			inputs = in_i.input;
@@ -1919,13 +1919,13 @@ struct RT::DBase::LoadScene_Physics
 		for(size_t i=req.SID_by_SID.size()-1;i-->0;)
 		switch(req.SID_by_SID[i]->getElementType())
 		{
-		case DAEP::Schematic<Collada05::instance_physics_model>::genus:
+		case DAEP::Generic<Collada05::instance_physics_model>::genus:
 		req.SID_by_SID[i] = req.SID_by_SID[i+1]->getAncestor<Collada05::physics_model>();		
 		break;
-		case DAEP::Schematic<Collada08::instance_physics_model>::genus:
+		case DAEP::Generic<Collada08::instance_physics_model>::genus:
 		req.SID_by_SID[i] = req.SID_by_SID[i+1]->getAncestor<Collada08::physics_model>();		
-		case DAEP::Schematic<Collada05::physics_model>::genus: break;
-		case DAEP::Schematic<Collada08::physics_model>::genus: break;
+		case DAEP::Generic<Collada05::physics_model>::genus: break;
+		case DAEP::Generic<Collada08::physics_model>::genus: break;
 		default: req.SID_by_SID[i] = nullptr;
 		}
 		req.SID_by_SID.pop_back();
@@ -1990,9 +1990,9 @@ struct RT::DBase::LoadScene_Physics
 			for(size_t i=0;i<req.SID_by_SID.size();i++)		
 			switch(req.SID_by_SID[i]->getElementType())
 			{
-			case DAEP::Schematic<ColladaYY::instance_node>::genus:
+			case DAEP::Generic<ColladaYY::instance_node>::genus:
 			req.SID_by_SID[i] = req.SID_by_SID[i]->getParentElement();			
-			case DAEP::Schematic<ColladaYY::node>::genus: break;
+			case DAEP::Generic<ColladaYY::node>::genus: break;
 			default: req.SID_by_SID[i] = nullptr;
 			}
 			node = req->a<ColladaYY::node>();
@@ -2280,11 +2280,11 @@ struct RT::DBase::LoadTransforms_of
 		switch(e->getElementType()) //ORDER-IS-IMPORTANT
 		{
 		#define _(x) \
-		case DAEP::Schematic<Collada05::x>::genus:\
+		case DAEP::Generic<Collada05::x>::genus:\
 			out->Transforms.push_back\
 			(RT::Transform_##x(e->a<Collada05::const_##x>()));\
 			break;\
-		case DAEP::Schematic<Collada08::x>::genus:\
+		case DAEP::Generic<Collada08::x>::genus:\
 			out->Transforms.push_back\
 			(RT::Transform_##x(e->a<Collada08::const_##x>()));\
 			break;

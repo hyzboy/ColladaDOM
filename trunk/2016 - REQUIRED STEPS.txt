@@ -1,10 +1,11 @@
 
-As of the year 2016 the following ZIP archive must be downloaded 
-and unpacked into the same folder as this text file. It contains
-many procedurally generated files. 
-
+As of the year 2018 the following ZIP archive must be downloaded.
 This is a courtesy. dom/codeGen/gen.php can generate these files.
+The reference implementation project inside of the viewer folder
+is set up to find these files in dom/include/2 & 3, however user
+code can place them anywhere, or use a different XML Schema file
+than COLLADA's. COLLADA-DOM's library component is now a general
+purpose XML container library for C++. (By using the dom/codeGen
+C++ include files generator written for PHP.) 
 
-https://sourceforge.net/projects/collada-dom/files/COLLADA%20Schema%20generated%20CPP%20and%20H%20files/Transitional%201.4-or-1.5%20with%20old%20dom-%20prefix.zip/download
-
-This text file should be removed if this step is no longer necessary.
+https://sourceforge.net/projects/collada-dom/files/2.5%20Pregenerated%20Classes%20Headers%20%28Beta%29/

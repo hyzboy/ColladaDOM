@@ -66,6 +66,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\dae\dae.cpp" />
+    <ClCompile Include="..\..\src\dae\daeAnySimpleType.cpp" />
     <ClCompile Include="..\..\src\dae\daeDocument.cpp" />
     <ClCompile Include="..\..\src\dae\daeElement.cpp" />
     <ClCompile Include="..\..\src\dae\daeError.cpp">
@@ -84,7 +85,6 @@
     <ClCompile Include="..\..\src\dae\daeZAEUncompressHandler.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\..\src\dae\domAny.cpp" />
     <ClCompile Include="..\..\src\modules\LIBXMLPlugin\daeLIBXMLPlugin.cpp" />
     <ClCompile Include="..\..\src\PCH.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
