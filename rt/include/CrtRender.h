@@ -531,9 +531,9 @@ struct Frame_Asset
 	 */
 	inline void operator=(const E *cp)
 	{
-		_operator_YY(dae(cp),typename DAEP::Schematic<E>::schema());
+		_operator_YY(dae(cp),typename DAEP::Generic<E>::schema());
 	}
-	//HACK: __NB__ is DAEP::Schematic<ColladaYY::COLLADA>::schema.
+	//HACK: __NB__ is DAEP::Generic<ColladaYY::COLLADA>::schema.
 	void _operator_YY(const daeElement*,Collada05_XSD::__NB__ schema);
 	void _operator_YY(const daeElement*,Collada08_XSD::__NB__ schema);
 	#ifdef PRECOMPILING_COLLADA_RT //asset is incomplete.

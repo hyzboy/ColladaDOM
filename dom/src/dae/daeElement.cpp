@@ -11,6 +11,158 @@ COLLADA_(namespace)
 {//-.
 //<-'
 
+extern XS::Attribute daeMetaElement_valueless;
+extern daeAlloc<XS::Attribute*,1> domAnyAttributeThunk;
+
+  //// daeAnyAttribute //// daeAnyAttribute //// daeAnyAttribute ////
+  //// daeAnyAttribute //// daeAnyAttribute //// daeAnyAttribute ////
+  //// daeAnyAttribute //// daeAnyAttribute //// daeAnyAttribute ////
+
+inline daeAlloc<> *daeAnyAttribute::_head_AU()
+{
+	//Commenting, since a lot of this is counterintuitive.
+
+	//If there are only static attributes there's not yet
+	//a head of the AU linked-list.
+	if((daeSize)_au->getOffset()+1==getCapacity())
+	return nullptr;
+	
+	//Get the first nonstatic attribute?
+	daeData **d = _au->_varray+_au->getOffset();
+	//If first happens to be the VOID attribute, then the 
+	//first is actually the next attribute.	
+	//if(!hasAnyExtra()) d++; 
+	if(*d==daeMetaElement_valueless)
+	{
+		assert(!hasAnyExtra()); d++;
+	}
+	else assert(hasAnyExtra());
+	
+	//This converts the first subscript to its AU's address.
+	return (daeAlloc<>*)&daeAlloc<daeData>::dataptr_cast(*d);
+}
+inline daeAlloc<> *daeAnyAttribute::_next_AU(daeAlloc<> *node)
+{
+	//here _offset is repurposed as linked-list pointer.
+	return (daeAlloc<>*)((daeAllocThunk*)node)->_offset;
+}
+inline void daeAnyAttribute::_llist_AU(daeAlloc<> *head, void *node)
+{
+	if(head==nullptr) return; //Nothing to link?
+	daeOffset &next = ((daeAllocThunk*)head)->_offset;
+	((daeAllocThunk*)node)->_offset = next; next = daeOffset(node);
+}
+void daeAnyAttribute::_grow(size_t to)
+{
+	const size_t cp = getCapacity(); 
+	to++; assert(to>cp);
+
+	//This is to squeeze Data objects into _grow(++i+6) in
+	//_extern_push_back() starting with a domAny.
+	if(to%2==1) to++;
+	
+	daeAlloc<> *headAU = _head_AU();
+	if(headAU!=nullptr)
+	{
+		//TODO? Might want to ensure to-cp is large enough 
+		//to justify an allocation overhead.
+		//(Reminder: these are extra/any attributes.)
+	}
+
+	union
+	{
+		daeAlloc<daeData*> *prevAU;
+		daeAlloc<daeAnySimpleType::Data> *availAU;
+	};prevAU = _au;
+
+	daeElement &el = const_cast<daeElement&>(getElement());
+	daeDatabase &db = el.getDatabase();
+	el._reAlloc<1,1>(daeOpaque(&getAU()),to,nullptr,&db);
+	daeData **va = _au->_varray;
+	memcpy(va,prevAU->_varray,cp*sizeof(daeData*));
+
+	//Note, the current AU is not part of this linked-list.
+	//The first AU will not have a head, and so the metadata
+	//thunk will not end up in this list.
+	_llist_AU(headAU,prevAU);
+
+	//NOTE: When this was designed Data was much more svelte.
+	//Now the ratio is way off. domAny (having 0 attributes) 
+	//doesn't do so well, however an element with attributes
+	//will fair somewhat better.
+	//If the subscripts were a little larger the ratio would
+	//be better. Data can do without the flags to be smaller
+	//but 32-bit builds wouldn't change because of alignment.
+	size_t extra = to-cp;
+	size_t avail = cp*sizeof(void*)/sizeof(daeAST::Data);	
+	daeCTC<sizeof(daeAST::Data)%sizeof(void*)==0>();
+	if(extra>avail)
+	{
+		size_t dummyN = extra-avail;
+		daeAlloc<daeAnySimpleType::Data,0> dummy;
+		daeAlloc<daeAnySimpleType::Data> *dummyAU = dummy.unit();
+		el._reAlloc<1,1>(daeOpaque(&dummyAU),dummyN,nullptr,&db);
+
+		_llist_AU(headAU,dummyAU);				
+
+		for(size_t i=cp+avail,j=0;j<dummyN;)
+		va[i++] = dummyAU->_varray+j++;
+	}
+	else //In this case there may be excess...
+	{
+		//TODO? Increase the new capacity to make the most of
+		//this? Or setInternalCounter so to try to reuse next.
+		avail = extra;
+	}
+	for(size_t i=cp,j=0;j<avail;)
+	va[i++] = availAU->_varray+j++;
+
+	//Initialize strings to the owning DOM's empty string-ref.
+	daeString e = el.getDOM()->getEmptyURI().data();
+	for(size_t i=cp;i<to;i++)
+	new(va[i]) daeAnySimpleType::Data(&el,e);		
+}
+
+inline void daeAnyAttribute::_extern_free(const void *metaAU)
+{
+	if(_au==metaAU) return
+
+	//Assuming ~daeAnyAttribute() in the second condition.
+	//(Leaving open the possiblity of resetting the array.)
+	assert(metaAU!=nullptr||hasAnyExtra());
+	
+	for(size_t i=_au->getOffset();i<getCapacity();i++)
+	{
+		if(i==size())
+		assert(_au->_varray[i]==&daeMetaElement_valueless);
+		else
+		((daeAST::Data*)_au->_varray[i])->~Data();
+	}
+
+	daeAlloc<> *q,*p = _head_AU(); if(p!=nullptr)
+	{
+		daeElement &el = const_cast<daeElement&>(getElement());
+		daeDatabase &db = el.getDatabase();
+
+		do{ q = _next_AU(p); db._delete(*p,el); p = q; }
+		while(p!=nullptr);
+	
+		//The current daeData* AU is not included in the linked-list
+		//since that avoids special handling of the metadata's thunk
+		//and in theory ~daeAnyAttribute() should dispose of it. 
+		#ifdef NDEBUG
+		#error What about DAEP::Value<daeContents> for that matter?
+		#endif
+		db._delete(*_au,el); 
+	}							   
+	(const void*&)_au = metaAU;			
+}
+void daeAnyAttribute::_extern_free2(){ _extern_free(nullptr); }
+
+  //// daeElement //// daeElement //// daeElement //// daeElement ////
+  //// daeElement //// daeElement //// daeElement //// daeElement ////
+  //// daeElement //// daeElement //// daeElement //// daeElement ////
+
 void DAEP::Element::__COLLADA__atomize()
 {	
 	daeElement &_this = dae(*this);
@@ -25,7 +177,10 @@ void daeElement::__atomize2(daeMeta &meta)
 	assert(!isContent());		
 	assert(!meta.hasObjectsEmbedded()); //__DAEP__Object__0 assumes so.
 	if(!meta.hasFeaturesWithAtomize())
-	return;
+	return;	
+	//Turns out ~daeAnyAttribute() might as well do this, though
+	//it might not hurt to go ahead and clear the memory out too.
+	//getAttributes()._extern_free(meta.getAttributes().getAU());
 	DAEP::Model &model = meta.getModel();
 	for(daeFeatureID f=meta._feature_completeID;f!=0;f++) model[f].atomizeWRT(this);	
 }	
@@ -144,87 +299,19 @@ daeElement *daeElement::add(daeString list_of_names)
 	}
 	if(out==nullptr&&root!=nullptr) removeChildElement(root); return out;
 }
-
-int daeElement::_getAttributeIndex(const daePseudonym &name)const
-{
-	//REMINDER: THIS IS IMPLEMENTED BY A LINEAR LOOKUP BECAUSE domAny
-	//NEEDS TO BE ABLE TO DYNAMICALLY ADD ATTRIBUTES TO ITS ATTRIBUTE
-	//ARRAY INSIDE ITS PSEUDO METADATA. OTHERWISE IT WOULD USE A HASH
-	//LOOKUP LIKE THE CHILDREN DO. (OR HYBRID IF SOMEONE PROFILES IT)
-	const daeArray<daeAttribute> &attrs = getMeta()->getAttributes();
-	size_t i;
-	for(i=0;i<attrs.size();i++)
-	if(name==attrs[i]->getName()) return (int)i;		
-	if(_addAnyAttribute(name)) return (int)i; return -1;
-}
-
-daeAttribute *daeElement::_getAttributeObject(size_t i)const
-{
-	const daeArray<daeAttribute> &attrs = getMeta()->getAttributes();
-	if(i<attrs.size()) return attrs[i]; return nullptr;
-}
-	 
-daeArray<daeStringCP> &daeElement::_getAttribute(daeArray<daeStringCP> &out, size_t i)const
-{
-	daeAttribute *attr = nullptr;
-	attr = getAttributeObject(i); 	
-	if(attr!=nullptr) 
-	attr->memoryToStringWRT(this,out);
-	else out.clear_and_0_terminate(); return out;
-}
-		
-daeOK daeElement::_setAttribute(size_t i, daeString value)
-{
-	daeAttribute *attr = getAttributeObject(i); 		
-	if(attr!=nullptr) return attr->stringToMemoryWRT(this,value,value+strlen(value)); 
-	return DAE_ERR_QUERY_NO_MATCH;
-}
-daeOK daeElement::_setAttribute(size_t i, const daeHashString &value)
-{
-	daeAttribute *attr = getAttributeObject(i); 		
-	if(attr!=nullptr) return attr->stringToMemoryWRT(this,value); 
-	return DAE_ERR_QUERY_NO_MATCH;
-}
    
-daeArray<daeStringCP> &daeElement::getCharData(daeArray<daeStringCP> &out)const
-{
-	daeCharData *CD = getCharDataObject();
-	if(CD!=nullptr)
-	CD->memoryToStringWRT(this,out);
-	else out.clear_and_0_terminate(); return out;
-}
-
-daeOK daeElement::_setCharData(const daeHashString &value)
-{
-	daeCharData *CD = getCharDataObject();
-	if(CD!=nullptr) return CD->stringToMemoryWRT(this,value); 
-	return DAE_ERR_QUERY_NO_MATCH;
-}
-
 daeElementRef daeElement::clone(daeDOM &DOM, clone_Suffix *suffix)const
 {		
-	daeElementRef ret = DOM._addElement(getMeta()); ret->getNCName() = getNCName();
+	daeElementRef ret = DOM._addElement(getMeta()); 
+	ret->getNCName() = getNCName();
 
-	daeMeta *meta = getMeta();
-	const daeArray<daeAttribute> &attrs = meta->getAttributes();
-	//This is an optimized approach, versus a pure-string based one.
-	if(daeObjectType::ANY==getElementType())
-	{
-		#ifdef NDEBUG
-		#error maybe just give domAny a private copy-constructor?
-		#endif
-		for(size_t i=0;i<attrs.size();i++)
-		{
-			//attrs[i]->copyWRT(ret,this); could be direct, but no big deal for now.
-			ret->_cloneAnyAttribute(attrs[i].getName()); attrs[i]->copyWRT(ret,this);
-		}
-	}
-	else for(size_t i=0;i<attrs.size();i++) attrs[i]->copyWRT(ret,this);
-	daeCharData *CD = getCharDataObject();
-	if(CD!=nullptr) CD->copyWRT(ret,this);
+	//NOTE: Copying attributes this way is suboptimal if types are equal.
+	//ret->getAttributes() = getAttributes();	
+	ret->getAttributes()._assign<true,true>(getAttributes());
+	getCharData().copyWRT(ret,this);
 
-	daeContents &dst = meta->getContentsWRT(ret);
-	const daeContents &src = meta->getContentsWRT(this);
+	daeContents &dst = ret->getContents();
+	const daeContents &src = getContents();
 	dst.grow(src.getCapacity()); 
 	dst.getAU()->setInternalCounter(src.size());
 	memcpy(dst.data(),src.data(),src.getCapacity()*sizeof(daeContent));
@@ -240,9 +327,8 @@ daeElementRef daeElement::clone(daeDOM &DOM, clone_Suffix *suffix)const
 void daeElement::clone_Suffix::_suffix(daeElement *clone)
 {		
 	#define _(x) if(x!=nullptr){\
-	int i = clone->getAttributeIndex(#x);\
-	if(i>=0&&!clone->getAttribute(*this,i).empty())\
-	clone->setAttribute(i,append_and_0_terminate(x,x.extent).data()); }
+	if(!clone->getAttribute(#x,*this).empty())\
+	clone->setAttribute(#x,append_and_0_terminate(x,x.extent)); }
 	_(id)_(name)
 	#undef _
 }
@@ -285,8 +371,8 @@ daeArray<daeStringCP> &daeElement::compare_Result::format(daeArray<daeStringCP> 
 	<<std::setw(50)<<std::left,formatColumns(msg,attrMismatch,attrMismatch)<<std::endl
 	<<std::setw(13)<<std::left<<"Attr value"
 	<<std::setw(50)<<std::left,formatColumns
-	(msg,elt1->getAttribute(tmp1,attrMismatch).data()
-	,elt2->getAttribute(tmp2,attrMismatch).data())<<std::endl
+	(msg,elt1->getAttribute(attrMismatch,tmp1).data()
+	,elt2->getAttribute(attrMismatch,tmp2).data())<<std::endl
 	<<std::setw(13)<<std::left<<"Char data"
 	<<std::setw(50)<<std::left,formatColumns
 	(msg,elt1->getCharData(tmp1).data(),elt2->getCharData(tmp2).data())<<std::endl
@@ -316,7 +402,7 @@ namespace //static
 		daeElement::compare_Result result;
 		result.elt1 = &elt1; result.elt2 = &elt2;
 		result.compareValue = 
-		strcmp(elt1.getAttribute(name).data(),elt2.getAttribute(name).data());
+		strcmp(elt1.glimpse(name).data(),elt2.glimpse(name).data());
 		result.attrMismatch = name; return result;
 	}
 
@@ -324,7 +410,7 @@ namespace //static
 	{
 		daeElement::compare_Result result;
 		result.elt1 = &elt1; result.elt2 = &elt2;
-		result.compareValue = strcmp(elt1.getCharData().data(),elt2.getCharData().data());
+		result.compareValue = strcmp(elt1.glimpse().data(),elt2.glimpse().data());
 		result.charDataMismatch = true; return result;
 	}
 
@@ -360,15 +446,13 @@ namespace //static
 	daeElement::compare_Result compareElementsSameType(const daeElement &elt1, const daeElement &elt2)
 	{
 		//Compare attributes 
-		daeMeta &meta = elt1.getMeta();
-		const daeArray<daeAttribute> &attribs = meta.getAttributes();
+		daeAnyAttribute &attribs = elt1.getAttributes();
 		for(size_t i=0;i<attribs.size();i++)
-		if(attribs[i].compareWRT(&elt1,&elt2)!=0)
-		return attrMismatch(elt1,elt2,attribs[i].getName());
+		if(0!=attribs[i]->compareWRT(&elt1,&elt2))
+		return attrMismatch(elt1,elt2,attribs[i]->getName());
 
 		//Compare character data
-		if(meta.getValue()!=nullptr)
-		if(meta.getValue()->compareWRT(&elt1,&elt2)!=0)
+		if(0!=elt1.getCharData().compareWRT(&elt1,&elt2))
 		return charDataMismatch(elt1,elt2);
 
 		return compareElementsChildren(elt1,elt2);
@@ -376,18 +460,18 @@ namespace //static
 
 	daeElement::compare_Result compareElementsDifferentTypes(const daeElement &elt1, const daeElement &elt2)
 	{
-		daeArray<daeStringCP,256> value1, value2;
+		daeArray<daeStringCP,260> value1,value2;
 
 		//Compare attributes. Be careful because each element could have a
 		//different number of attributes.
-		if(elt1.getAttributeCount()>elt2.getAttributeCount())
-		return attrMismatch(elt1,elt2,elt1.getAttributeName(elt2.getAttributeCount()));
-		if(elt2.getAttributeCount()>elt1.getAttributeCount())
-		return attrMismatch(elt1,elt2,elt2.getAttributeName(elt1.getAttributeCount()));
-		for(size_t i=0;i<elt1.getAttributeCount();i++)
+		if(elt1.getAttributesCount()>elt2.getAttributesCount())
+		return attrMismatch(elt1,elt2,elt1.getAttributeName(elt2.getAttributesCount()));
+		if(elt2.getAttributesCount()>elt1.getAttributesCount())
+		return attrMismatch(elt1,elt2,elt2.getAttributeName(elt1.getAttributesCount()));
+		for(size_t i=0;i<elt1.getAttributesCount();i++)
 		{
-			elt1.getAttribute(value1,i);
-			elt2.getAttribute(value2,elt1.getAttributeName(i));
+			elt1.getAttribute(i,value1);
+			elt2.getAttribute(elt1.getAttributeName(i),value2);
 			if(value1!=value2)
 			return attrMismatch(elt1,elt2,elt1.getAttributeName(i));
 		}
@@ -408,10 +492,14 @@ daeElement::compare_Result daeElement::compareWithFullResult(const daeElement &e
 	return nameMismatch(elt1,elt2);
 
 	//Dispatch to a specific function based on whether or not the types are the same	
-	if(elt1.getMeta()!=elt2.getMeta())
+	#ifdef NDEBUG
+	#error "This division won't work with daeAnyAttribute and domAny now use the same metatada record."
+	#endif
+	//assert(0);
+	//if(elt1.getMeta()!=elt2.getMeta())
 	return compareElementsDifferentTypes(elt1,elt2);
-	else
-	return compareElementsSameType(elt1,elt2);
+	//else
+	//return compareElementsSameType(elt1,elt2);
 }
 
 #ifndef COLLADA_NODEPRECATED

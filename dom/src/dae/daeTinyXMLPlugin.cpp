@@ -208,20 +208,18 @@ daeOK daeTinyXMLPlugin::writeContent(daeIO &IO, const daeContents &content)
 }
 
 void daeTinyXMLPlugin::_writeElement(TiXmlNode *tinyXmlNode, const daeElement &element)
-{	
-	daeMeta &meta = element->getMeta();
-	
+{		
 	TiXmlElement *tiElm = setValue(new TiXmlElement(""),element.getElementName());
 
 	//_err may or may not work in this context. It's UNTESTED.
 	_err = tinyXmlNode->LinkEndChild(tiElm);
 
-	const daeArray<daeAttribute> &attrs = meta.getAttributes();
+	daeAnyAttribute &attrs = element.getAttributes();
 	for(size_t i=0;i<attrs.size();i++)
 	{
 		//Previously _writeAttribute(attrs[i],element);
-		daeAttribute &attr = attrs[i];
-		attr.memoryToStringWRT(&element,_CD);
+		daeData *attr = attrs[i];
+		attr->memoryToStringWRT(&element,_CD);
 
 		//REMINDER: TO SUPPORT LEGACY BEHAVIOR, <COLLADA> HAS
 		//BOTH-REQUIRED-AND-DEFAULT ON ITS version ATTRIBUTES.
@@ -229,22 +227,27 @@ void daeTinyXMLPlugin::_writeElement(TiXmlNode *tinyXmlNode, const daeElement &e
 		//  - The attribute isn't required AND
 		//     - The attribute has no default value and the current value is ""
 		//     - The attribute has a default value and the current value matches the default
-		if(!attr.getIsRequired())
-		if(attr.getDefaultString()==nullptr)
+		daeValue *def = attr->findDefault();
+		if(_CD.empty())
 		{
-			if(_CD.empty())	continue;
+			if(attr->getIsRequired())
+			{	
+				//NEW: Empty/required attribute is probably illegal. So try to fill it out?
+				if(def!=nullptr) def->defaultToString(_CD);
+			}
+			else continue;
 		}
-		else if(0==attr.compareToDefaultWRT(&element)) 
-		continue;
+		else if(def!=nullptr)
+		{
+			if(def->compareIsDefaultWRT(&element))
+			continue;
+		}
 
-		tiElm->SetAttribute(attr.getName(),_CD.data());
+		tiElm->SetAttribute(attr->getName(),_CD.data());
 	}
 	
-	//Previously this came after _writeValue(element),
-	//-and they were not treated as mutually exclusive.
-	_writeContent2(tiElm,meta.getContentsWRT(&element));
-
-	//Previously _writeValue(element);
+	//Reminder: domAny is ambiguous with regard to value/content.
+	_writeContent2(tiElm,element.getContents());
 	if(!element->getCharData(_CD).empty())
 	tiElm->LinkEndChild(setValue(new TiXmlText(""),_CD));	
 }

@@ -16,7 +16,7 @@ void daeMeta::_clearTOC(daeElement *e)const
 	daeOffset from = _clearTOC_offset;
 	daeOffset to = _content_offset-sizeof(daeChildID);
 	assert(to>=from&&to<(daeOffset)_sizeof&&from>=(int)sizeof(DAEP::Element));
-	memcpy((char*)e+from,(char*)_domAny_safe_prototype+from,to-from);
+	memcpy((char*)e+from,(char*)&_prototype+from,to-from);
 	//_content_thunk.offset is not used above because it cannot get
 	//pseudo-elements, as they are the prototype. So not to branch:
 	{
@@ -94,14 +94,33 @@ daeMeta *daeMeta::_findChild2(daeString pseudonym)const
 	return _findChild3(pseudonym);
 }
 
-daeAttribute *daeMeta::_getAttribute(const daePseudonym &pseudonym)const
+static XS::SimpleType daeMetaElement_typeless;
+extern daeTypewriter daeMetaElement_voidwriter;
+extern XS::Attribute daeMetaElement_valueless(0); 
+COLLADA_(extern) daeAlloc<XS::Attribute*,1> domAnyAttributeThunk(1);
+XS::Attribute::Attribute(int) 
 {
-	//REMINDER: THIS IS IMPLEMENTED BY A LINEAR LOOKUP BECAUSE domAny
-	//NEEDS TO BE ABLE TO DYNAMICALLY ADD ATTRIBUTES TO ITS ATTRIBUTE
-	//ARRAY INSIDE ITS PSEUDO METADATA. OTHERWISE IT WOULD USE A HASH
-	//LOOKUP LIKE THE CHILDREN DO. (OR HYBRID IF SOMEONE PROFILES IT)
-	for(size_t i=0;i<_attribs.size();i++)
-	if(pseudonym==_attribs[i]->getName()) return _attribs[i]; return nullptr;
+	assert(domAnyAttributeThunk._varray[0]==nullptr);
+	domAnyAttributeThunk._varray[0] = &daeMetaElement_valueless;
+
+	memset(this,0x00,sizeof(*this)); 
+	setIsProhibited();
+	XS::SimpleType *st = &daeMetaElement_typeless;
+	_simpletype = st;
+	st->_itemType = st;
+	st->_value_typewriter = 
+	_type.writer = &daeMetaElement_voidwriter;
+	#ifdef _DEBUG
+	__vizDefault = 
+	#endif
+	st->_name = _type.alias = 
+	_attribute_name_string = (char*)&_offset;
+	st->_restriction = nullptr;
+	//daeAnyAttribute relies on its VOID terminator
+	//to not appear to be "static" and this type is
+	//a pseudo object, so it should appear as if it
+	//doesn't belong to any element.
+	assert(!isStatic());
 }
 
 extern daeDOM &daeStringRef_protoDOM;
@@ -111,17 +130,24 @@ extern daeTypewriter &daeStringRef_counterTW;
 extern daeAlloc<daeCounter,0> daeStringRef_counterLT;
 void *daeMeta::_continue_XS_Schema_addElement2(void ctor(DAEP::Object*), daeFeatureID union_feature, daeOffset content_offset)
 {
+	//NEW: Slip in daeAnyAttribute and dummy values.
+	const int any_value = _value==nullptr?1:2;
+	//HACK: Can XS::Schema::addElement set this up??
+	if(any_value==1) 
+	_value = (daeDefault*)&daeMetaElement_valueless; 
+	
 	//XS::Schema::addElement has initialized a lot of the model already by this stage.	
 	_bring_to_life(_elems);
 	_bring_to_life(_elem_names);
 	_destructor_ptr = daeMetaElement_self_destruct;
 	_constructor = ctor;
-	size_t features = -(int)_finalFeatureID;
-	assert(_attribs.size()<features);
+	size_t features = -(int)_finalFeatureID;	
+	size_t attribsN = _attribs().size();
+	assert(attribsN<features);
 	size_t single_elems_32 = 0;
 	size_t single_elems = (int)union_feature-(int)_finalFeatureID-1;
 	assert(single_elems<features&&single_elems!=1);
-	size_t approx_elems = features-_attribs.size()-(_value==nullptr?0:1)-1;
+	size_t approx_elems = features-attribsN-any_value-1;
 	assert(approx_elems<features&&approx_elems>=1);
 	//Hack: this constructs, and decreases the count.
 	//The positive childID count isn't truly knowable, but this should be a tight fit.	
@@ -244,11 +270,14 @@ void daeMetaElement::_self_destruct()
 		//it's too late at this stage to be deleting elements.
 		//Since their metadata may've already been destructed.
 		assert(getContentsWRT(_prototype).empty());
-		daeAttribute *a = _attribs.data();
-		for(size_t i=0,iN=_attribs.size();i<iN;i++)		
+		const daeArray<daeAttribute*> &attribs = getAttributes();
+		daeAttribute*const *a = attribs.data();
+		for(size_t i=0,iN=attribs.size();i<iN;i++)		
+		if(nullptr!=a[i]->_destructor)
 		{
-			if(nullptr!=a[i]._destructor)
-			a[i]._destructor(&a[i].getWRT(_prototype));
+			//These should be equivalent.
+			//a[i]->_destructor(&a[i]->getWRT(_prototype));
+			a[i]->_destructor(&a[i]->_type.value);
 		}
 	}
 	
@@ -274,27 +303,41 @@ void daeMetaElement::_self_destruct()
 		delete _CMRoot; //Delete the CM graph.
 	}
 	
-	if(_value!=nullptr)
+	if(_value!=daeMetaElement_valueless)
 	{
 		//This likely does nothing, but you never know.
-		_value->~daeValue(); 
+		_value->~daeDefault(); 
 		//This is the only real opportune time to check 
 		//that generators set up daeContentModel::SIMPLE.
 		assert(&_value->getSimpleType()!=nullptr);
 	}
 
+	//The _offset holds the number of static attributes.
+	(*_attribs().getAU())->_offset = 0;
 	this->~daeMetaElement();
 }
 
-XS::Attribute &daeMeta::_addAttribute(daeFeatureID fID, daeOffset os, daeAlloc<>&lt(daeAllocThunk&), daeHashString type, daeHashString name)
+#ifdef NDEBUG
+#error What are suitable attributes?
+#endif
+static const daeAny daeMetaElement_anyless;
+const daeAny &daeMeta::getAnyAttribute()const
 {
-	bool value = name==nullptr;
+	return getAllowsAnyAttribute()?_any():daeMetaElement_anyless;
+}
 
-	daeValue &out = value?*_value:_attribs[-fID-1];
+extern daeAnySimpleType daeAnySimpleType_string;
+XS::Attribute &daeMeta::_addAttribute(daeFeatureID fID, daeOffset os, daeAlloc<>&lt(daeAllocThunk&), daeName type, daeName name)
+{
+	const bool value = name==nullptr;
+	//Second -1 assumes xsAnyAttribute. 
+	const int i = -fID-1-1; assert(i>=0);
+	daeDefault &out = value?*_value:*_attribs()[i];
 	
 	const XS::SimpleType &st = *_schema->findType(type);
 	
-	assert(nullptr!=&st&&nullptr!=&out); //These are generator check.
+	//Just some generator sanity checks.
+	assert(nullptr!=&st&&nullptr!=&out); 
 
 	daeTypewriter &tw = st.getValueTypewriter();
 
@@ -321,13 +364,34 @@ XS::Attribute &daeMeta::_addAttribute(daeFeatureID fID, daeOffset os, daeAlloc<>
 		if(fID==_feature_completeID) _feature_complete(_feature_completeID);
 	}
 
-	out._meta = this;
-	out._offset = os;
-	if(name==nullptr) //value?
-	{
-		out._attribute_name._clear_client_string();
+	//out._meta = this;
+	if(&tw==daeAnySimpleType_string)
+	{	
+		out._static_anySimpleType = 1;
+		xs::anySimpleType &ast = daeOpaque(_prototype)[os];
+		ast._offset = os;
+		ast._type = daeAnySimpleType_string; 
+		//WARNING: This may have weird effects on
+		//anything that depends on these things to
+		//necessarily correspond which will have to
+		//be dealt with later on an individual basis.
+		os+=daeOffsetOf(xs::anySimpleType,_union);		
 	}
-	else out._attribute_name = name;	
+	if(value) //if(name==nullptr) //value?
+	{
+		out._is_not_attribute = 1;
+
+		//out._attribute_name._clear_client_string();
+		out._attribute_name_string = daeStringRef_empty; 
+		out._attribute_name_length = 0;		
+	}
+	else 
+	{
+		out._attribute_name_string = name.string;	
+		out._attribute_name_length = name.extent;
+	}
+	out._offset = os;
+	out._static = 1; assert(os!=sizeof(daeElement));
 	out._simpletype = &st;
 	out._type.alias = st.getName();
 	out._type.writer = &tw; 
@@ -345,10 +409,8 @@ XS::Attribute &daeMeta::_addAttribute(daeFeatureID fID, daeOffset os, daeAlloc<>
 	}
 	else out._type.minLength = out._type.maxLength = 1;	
 
-	switch(tw.getAtomicType())
+	if(tw.hasStringType())
 	{
-	case daeAtomicType::TOKEN: case daeAtomicType::STRING:
-
 		(daeString&)out._type.value = daeStringRef_empty;
 
 		_addAttribute_maybe_addID(out,_prototype); //ID?
@@ -357,12 +419,15 @@ XS::Attribute &daeMeta::_addAttribute(daeFeatureID fID, daeOffset os, daeAlloc<>
 }
 void daeMeta::_addAttribute_maybe_addID(daeAttribute &maybe_ID, const daeElement *proto_or_any)
 {
-	if(nullptr==_schema->_IDs.find(maybe_ID._attribute_name))
+	if(nullptr==_schema->_IDs.find(maybe_ID.getName()))
 	return;	
 	XS::Attribute *it = const_cast<XS::Attribute*>(_IDs); 
 	XS::Attribute *ID = const_cast<XS::Attribute*>(&maybe_ID);
 	if(nullptr!=it)
 	{
+		//Assuming attributes are unsorted for lookup.
+		assert(it<ID);
+
 		while(it->_next_attribute_is_ID) 
 		it = it+it->_next_attribute_is_ID; 
 		while(it<ID)
@@ -383,39 +448,92 @@ void daeMeta::_addAttribute_maybe_addID(daeAttribute &maybe_ID, const daeElement
 		}; assert(it==ID);
 	}else _IDs = it = ID;
 	it->_this_attribute_is_ID = 1; 	
-	if("id"==it->_attribute_name) _IDs_id = it; //LEGACY		
+	if("id"==it->getName()) _IDs_id = it; //LEGACY		
 	proto_or_any->__DAEP__Element__data.getMeta_getFirstID_is_nonzero = 1;
 }
-XS::Attribute &daeMeta::_anyAttribute_maybe_addID(const daeElement *proto_or_any)
-{
-	XS::Attribute *was = _attribs.data(); 
-	//Copying _value isn't ideal, but it is less code.
-	//And this is on the track to obsolescence anyway.
-	_attribs.push_back(*_value); if(nullptr!=_IDs)
-	{
-		_IDs = &_attribs[_IDs-was]; //This complicates things.
-	
-		if(nullptr!=_IDs_id) _IDs_id = &_attribs[_IDs_id-was];
-	}		
-	_addAttribute_maybe_addID(_attribs.back(),proto_or_any); return _attribs.back();
-}
-void daeValue::_setDefaultString(daeHashString def)
-{
-	assert(_meta->_prototype->_isData());
+extern daeAnySimpleType daeAnySimpleType_hexBinary;
+void daeDefault::_setDefaultString(daeHashString def)
+{	
+	//I think this can do without _meta?
+	//daeElement *pt = _meta->_prototype;
+	daeElement &pt = _type.value[-_offset];
+
+	assert(pt->_isData());
 	//Turn the data-bit off for the last time.
 	//It's falsely indicating there is a database.
 	//(So that _construct() doesn't have to flip it on.)
-	(&_meta->_prototype->_getClassTag())[3]^=1; 
-	assert(!_meta->_prototype->_isData());
-	{		
-		assert(_default==nullptr); _default = def;
+	//NOTE: THIS LIKELY ONLY APPLIES TO ARRAYS (xs:list)
+	//(AND ONLY IF THEY GROW BEYOND THEIR THUNK AT THAT)
+	//(MAYBE daeStringRef TOO, BUT I ALMOST CERTAIN NOT)
+	//(daeBinary is also arrays)
+	(&pt->_getClassTag())[3]^=1; 
+	assert(!pt->_isData());
+	{	
+		//2018: Indicate via daeData that there is cause
+		//to look for the default value?
+		_fixed_default|=1; assert(!def.empty());
 
-		if(DAE_OK!=_type->stringToMemory(def,_type.value)) 
+		daeOK OK; //DEBUGGING
+
+		if(_type.writer==daeAnySimpleType_string) 
 		{
-			assert(0);
+			//EXPERIMENTAL
+			//WORTHWHILE? This is preventing hexBinary default strings
+			//and also hexBinary lists in defaults, because copying them
+			//in the prototype is extravagant compared to what little this
+			//type offers versus a string.
+			//This code could "assert(0)" if the prototype constructor handles
+			//the BINARY case.
+			size_t size;
+			daeAnySimpleTypewriter *ast = daeAnySimpleType_string;
+			ast = ast->_type(def.string,def.string+def.extent,size);
+			if(ast==daeAnySimpleType_hexBinary
+			 ||ast==daeAnySimpleType_hexBinary+1)
+			ast = daeAnySimpleType_string;
+			OK = ast->_unserialize2(def.string,def.string+def.extent,_type.value,size);
 		}
+		else //standard operating procedure
+		{
+			OK = _type->stringToMemory(def,_type.value); 
+		}
+
+		#ifdef _DEBUG
+		//Ensure equivalent to old "_default" member.
+		//assert(_default==nullptr); _default = def;
+		__vizDefault = def; daeCharData check;
+		defaultToString(check);
+		if(def!=check) switch(getDefaultType().getAtomicType())
+		{
+		case daeAtomicType::INT:
+
+			//I think this is 64-bit however on 32-bit
+			//builds daeDomTypes.h is making 64-bit to
+			//be 32-bit for integers. It's possible to
+			//override this on a case by case basis.
+			//https://www.khronos.org/bugzilla/show_bug.cgi?id=1948
+			//gl_pipeline_settings stencil_mask value
+			if(check=="-1"&&def=="4294967295")
+			check = def;
+			break;
+
+		case daeAtomicType::FLOAT:
+		case daeAtomicType::DOUBLE:
+			check.append_and_0_terminate(".0",2);
+			break;
+		case daeAtomicType::BOOLEAN:
+			if("0"==check) check = "false";
+			if("1"==check) check = "true";
+			break;
+		case daeAtomicType::EXTENSION:
+			//Assuming arrays are correct until someone says
+			//otherwise.
+			check = def;
+			break;
+		}
+		assert(OK&&check==def);
+		#endif		
 	}
-	(&_meta->_prototype->_getClassTag())[3]^=1; 
+	(&pt->_getClassTag())[3]^=1; 
 }	
 
 daeParentCM::~daeParentCM()
@@ -567,7 +685,7 @@ XS::Element &daeMeta::_addChild(const XS::Element &cp, daeFeatureID fid, daeOffs
 		assert(i<0&&toc==(int)sizeof(daeCounter));
 	}
 	_elem_names[name] = (int)i;
-	out = _jumpIntoTOC(i); //This includes a bounds check.
+	out = &_jumpIntoTOC(i); //This includes a bounds check.
 	bool first_instance_of_name = 0==out->_element.offset;
 
 	//TODO: This can reasonably be done in bulk by addElement().
@@ -642,7 +760,7 @@ bool daeMeta::_typeLookup_unless(daeElement *e)
 	//In practice, this can't work in the prototype.
 	//Should daeDocument_typeLookup_called be checked first?
 	//daeDocument_typeLookup_called is off in some other part of memory.
-	return e->getMeta()->_daeDocument_typeLookup_enabled;
+	return e->getMeta()._daeDocument_typeLookup_enabled;
 }
 daeError daeMeta::_placeWRT(daeElement &parent, daeElement &child)const
 {
@@ -1009,9 +1127,7 @@ const daeChildRef<> &daeMeta::pushBackWRT(daePseudoElement *parent, const daePse
 			//FYI: The other APIs don't do this due to either legacy or 
 			//stability requirements.
 			p.name = 1; 
-			//TODO: This is needed to implement extra-schema attributes.
-			daeCTC<daeElement::xs_anyAttribute_is_still_not_implemented>();
-
+				
 			p.ordinal = 0; goto unordered2;			
 		}
 	}

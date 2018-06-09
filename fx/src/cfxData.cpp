@@ -357,7 +357,7 @@ template<int YY> struct cfxData_MakeData
 		if(1!=e.name()) switch(e->getElementType())
 		{
 		#define _1(x,y) \
-		case DAEP::Schematic<Collada05::y>::genus:\
+		case DAEP::Generic<Collada05::y>::genus:\
 		return _new<FX::Data##x>(*(Collada05::const_##y*)&e);
 		#define _3(x,y) \
 		_1(x,annotate::y)_1(x,instance_effect::setparam::y)\
@@ -366,7 +366,7 @@ template<int YY> struct cfxData_MakeData
 		#define _5(x,y) _3(x,y##__alias)\
 		/*_3(x##1,y##1)*/_3(x##2,y##2)_3(x##3,y##3)_3(x##4,y##4)
 		#define _Sam(x) /*falling thru*/\
-		case DAEP::Schematic<Collada05::profile_CG::newparam::sampler##x>::genus:\
+		case DAEP::Generic<Collada05::profile_CG::newparam::sampler##x>::genus:\
 		_1(Sampler##x,texture##x::value)
 		//_1(Sampler##x,instance_effect::setparam::sampler##x)
 		//END MACRO DEFS
@@ -388,7 +388,7 @@ template<int YY> struct cfxData_MakeData
 		_1(Float4,profile_COMMON::newparam::float4) 
 		_3(Float2x2,float2x2)_3(Float3x3,float3x3)_3(Float4x4,float4x4)
 		//The 1.4.1 schema defines aliases for these types just for the "fun" of it.
-		case DAEP::Schematic<Collada05::profile_COMMON::newparam::sampler2D>::genus:	
+		case DAEP::Generic<Collada05::profile_COMMON::newparam::sampler2D>::genus:	
 		_Sam(2D)/*falling thru*/_Sam(1D)_Sam(3D)_Sam(CUBE)_Sam(RECT)_Sam(DEPTH)
 
 		//END MACRO USES
@@ -397,9 +397,9 @@ template<int YY> struct cfxData_MakeData
 		#undef _3
 		#undef _1
 
-		case DAEP::Schematic<Collada05::annotate>::genus:
-		case DAEP::Schematic<Collada05::modifier>::genus:
-		case DAEP::Schematic<Collada05::semantic>::genus:
+		case DAEP::Generic<Collada05::annotate>::genus:
+		case DAEP::Generic<Collada05::modifier>::genus:
+		case DAEP::Generic<Collada05::semantic>::genus:
 
 			//Known exceptions.
 			break;
@@ -413,7 +413,7 @@ template<int YY> struct cfxData_MakeData
 		if(1!=e.name()) switch(e->getElementType())
 		{
 		#define _1(x,y) \
-		case DAEP::Schematic<Collada08::y>::genus:\
+		case DAEP::Generic<Collada08::y>::genus:\
 		return _new<FX::Data##x>(*(Collada08::const_##y*)&e);
 		#define _3(x,y) \
 		/*_1(x,annotate::y)_1(x,profile_CG::newparam::y)*/\
@@ -421,7 +421,7 @@ template<int YY> struct cfxData_MakeData
 		#define _5(x,y) _3(x,y##__alias)\
 		/*_3(x##1,y##1)*/_3(x##2,y##2)_3(x##3,y##3)_3(x##4,y##4)	
 		#define _Sam(x) /*falling thru*/\
-		/*case DAEP::Schematic<Collada08::profile_CG::newparam::sampler##x>::genus:*/\
+		/*case DAEP::Generic<Collada08::profile_CG::newparam::sampler##x>::genus:*/\
 		_1(Sampler##x,texture##x::value)
 		//_1(Sampler##x,instance_effect::setparam::sampler##x)
 		//END MACRO DEFS
@@ -441,7 +441,7 @@ template<int YY> struct cfxData_MakeData
 		_1(Float,profile_GLSL::newparam::float__alias)
 		_3(Float2x2,float2x2)_3(Float3x3,float3x3)_3(Float4x4,float4x4)
 		//The 1.4.1 schema defines aliases for these types just for the "fun" of it.
-		//case DAEP::Schematic<Collada08::profile_COMMON::newparam::sampler2D>::genus:	
+		//case DAEP::Generic<Collada08::profile_COMMON::newparam::sampler2D>::genus:	
 		_Sam(2D)/*falling thru*/_Sam(1D)_Sam(3D)_Sam(CUBE)_Sam(RECT)_Sam(DEPTH)
 
 		//This is a counterpart to sampler_image.
@@ -453,9 +453,9 @@ template<int YY> struct cfxData_MakeData
 		#undef _3
 		#undef _1
 
-		case DAEP::Schematic<Collada08::annotate>::genus:
-		case DAEP::Schematic<Collada08::modifier>::genus:
-		//case DAEP::Schematic<Collada08::semantic>::genus:
+		case DAEP::Generic<Collada08::annotate>::genus:
+		case DAEP::Generic<Collada08::modifier>::genus:
+		//case DAEP::Generic<Collada08::semantic>::genus:
 
 			//Known exceptions.
 			break;

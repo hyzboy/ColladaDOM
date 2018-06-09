@@ -100,6 +100,13 @@ COLLADA_(namespace)
 			typedef daeURI type; 
 		};
 
+		//TODO? Known issues:
+		//https://www.khronos.org/bugzilla/show_bug.cgi?id=1948
+		//
+		//	*gl_pipeline_settings stencil_mask value:
+		//
+		//		64-bit defaults to 4294967295 (becomes -1 as 32-bit value.)
+		//
 		#if COLLADA_UPTR_MAX==0xFFFFFFFF || defined(COLLADA_DOM_INT32_long_long)
 		template<class Note, class Unsigned>
 		/**TEMPLATE-SPECIALIZATION, LEGACY-SUPPORT
@@ -120,7 +127,7 @@ COLLADA_(namespace)
 		struct Cognate<unsigned long long,Note,Note,Unsigned>
 		{
 			typedef unsigned COLLADA_DOM_INT32 type; 
-		};
+		};				
 		#else
 		template<class Unsigned>
 		/**PARTIAL-TEMPLATE-SPECIALIAZTION 
@@ -201,7 +208,7 @@ COLLADA_(namespace)
 		 */
 		class Value<ID,daeURI,CC,PtoM> : public DAEP::InnerValue<ID,daeURI,CC,PtoM,daeStringRef>
 		{
-		COLLADA_(public) using InnerValue<ID,daeURI,CC,PtoM,daeStringRef>::operator=; //C2679
+		public: using InnerValue<ID,daeURI,CC,PtoM,daeStringRef>::operator=; //C2679
 		};
 		template<int ID, class CC, typename CC::_ PtoM>
 		/**TEMPLATE-SPECIALIZATION
@@ -209,7 +216,7 @@ COLLADA_(namespace)
 		 */
 		class Value<ID,daeIDREF,CC,PtoM> : public DAEP::InnerValue<ID,daeIDREF,CC,PtoM,daeTokenRef>
 		{
-		COLLADA_(public) using InnerValue<ID,daeIDREF,CC,PtoM,daeTokenRef>::operator=; //C2679
+		public: using InnerValue<ID,daeIDREF,CC,PtoM,daeTokenRef>::operator=; //C2679
 		};
 		template<int ID, class CC, typename CC::_ PtoM>
 		/**TEMPLATE-SPECIALIZATION
@@ -217,7 +224,7 @@ COLLADA_(namespace)
 		 */
 		class Value<ID,daeSIDREF,CC,PtoM> : public DAEP::InnerValue<ID,daeSIDREF,CC,PtoM,daeTokenRef>
 		{
-		COLLADA_(public) using InnerValue<ID,daeSIDREF,CC,PtoM,daeTokenRef>::operator=; //C2679
+		public: using InnerValue<ID,daeSIDREF,CC,PtoM,daeTokenRef>::operator=; //C2679
 		};
 	}
 	//IT SEEMS USING DAEP::Container BELOW MAKES THESE DEPENDENT ON THE ABOVE SPECIALIZATIONS
@@ -226,7 +233,8 @@ COLLADA_(namespace)
 	//EXPERIMENTAL
 	typedef daeElement any; //DAEP::Element
 
-	typedef daeString anySimpleType;
+	typedef daeAnyAttribute anyAttribute;
+	typedef daeAST::TypedUnion anySimpleType;
 	typedef daeURI anyURI;	
 	typedef daeString duration;
 	typedef daeString dateTime;	
@@ -301,7 +309,8 @@ COLLADA_(namespace)
 	typedef daeArray<daeElementRef> xsAny_Array;
 	typedef daeArray<const_daeElementRef> const_xsAny_Array;
 
-	typedef daeString xsAnySimpleType;
+	typedef daeAnyAttribute xsAnyAttribute;
+	typedef daeAST::TypedUnion xsAnySimpleType;
 	typedef daeURI xsAnyURI;
 	typedef daeIDREF xsIDREF;
 	typedef daeString xsString,
@@ -355,10 +364,6 @@ COLLADA_(namespace)
 	typedef daeUByte xsUnsignedByte;
 	typedef daeArray<daeUByte> xsUnsignedByteArray; //A
 
-#else //domAny requires xsAny/xsAnySimpleType.
-
-		typedef daeElement xsAny;
-		typedef daeString xsAnySimpleType;
 #endif
 }
 

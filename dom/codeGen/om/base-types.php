@@ -115,6 +115,7 @@ class _elementSet extends _typedData
 	function _elementSet()
 	{
 		$this->_addAttribute('minOccurs',array('type'=>'xs:integer'));
+		//Would 0 not be the more correct default?
 		$this->setAttribute('minOccurs',1);
 		$this->_addAttribute('maxOccurs',array('type'=>'xs:integer'));
 		$this->setAttribute('maxOccurs',1);

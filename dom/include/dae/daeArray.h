@@ -91,25 +91,23 @@ COLLADA_(public) //operator==()
 	bool operator==(/*const*/ T &a, daeOpaque2 b){ return b._ptr==(char*)&a; }		
 };
 
+//SCHEDULED FOR REMOVAL
 /**SKETCHY
  * This attaches some information to a @c daeAllocThunk.
  * It's not generally helpful, but it's hard to dismiss.
- * @c daeRefRequest has it. It's a field of @c daeValue.
- *
- * An idea is to replace the @c daeAllocThunk vptr with
- * @c daePrototype for a portable ABI & 64bit alignment.
+ * @see @c daeAllocThunk::_prototype Doxygentation note.
  */
 struct daePrototype 
 {
 COLLADA_(public)
+	/**FIRST-MEMBER
+	 * This provides RTTI and opaque operators.
+	 */
+	daeTypewriter *writer;
 	/**
 	 * This is typically the simpleType's name.
 	 */
 	daeClientString alias;
-	/**
-	 * This provides RTTI and opaque operators.
-	 */
-	daeTypewriter *writer;
 	/**
 	 * This is typically the generated class's
 	 * prototype's member field. It holds what
@@ -126,9 +124,19 @@ COLLADA_(public)
 
 COLLADA_(public) //OPERATORS (legacy compatibility layer)
 
-	inline operator daeTypewriter*()const{ return writer; }
-	inline operator daeTypewriter&()const{ return *writer; }
-	inline daeTypewriter *operator->()const{ return writer; }		
+	//REMINDER: These should match daeData::getType() and
+	//daeDefault::getType(). Switching to daeTypewriter2*
+	//diminishes theeir utility to the point that there's
+	//no other reason to keep them around.
+
+	inline operator daeTypewriter2*()const
+	{
+		return (daeTypewriter2*)writer; 
+	}	
+	inline daeTypewriter2 *operator->()const
+	{
+		return (daeTypewriter2*)writer; 
+	}		
 };
 
 /**
@@ -186,7 +194,16 @@ COLLADA_(protected) //VIRTUAL METHODS
 	}
 
 COLLADA_(public) //DATA-MEMBERS
-	/**
+	/**FIRST-MEMBER
+	 * Positive byte (machine character) offset to owning @c daeObject.
+	 * Or 0 where unowned.
+	 *
+	 * @note @c daeAnyAttribute casts @c _offset to @c daePartition so
+	 * it must precede @c _counter. (Hiding @c daeArray::getOffset().)
+	 */
+	daeOffset _offset;
+
+	/**SECOND-MEMBER
 	 * Internal counter for arrays to use to count up to @c _capacity.
 	 *
 	 * IMPORTANT!
@@ -194,60 +211,57 @@ COLLADA_(public) //DATA-MEMBERS
 	 * This is due to the order-of-events inside of reallocation code.
 	 *
 	 * @see @c daeAlloc::setInternalCounter().
+	 *
+	 * @note @c daeAnyAttribute casts @c _offset to @c daePartition so
+	 * it must precede @c _counter.
 	 */
 	size_t _counter; 
 
-	/**CONST DATA-MEMBER
+	/**CONST THIRD-MEMBER
 	 * Fixed capacity; by definition an allocation unit has a fixed 
 	 * capacity. A thunk has 0 capacity.
 	 *
 	 * @remarks Although called @c daeAllocThunk. It's also a base class.
 	 * (Because it's a base class, it does not have advertised methods.)
+	 *
+	 * @note It might be desirable to cast @c _counter to @c daePartition
+	 * so it must precede @c _capacity.
 	 */
 	const size_t _capacity;	
-
-	/**
-	 * Positive byte (machine character) offset to the owning @c daeObject.
-	 * 
-	 * If between 0 and 3 the offset is understood to be 0, and so unowned.
-	 *
-	 * Unowned allocation units use the global default allocation pathways.
-	 * However these are local to the calling translation unit, and are in
-	 * addition to this, virtual method calls, which can be overriden. When
-	 * the unit is "owned" by an object, it SHALL be stored in the database
-	 * alongside that of the objects that comprise that DOM-cum-daeDatabase.
-	 */
-	daeOffset _offset;
 	
 	/**SKETCHY
 	 * This may be a @c daePrototype if it's in the object's meta-data.
 	 *
-	 * This was to be a prototype, but it's not really useful as such, 
-	 * -as why should it be that only arrays have RTTI inside of them?
-	 * And beside, it was not very useful to have for implementing the
-	 * @c daeArray class.
+	 * @note This was part of version 2.4 that I believe wasn't really
+	 * used for anything, but was implemented anyway until its purpose
+	 * became evident, and it was made plain to see that nothing would
+	 * require it for that purpose...
+	 * 
+	 * RIGHT NOW it's a way for @c daeFeature to access default values.
+	 * The features have array thunks even if they are not arrays, and
+	 * so it can be used to make compatible data without building into
+	 * the @c daeTypewriter objects C++ constructor/destructor methods.
 	 *
-	 * The only part that may be useful in theory is the array bounds.
-	 * In theory these can optimize allocation, if checking them isn't
-	 * an overall drain. 
-	 *
-	 * TODO (THIS IS COPIED FROM THE daeAllocThunk DOXYGENTATION.)
-	 * @todo At some much later date, decide if it's worth putting a
-	 * fully custom-made function pointer table inside of @c _prototype.
-	 * The virtual-methods are not high frequency, and they cause this
-	 * thunk to not be strictly 16-byte aligned, which would be a nice
-	 * feature. The custom solution might offer other benefits if given
-	 * lots of thought.
+	 * If this pointer is removed the "vptr" and other values could be
+	 * 128-bit aligned. A way is to combine them into one pointer, but
+	 * this would lose @c typeid facilities, so @c daeTypeWriter would
+	 * have to have its own typeid framework (which might not be a bad
+	 * thing.)
 	 */
 	const daePrototype *_prototype;
+
+//I think that daeAlloc::operator* is picking up on this, and it's not
+//needed or used any longer
 	/**OPERATOR
 	 * This is to complement @c daeFeature::getAllocThunk().
+	 *
+	 * @see DAEP::InnerValue::prototype()
 	 */
-	inline const daePrototype *operator->()const
-	{
-		assert(_prototype!=nullptr);
-		return static_cast<const daePrototype*>(_prototype); 
-	}
+//	inline const daePrototype *operator->()const
+//	{
+//		assert(_prototype!=nullptr);
+//		return static_cast<const daePrototype*>(_prototype); 
+//	}
 
 	/**
 	 * Default Constructor
@@ -255,7 +269,7 @@ COLLADA_(public) //DATA-MEMBERS
 	 * The memory layout for daeAlloc and thunks should not change.
 	 * Any future information will be facilitated by @c _prototype.
 	 */
-	daeAllocThunk(size_t c=0):_counter(),_capacity(c),_offset(),_prototype(){}
+	daeAllocThunk(size_t c=0):_offset(),_counter(),_capacity(c),_prototype(){}
 
 COLLADA_(public) //Non-advertised inline methods (There was more.)
 
@@ -306,8 +320,11 @@ COLLADA_(public) //Thunk operations
 	/**OPERATOR
 	 * Converts @c daeAlloc<T>::localThunk() into a
 	 * pointer to ease @c daeFeature._localthunk set up.
+	 *
+	 * CONST-FORM Doxygentation
+	 * This is for @c daeFeature::setAllocThunk().
 	 */
-	inline operator daeAllocThunk*(){ return this; }
+	COLLADA_DOM_OBJECT_OPERATORS(daeAllocThunk)
 
 COLLADA_(protected) //void-semantics
 	/**
@@ -381,6 +398,11 @@ COLLADA_(public) //ACCESSORS ONLY -- No Mutators for <void>
 	 */
 	inline size_t getInternalCounter()const{ return _counter; }	
 	/**
+	 * Sets the number of items stored in this @c daeAlloc.
+	 */
+	inline void setInternalCounter(size_t c){ _counter = c; assert(c<=_capacity); }	
+	
+	/**
 	 * Gets the number of items stored in this @c daeAlloc.
 	 * @return Returns the number of items stored in this @c daeAlloc.
 	 */
@@ -396,6 +418,11 @@ COLLADA_(public) //ACCESSORS ONLY -- No Mutators for <void>
 	 * Gets the positive offset from the @c daeObject 
 	 * to this allocation unit's embedded pointer.
 	 * @return Returns 0 if no @c daeObject owns this unit.
+	 *
+	 * @note @c daeArray based classes may repurpose this
+	 * field; In which case it must be 0 or a valid object
+	 * offset when re/deallocating @c this AU.
+	 * @see daeAnyAttribute and @c daeArray::getObject().
 	 */
 	inline daeOffset getOffset()const{ return _offset; }
 	
@@ -502,13 +529,21 @@ COLLADA_(public)
 	/**
 	 * Default Constructor
 	 */	
-	daeAlloc(size_t c=0):daeAlloc<>(c){ assert(size_of_array==0); } 	
+	daeAlloc(size_t c=0):daeAlloc<>(c)
+	{
+		//1 is allowed for 0 terminated thunks.
+		assert(size_of_array/*==0*/<=1); 
+	} 	
 
 	COLLADA_SUPPRESS_C(4624)
 	/**
 	 * Non-Destructor (AUs are not C++ objects.)
 	 */	
-	~daeAlloc(){ daeCTC<size_of_array==0>(); }
+	~daeAlloc()
+	{
+		//1 is allowed for 0 terminated thunks.
+		daeCTC<(size_of_array/*==0*/<=1)>(); 
+	}
 
 COLLADA_(public) //DATA MEMBER
 	/**
@@ -541,23 +576,8 @@ COLLADA_(public) //DATA MEMBER
 		static const daeAlloc<T,0> t; 
 		COLLADA_ASSUME(t._capacity==0&&t._counter==0); 
 		return (const daeAlloc&)t; 
-	}	
-
-COLLADA_(public) //OPERATORS
-	/**
-	 * This is for @c daeFeature::setAllocThunk().
-	 */
-	operator daeAllocThunk*()const
-	{
-		daeCTC<size_of_array==0>(); return (daeAllocThunk*)this;
 	}
 
-COLLADA_(public) //MUTATORS	
-	/**
-	 * Sets the number of items stored in this @c daeAlloc.
-	 */
-	inline void setInternalCounter(size_t c){ _counter = c; assert(c<=_capacity); }	
-	
 COLLADA_(private) //daeAllocThunk methods	
 
 	template<class> friend class daePlatonic;
@@ -613,6 +633,12 @@ COLLADA_(public) //UTILITIES
 	{ 
 		return (daeAlloc<T>&)daeOpaque(dataptr)[-daeOffsetOf(daeAlloc<T>,_varray)];
 	}	
+
+	/**NEVER-CONST?
+	 * This converts to @c size_on_stack to the default size accepted by 
+	 * @c daeArray::daeArray(). It's for working with stack based thunks.
+	 */
+	inline daeAlloc<T> *unit(){ return (daeAlloc<T>*)this; }
 };
 
 /**
@@ -847,16 +873,28 @@ COLLADA_(public) //Standard Library compatibility layer
 	 * HOWEVER. This should not be done with clear.
 	 */
 	inline void clear(){ _clear2((T*)nullptr); }
+
+	//SCHEDULED FOR REMOVAL?
 	/**
 	 * Implements @c clear(). 
 	 * @param ... is because strict C++ won't let methods be explicitly
 	 * specialized in any capacity.
+	 *
+	 *
+	 *	 @TODO Would rather implement @c clear() as a 
+	 *	 @c daeContents_base method. No matter what's
+	 *	 possible @c ~daeArray will need a workaround
+	 *	 like this, but it shouldn't be mixed up with
+	 *	 @c clear().
+	 *	 @see _grow2()
+	 *
 	 */
 	inline void _clear2(...)
 	{
 		size_t iN = _au->getCount(); //hack: use safe count (min(count,capacity))
 		for(size_t i=0;i<iN;i++) _au->_varray[i].~T(); _au->setInternalCounter(0);		
 	}
+	//SCHEDULED FOR REMOVAL?
 	/**KISS, CIRCULAR-DEPENDENCY
 	 * Implements @c daeArray<daeContent>::clear(). 
 	 * @see ColladaDOM_3.inl header's implementation.
@@ -935,7 +973,12 @@ COLLADA_(public) //Standard Library compatibility layer
 	{
 		assert(_au->_counter<=_au->_capacity); return _au->getInternalCounter(); 
 	}
-	/**
+	/**WARNING
+	 * @warning This figure includes 0-terminators, whereas some
+	 * specialzed containers (@c daeContents, @c daeAnyAttribute)
+	 * do not consider the 0 terminator to be part of the desired
+	 * capacity vis-a-vis their @c grow() methods. 
+	 *
 	 * @see @c getCapacity() legacy API.
 	 */
 	inline size_t capacity()const{ return _au->getCapacity(); }
@@ -1112,7 +1155,12 @@ COLLADA_(public) //LEGACY ACCESSORS & MUTATORS
 		assert(_au->_counter<=_au->_capacity); return _au->getInternalCounter(); 
 	}	
 
-	/**
+	/**WARNING
+	 * @warning This figure includes 0-terminators, whereas some
+	 * specialzed containers (@c daeContents, @c daeAnyAttribute)
+	 * do not consider the 0 terminator to be part of the desired
+	 * capacity vis-a-vis their @c grow() methods. 
+	 *
 	 * Gets the current capacity of the array, the biggest it can get without incurring a realloc.
 	 * @return Returns the capacity of the array.
 	 */
@@ -1141,7 +1189,12 @@ COLLADA_(public) //LEGACY ACCESSORS & MUTATORS
 	 */
 	inline const T &get(size_t index)const{ assert(index<getCount()); return _au->_varray[index]; }	
 	
-	/**
+	/**WARNING
+	 * @warning @a minCapacity includes 0-terminators whereas some of the specialized 
+	 * containers' (@c daeContents, @c daeAnyAttribute) "grow" implementations factor
+	 * out their 0-terminators. (They simply inherit @c capacity() / @c getCapacity()
+	 * from @c daeArray.)
+	 *
 	 * Increases the capacity of the @c daeArray.
 	 * @param minCapacity The minimum array capacity (the actual resulting capacity may be higher).
 	 */
@@ -1149,13 +1202,28 @@ COLLADA_(public) //LEGACY ACCESSORS & MUTATORS
 	{
 		_grow2(minCapacity,(T*)nullptr);
 	}
-	/** Implements @c grow(). */
+	//SCHEDULED FOR REMOVAL?
+	/** Implements @c grow().
+	 *
+	 *	 @TODO Determine if this can be replaced by making
+	 *	 "grow" a @c daeContents_base method. Can contents
+	 *	 array be copied, etc. Will it not compile because
+	 *	 @c daeContent cannot be constructed? Currently it
+	 *	 is possible to use @c daeArray<daeContent> but it
+	 *	 offers no practical advantage and @ c daeContents
+	 *	 is inheriting it by the @c private base qualifier.
+	 *	 @see _clear2()
+	 */
 	inline void _grow2(size_t minCapacity,...)
 	{
 		if(minCapacity>getCapacity()) _grow3(minCapacity);
 	}	
-	/** KISS, CIRCULAR-DEPENDENCY
-	 * Implements @c daeArray<daeContent>::clear(). 
+	//SCHEDULED FOR REMOVAL?
+	/**WARNING, CIRCULAR-DEPENDENCY
+	 * @warning @c getCapacity() includes a 0 terminator
+	 * whereas @a minCapacity does not.
+	 *
+	 * Implements @c daeArray<daeContent>::grow(). 
 	 * @c __COLLADA__move() was going to be used, but
 	 * when @c daeCursor was made to be an iterator, it
 	 * became necessary to adjust it.
@@ -1171,6 +1239,8 @@ COLLADA_(public) //LEGACY ACCESSORS & MUTATORS
 	{
 		enum
 		{
+		//Reminder: isFreeAU seems to want at least 2.
+		//(2 may also be required for math. Not sure.)
 		_small = 16*sizeof(void*)/sizeof(T),
 		minCap = _small<2?2:_small
 		};
@@ -1793,9 +1863,13 @@ COLLADA_(public)
 
 COLLADA_(private) //DATA-MEMBER
 
-	union //stack/embedded AU data
+	struct //stack/embedded AU data
 	{
-		COLLADA_DOM_INT64 _aligner; 	
+		#ifdef NDEBUG
+		#error WASTE ON 32-BIT FOR 32-BIT & LESS TYPES.
+		#endif
+		//MSVC: Putting after struct doesn't work???
+		COLLADA_ALIGN(8)
 		char _[sizeof(daeAlloc<T,size_on_stack>)];
 		operator daeAlloc<T,size_on_stack>&(){ return (daeAlloc<T,size_on_stack>&)*this; }
 

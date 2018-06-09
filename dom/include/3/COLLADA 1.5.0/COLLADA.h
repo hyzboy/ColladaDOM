@@ -23,39 +23,39 @@ COLLADA_(namespace)
     COLLADA_(http_www_collada_org_2008_03_COLLADASchema,namespace)
     {//-.
 //<-----'
-COLLADA_DOM_NOTE(5752,COLLADA::xmlns,enum{ has_default=1 };)
-COLLADA_DOM_NOTE(5753,COLLADA::version,enum{ has_default=1 };)
-COLLADA_DOM_NOTE(5754,COLLADA::xml_base)
-COLLADA_DOM_NOTE(5755,COLLADA::library_animations)
-COLLADA_DOM_NOTE(5756,COLLADA::library_animation_clips)
-COLLADA_DOM_NOTE(5757,COLLADA::library_cameras)
-COLLADA_DOM_NOTE(5758,COLLADA::library_controllers)
-COLLADA_DOM_NOTE(5759,COLLADA::library_geometries)
-COLLADA_DOM_NOTE(5760,COLLADA::library_effects)
-COLLADA_DOM_NOTE(5761,COLLADA::library_force_fields)
-COLLADA_DOM_NOTE(5762,COLLADA::library_images)
-COLLADA_DOM_NOTE(5763,COLLADA::library_lights)
-COLLADA_DOM_NOTE(5764,COLLADA::library_materials)
-COLLADA_DOM_NOTE(5765,COLLADA::library_nodes)
-COLLADA_DOM_NOTE(5766,COLLADA::library_physics_materials)
-COLLADA_DOM_NOTE(5767,COLLADA::library_physics_models)
-COLLADA_DOM_NOTE(5768,COLLADA::library_physics_scenes)
-COLLADA_DOM_NOTE(5769,COLLADA::library_visual_scenes)
-COLLADA_DOM_NOTE(5770,COLLADA::library_joints)
-COLLADA_DOM_NOTE(5771,COLLADA::library_kinematics_models)
-COLLADA_DOM_NOTE(5772,COLLADA::library_articulated_systems)
-COLLADA_DOM_NOTE(5773,COLLADA::library_kinematics_scenes)
-COLLADA_DOM_NOTE(5774,COLLADA::library_formulas)
-COLLADA_DOM_NOTE(5775,COLLADA::extra)
-COLLADA_DOM_NOTE(5780,COLLADA::asset)
-COLLADA_DOM_NOTE(5781,COLLADA::scene)
+COLLADA_DOM_NOTE(6532,COLLADA::xmlns,enum{ has_default=1 };)
+COLLADA_DOM_NOTE(6533,COLLADA::version,enum{ has_default=1 };)
+COLLADA_DOM_NOTE(6534,COLLADA::xml_base)
+COLLADA_DOM_NOTE(6535,COLLADA::library_animations)
+COLLADA_DOM_NOTE(6536,COLLADA::library_animation_clips)
+COLLADA_DOM_NOTE(6537,COLLADA::library_cameras)
+COLLADA_DOM_NOTE(6538,COLLADA::library_controllers)
+COLLADA_DOM_NOTE(6539,COLLADA::library_geometries)
+COLLADA_DOM_NOTE(6540,COLLADA::library_effects)
+COLLADA_DOM_NOTE(6541,COLLADA::library_force_fields)
+COLLADA_DOM_NOTE(6542,COLLADA::library_images)
+COLLADA_DOM_NOTE(6543,COLLADA::library_lights)
+COLLADA_DOM_NOTE(6544,COLLADA::library_materials)
+COLLADA_DOM_NOTE(6545,COLLADA::library_nodes)
+COLLADA_DOM_NOTE(6546,COLLADA::library_physics_materials)
+COLLADA_DOM_NOTE(6547,COLLADA::library_physics_models)
+COLLADA_DOM_NOTE(6548,COLLADA::library_physics_scenes)
+COLLADA_DOM_NOTE(6549,COLLADA::library_visual_scenes)
+COLLADA_DOM_NOTE(6550,COLLADA::library_joints)
+COLLADA_DOM_NOTE(6551,COLLADA::library_kinematics_models)
+COLLADA_DOM_NOTE(6552,COLLADA::library_articulated_systems)
+COLLADA_DOM_NOTE(6553,COLLADA::library_kinematics_scenes)
+COLLADA_DOM_NOTE(6554,COLLADA::library_formulas)
+COLLADA_DOM_NOTE(6555,COLLADA::extra)
+COLLADA_DOM_NOTE(6560,COLLADA::asset)
+COLLADA_DOM_NOTE(6561,COLLADA::scene)
 /**
  * The COLLADA element declares the root of the document that comprises some
  * of the content in the COLLADA schema.
  */
 class COLLADA
 : 
-public DAEP::Elemental<COLLADA>, public DAEP::Schema<0x030c000300000002ULL>
+public DAEP::Elemental<COLLADA,0x030c000300000002ULL>
 {
 public: //NESTED ELEMENTS
 	
@@ -72,55 +72,61 @@ public: //NESTED ELEMENTS
 
 public: //Parameters
 
-	typedef struct:Elemental,Schema
-	{   DAEP::Value<0,xs::anyURI>
-	_0; DAEP::Value<1,version_enum>
-	_1; DAEP::Value<2,xml::base>
-	_2; COLLADA_WORD_ALIGN
+	typedef struct:Elemental
+	{   DAEP::Value<0,xs::anyAttribute>
+	_0; DAEP::Value<1,xs::anyURI>
+	_1; DAEP::Value<2,version_enum>
+	_2; DAEP::Value<3,xml::base>
+	_3; COLLADA_WORD_ALIGN
 		DAEP::Child<24,library_animations_type>
-	_3; DAEP::Child<23,library_animation_clips_type>
-	_4; DAEP::Child<22,library_cameras_type>
-	_5; DAEP::Child<21,library_controllers_type>
-	_6; DAEP::Child<20,library_geometries_type>
-	_7; DAEP::Child<19,library_effects_type>
-	_8; DAEP::Child<18,library_force_fields_type>
-	_9; DAEP::Child<17,library_images_type>
-	_10; DAEP::Child<16,library_lights_type>
-	_11; DAEP::Child<15,library_materials_type>
-	_12; DAEP::Child<14,library_nodes_type>
-	_13; DAEP::Child<13,library_physics_materials_type>
-	_14; DAEP::Child<12,library_physics_models_type>
-	_15; DAEP::Child<11,library_physics_scenes_type>
-	_16; DAEP::Child<10,library_visual_scenes_type>
-	_17; DAEP::Child<9,library_joints_type>
-	_18; DAEP::Child<8,library_kinematics_models_type>
-	_19; DAEP::Child<7,library_articulated_systems_type>
-	_20; DAEP::Child<6,library_kinematics_scenes_type>
-	_21; DAEP::Child<5,library_formulas_type>
-	_22; DAEP::Child<4,extra_type>
-	_23; COLLADA_DOM_Z(1,2)
-	DAEP::Value<26,dae_Array<>> _Z; enum{ _No=26 };
-	DAEP::Value<30,daeContents> content; typedef __NS__<5752> notestart;
+	_4; DAEP::Child<23,library_animation_clips_type>
+	_5; DAEP::Child<22,library_cameras_type>
+	_6; DAEP::Child<21,library_controllers_type>
+	_7; DAEP::Child<20,library_geometries_type>
+	_8; DAEP::Child<19,library_effects_type>
+	_9; DAEP::Child<18,library_force_fields_type>
+	_10; DAEP::Child<17,library_images_type>
+	_11; DAEP::Child<16,library_lights_type>
+	_12; DAEP::Child<15,library_materials_type>
+	_13; DAEP::Child<14,library_nodes_type>
+	_14; DAEP::Child<13,library_physics_materials_type>
+	_15; DAEP::Child<12,library_physics_models_type>
+	_16; DAEP::Child<11,library_physics_scenes_type>
+	_17; DAEP::Child<10,library_visual_scenes_type>
+	_18; DAEP::Child<9,library_joints_type>
+	_19; DAEP::Child<8,library_kinematics_models_type>
+	_20; DAEP::Child<7,library_articulated_systems_type>
+	_21; DAEP::Child<6,library_kinematics_scenes_type>
+	_22; DAEP::Child<5,library_formulas_type>
+	_23; DAEP::Child<4,extra_type>
+	_24; COLLADA_DOM_Z(1,2)
+	DAEP::Value<27,dae_Array<>> _Z; enum{ _No=27 };
+	DAEP::Value<31,daeContents> content; typedef __NS__<6531> notestart;
 	}_;
 
 public: //Attributes
+	/**NO-NAMES
+	 * These attributes are invalid according to the schema. They may be user- 
+	 * defined additions and substitutes.
+	 */
+	DAEP::Value<0,xs::anyAttribute,_,(_::_)&_::_0> extra_schema__value;
 	/**
 	 * This element may specify its own xmlns.
 	 * @see XSD @c xs::anyURI
 	 */
-	DAEP::Value<0,xs::anyURI,_,(_::_)&_::_0> xmlns;
+	DAEP::Value<1,xs::anyURI,_,(_::_)&_::_1> xmlns;
 	/**
 	 * The version attribute is the COLLADA schema revision with which the instance
 	 * document conforms. Required Attribute.
 	 * @see XSD @c version_enum
 	 */
-	DAEP::Value<1,version_enum,_,(_::_)&_::_1> version;
+	DAEP::Value<2,version_enum,_,(_::_)&_::_2> version;
 	/**
 	 * The xml:base attribute allows you to define the base URI for this COLLADA
 	 * document. See http://www.w3.org/TR/xmlbase/ for more information.
 	 * @see XSD @c xml::base
 	 */
-	DAEP::Value<2,xml::base,_,(_::_)&_::_2> xml_base;
+	DAEP::Value<3,xml::base,_,(_::_)&_::_3> xml_base;
 
 public: //Elements
 		
@@ -129,113 +135,113 @@ public: //Elements
 	 * The COLLADA element may contain any number of library_animations elements.
 	 * @see XSD @c library_animations_type
 	 */
-	DAEP::Child<24,library_animations_type,_,(_::_)&_::_3> library_animations;
+	DAEP::Child<24,library_animations_type,_,(_::_)&_::_4> library_animations;
 	/**
 	 * The COLLADA element may contain any number of library_animation_clips elements.
 	 * @see XSD @c library_animation_clips_type
 	 */
-	DAEP::Child<23,library_animation_clips_type,_,(_::_)&_::_4> library_animation_clips;
+	DAEP::Child<23,library_animation_clips_type,_,(_::_)&_::_5> library_animation_clips;
 	/**
 	 * The COLLADA element may contain any number of library_cameras elements.
 	 * @see XSD @c library_cameras_type
 	 */
-	DAEP::Child<22,library_cameras_type,_,(_::_)&_::_5> library_cameras;
+	DAEP::Child<22,library_cameras_type,_,(_::_)&_::_6> library_cameras;
 	/**
 	 * The COLLADA element may contain any number of library_controllerss elements.
 	 * @see XSD @c library_controllers_type
 	 */
-	DAEP::Child<21,library_controllers_type,_,(_::_)&_::_6> library_controllers;
+	DAEP::Child<21,library_controllers_type,_,(_::_)&_::_7> library_controllers;
 	/**
 	 * The COLLADA element may contain any number of library_geometriess elements.
 	 * @see XSD @c library_geometries_type
 	 */
-	DAEP::Child<20,library_geometries_type,_,(_::_)&_::_7> library_geometries;
+	DAEP::Child<20,library_geometries_type,_,(_::_)&_::_8> library_geometries;
 	/**
 	 * The COLLADA element may contain any number of library_effects elements.
 	 * @see XSD @c library_effects_type
 	 */
-	DAEP::Child<19,library_effects_type,_,(_::_)&_::_8> library_effects;
+	DAEP::Child<19,library_effects_type,_,(_::_)&_::_9> library_effects;
 	/**
 	 * The COLLADA element may contain any number of library_force_fields elements.
 	 * @see XSD @c library_force_fields_type
 	 */
-	DAEP::Child<18,library_force_fields_type,_,(_::_)&_::_9> library_force_fields;
+	DAEP::Child<18,library_force_fields_type,_,(_::_)&_::_10> library_force_fields;
 	/**
 	 * The COLLADA element may contain any number of library_images elements.
 	 * @see XSD @c library_images_type
 	 */
-	DAEP::Child<17,library_images_type,_,(_::_)&_::_10> library_images;
+	DAEP::Child<17,library_images_type,_,(_::_)&_::_11> library_images;
 	/**
 	 * The COLLADA element may contain any number of library_lights elements.
 	 * @see XSD @c library_lights_type
 	 */
-	DAEP::Child<16,library_lights_type,_,(_::_)&_::_11> library_lights;
+	DAEP::Child<16,library_lights_type,_,(_::_)&_::_12> library_lights;
 	/**
 	 * The COLLADA element may contain any number of library_materials elements.
 	 * @see XSD @c library_materials_type
 	 */
-	DAEP::Child<15,library_materials_type,_,(_::_)&_::_12> library_materials;
+	DAEP::Child<15,library_materials_type,_,(_::_)&_::_13> library_materials;
 	/**
 	 * The COLLADA element may contain any number of library_nodes elements.
 	 * @see XSD @c library_nodes_type
 	 */
-	DAEP::Child<14,library_nodes_type,_,(_::_)&_::_13> library_nodes;
+	DAEP::Child<14,library_nodes_type,_,(_::_)&_::_14> library_nodes;
 	/**
 	 * The COLLADA element may contain any number of library_materials elements.
 	 * @see XSD @c library_physics_materials_type
 	 */
-	DAEP::Child<13,library_physics_materials_type,_,(_::_)&_::_14> library_physics_materials;
+	DAEP::Child<13,library_physics_materials_type,_,(_::_)&_::_15> library_physics_materials;
 	/**
 	 * The COLLADA element may contain any number of library_physics_models elements.
 	 * @see XSD @c library_physics_models_type
 	 */
-	DAEP::Child<12,library_physics_models_type,_,(_::_)&_::_15> library_physics_models;
+	DAEP::Child<12,library_physics_models_type,_,(_::_)&_::_16> library_physics_models;
 	/**
 	 * The COLLADA element may contain any number of library_physics_scenes elements.
 	 * @see XSD @c library_physics_scenes_type
 	 */
-	DAEP::Child<11,library_physics_scenes_type,_,(_::_)&_::_16> library_physics_scenes;
+	DAEP::Child<11,library_physics_scenes_type,_,(_::_)&_::_17> library_physics_scenes;
 	/**
 	 * The COLLADA element may contain any number of library_visual_scenes elements.
 	 * @see XSD @c library_visual_scenes_type
 	 */
-	DAEP::Child<10,library_visual_scenes_type,_,(_::_)&_::_17> library_visual_scenes;
+	DAEP::Child<10,library_visual_scenes_type,_,(_::_)&_::_18> library_visual_scenes;
 	/**UNDOCUMENTED
 	 * The XSD schema does not provide documentation in this case.
 	 * @see XSD @c library_joints_type
 	 */
-	DAEP::Child<9,library_joints_type,_,(_::_)&_::_18> library_joints;
+	DAEP::Child<9,library_joints_type,_,(_::_)&_::_19> library_joints;
 	/**UNDOCUMENTED
 	 * The XSD schema does not provide documentation in this case.
 	 * @see XSD @c library_kinematics_models_type
 	 */
-	DAEP::Child<8,library_kinematics_models_type,_,(_::_)&_::_19> library_kinematics_models;
+	DAEP::Child<8,library_kinematics_models_type,_,(_::_)&_::_20> library_kinematics_models;
 	/**UNDOCUMENTED
 	 * The XSD schema does not provide documentation in this case.
 	 * @see XSD @c library_articulated_systems_type
 	 */
-	DAEP::Child<7,library_articulated_systems_type,_,(_::_)&_::_20> library_articulated_systems;
+	DAEP::Child<7,library_articulated_systems_type,_,(_::_)&_::_21> library_articulated_systems;
 	/**UNDOCUMENTED
 	 * The XSD schema does not provide documentation in this case.
 	 * @see XSD @c library_kinematics_scenes_type
 	 */
-	DAEP::Child<6,library_kinematics_scenes_type,_,(_::_)&_::_21> library_kinematics_scenes;
+	DAEP::Child<6,library_kinematics_scenes_type,_,(_::_)&_::_22> library_kinematics_scenes;
 	/**UNDOCUMENTED
 	 * The XSD schema does not provide documentation in this case.
 	 * @see XSD @c library_formulas_type
 	 */
-	DAEP::Child<5,library_formulas_type,_,(_::_)&_::_22> library_formulas;
+	DAEP::Child<5,library_formulas_type,_,(_::_)&_::_23> library_formulas;
 	/**
 	 * The extra element may appear any number of times.
 	 * @see XSD @c extra_type
 	 */
-	DAEP::Child<4,extra_type,_,(_::_)&_::_23> extra;
+	DAEP::Child<4,extra_type,_,(_::_)&_::_24> extra;
 
 	COLLADA_DOM_Z(1,2) union //NO-NAMES & ONLY-CHILDS
 	{
 	/**NO-NAMES
-	 * These elements are invalid according to the schema. They may be user-defined 
-	 * additions and substitutes.
+	 * These elements are invalid according to the schema. They may be user- 
+	 * defined additions and substitutes.
 	 */
 	DAEP::Child<1,xs::any,_,(_::_)&_::_Z> extra_schema__unnamed;
 	/**
@@ -258,12 +264,12 @@ public: //Content
 	/**
 	 * Children, mixed-text, comments & processing-instructions.
 	 */
-	DAEP::Value<30,daeContents,_,(_::_)&_::content> content;
+	DAEP::Value<31,daeContents,_,(_::_)&_::content> content;
 };
-COLLADA_DOM_NOTE(5783,scene::instance_physics_scene)
-COLLADA_DOM_NOTE(5784,scene::instance_kinematics_scene)
-COLLADA_DOM_NOTE(5785,scene::extra)
-COLLADA_DOM_NOTE(5790,scene::instance_visual_scene)
+COLLADA_DOM_NOTE(6564,scene::instance_physics_scene)
+COLLADA_DOM_NOTE(6565,scene::instance_kinematics_scene)
+COLLADA_DOM_NOTE(6566,scene::extra)
+COLLADA_DOM_NOTE(6571,scene::instance_visual_scene)
 /**
  * The scene embodies the entire set of information that can be visualized
  * from the contents of a COLLADA resource. The scene element declares the
@@ -274,19 +280,27 @@ COLLADA_DOM_NOTE(5790,scene::instance_visual_scene)
  */
 class __COLLADA__scene__
 : 
-public DAEP::Elemental<__COLLADA__scene__>, public DAEP::Schema<0x030d000000000006ULL>
+public DAEP::Elemental<__COLLADA__scene__,0x030d000000000006ULL>
 {
 public: //Parameters
 
-	typedef struct:Elemental,Schema
-	{   COLLADA_WORD_ALIGN
+	typedef struct:Elemental
+	{   DAEP::Value<0,xs::anyAttribute>
+	_0; COLLADA_WORD_ALIGN
 		DAEP::Child<6,instance_with_extra_type>
-	_0; DAEP::Child<5,instance_kinematics_scene_type>
-	_1; DAEP::Child<4,extra_type>
-	_2; COLLADA_DOM_Z(1,2)
-	DAEP::Value<5,dae_Array<>> _Z; enum{ _No=5 };
-	DAEP::Value<8,daeContents> content; typedef __NS__<5783> notestart;
+	_1; DAEP::Child<5,instance_kinematics_scene_type>
+	_2; DAEP::Child<4,extra_type>
+	_3; COLLADA_DOM_Z(1,2)
+	DAEP::Value<6,dae_Array<>> _Z; enum{ _No=6 };
+	DAEP::Value<9,daeContents> content; typedef __NS__<6563> notestart;
 	}_;
+
+public: //Attributes
+	/**NO-NAMES
+	 * These attributes are invalid according to the schema. They may be user- 
+	 * defined additions and substitutes.
+	 */
+	DAEP::Value<0,xs::anyAttribute,_,(_::_)&_::_0> extra_schema__value;
 
 public: //Elements
 		
@@ -297,23 +311,23 @@ public: //Elements
 	 * number of times.
 	 * @see XSD @c instance_with_extra_type
 	 */
-	DAEP::Child<6,instance_with_extra_type,_,(_::_)&_::_0> instance_physics_scene;
+	DAEP::Child<6,instance_with_extra_type,_,(_::_)&_::_1> instance_physics_scene;
 	/**UNDOCUMENTED
 	 * The XSD schema does not provide documentation in this case.
 	 * @see XSD @c instance_kinematics_scene_type
 	 */
-	DAEP::Child<5,instance_kinematics_scene_type,_,(_::_)&_::_1> instance_kinematics_scene;
+	DAEP::Child<5,instance_kinematics_scene_type,_,(_::_)&_::_2> instance_kinematics_scene;
 	/**
 	 * The extra element may appear any number of times.
 	 * @see XSD @c extra_type
 	 */
-	DAEP::Child<4,extra_type,_,(_::_)&_::_2> extra;
+	DAEP::Child<4,extra_type,_,(_::_)&_::_3> extra;
 
 	COLLADA_DOM_Z(1,2) union //NO-NAMES & ONLY-CHILDS
 	{
 	/**NO-NAMES
-	 * These elements are invalid according to the schema. They may be user-defined 
-	 * additions and substitutes.
+	 * These elements are invalid according to the schema. They may be user- 
+	 * defined additions and substitutes.
 	 */
 	DAEP::Child<1,xs::any,_,(_::_)&_::_Z> extra_schema__unnamed;
 	/**
@@ -329,7 +343,7 @@ public: //Content
 	/**
 	 * Children, mixed-text, comments & processing-instructions.
 	 */
-	DAEP::Value<8,daeContents,_,(_::_)&_::content> content;
+	DAEP::Value<9,daeContents,_,(_::_)&_::content> content;
 };
 //-------.
     }//<-'

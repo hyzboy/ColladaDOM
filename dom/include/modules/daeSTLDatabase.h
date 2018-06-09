@@ -163,7 +163,7 @@ COLLADA_(public) //daeDB methods
 	{
 		_cache._getClassTag() = 1; _cache.contain(cache_object); return true;
 	}
-	void _noting(const Element &elem, const DAEP::Change &note, daeAttribute *attrib)
+	void _noting(const Element &elem, const DAEP::Change &note, daeData *attrib)
 	{	
 		//SEE _atomize_on_noting().
 		if(0!=_cache._getClassTag()) //NOT THREAD-SAFE
@@ -182,18 +182,10 @@ COLLADA_(public) //daeDB methods
 
 		if(DAEP::ATTRIBUTE==note.kind_of_change)
 		{
-			//Theoretically the client-side code is slightly more optimal.
-			if(op.first==nullptr) 
+			if(attrib->getIsID()&&op.first!=nullptr)			
+			if("id"==attrib->getName()||"sid"==attrib->getName())
+			op.first->_carry_out_change_of_ID_or_SID(note,attrib);			
 			return;
-			if(attrib->getThisID()!=nullptr)
-			{
-				if("id"==attrib->getName()
-				||"sid"==attrib->getName())
-				{
-					op.first->_carry_out_change_of_ID_or_SID(note,attrib);			
-					return; //_carry_out_change_of_ID_or_SID() has it now.
-				}
-			}
 		}
 
 		note.carry_out_change(); //Was the document changed?

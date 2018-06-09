@@ -23,6 +23,8 @@ struct daeContentModel
 {
 	/**
 	 * These values are returned by @c daeMetaElement::getContentModel().
+	 * @note @c domAny is ambiguous with regard to value/content. It can
+	 * be distinguished whenever @c getElementType()==daeObjectType::ANY.
 	 */
 	enum{ EMPTY=0,SIMPLE,COMPLEX,MIXED };
 };
@@ -77,56 +79,63 @@ COLLADA_(public) //ACCESSORS
 	 */
 	inline int getContentModel()const
 	{	
-		return _getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__content_model; 
+		//return _getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__content_model; 
+		return _getDSTs()&3; 
 	}
 	/**LEGACY
-	 * Previously "getIsInnerClass."
+	 * Formerly "getIsInnerClass."
 	 * Tells if elements of this type use an inner class (a local XSD type.)
 	 */
 	inline bool getIsLocal()const
 	{
-		return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_local); 
+		//return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_local); 
+		return 0!=(_getDSTs()&4); 
 	}
 	/**LEGACY
 	 * Tells if elements of this type can be placed in the object model.
 	 */
 	inline bool getIsAbstract()const
 	{
-		return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_abstract); 
+		//return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_abstract); 
+		return 0!=(_getDSTs()&16); 
 	}
 	/**LEGACY
-	 * Previously "getIsTransparent."
+	 * Formerly "getIsTransparent."
 	 * Tells if elements of this type should have an element tag printed when saving.
 	 */
 	inline bool getIsGroup()const
 	{ 
-		return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_group); 
+		//return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_group); 
+		return 0!=(_getDSTs()&8); 
 	}
 	/**LEGACY
 	 * Tells if elements of this type allow for any element as a child.
 	 */
 	inline bool getAllowsAny()const
 	{
-		return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__allows_any); 
+		//return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__allows_any); 
+		return 0!=(_getDSTs()&32); 
 	}
 	/**LEGACY-SUPPORT
 	 * Tells if elements of this type allow for any attribute.
 	 */
 	inline bool getAllowsAnyAttribute()const
 	{
-		return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__allows_any_attribute); 
+		//return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__allows_any_attribute); 
+		return 0!=(_getDSTs()&64); 
 	}
 	/**LEGACY-SUPPORT
 	 * Tell if elements of this type use the <xs:all> virtual content model.
 	 */
 	inline bool getIsAll()const
 	{
-		return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_all); 
+		//return 0!=(_getDSTs()&DAEP::Schema<>::__DAEP__Schema__g1__is_all); 
+		return 0!=(_getDSTs()&128); 
 	}
 
 	template<class T>
 	/**LEGACY-SUPPORT
-	 * Previously "getMetaCMPolicy::findChild."
+	 * Formerly "getMetaCMPolicy::findChild."
 	 * Gets the daeMetaElement of an acceptable child of this 
 	 * content-model object.	 
 	 * @note The library doesn't (yet) support QNames properly.
@@ -139,21 +148,21 @@ COLLADA_(public) //ACCESSORS
 	/** Implements @c findChild(). */
 	NOALIAS_LINKAGE daeMeta *_findChild2(daeString)const;
 	/** Implements @c findChild(). */
-	NOALIAS_LINKAGE daeMeta *_findChild2(const daeHashString&)const;	 
+	NOALIAS_LINKAGE daeMeta *_findChild2(const daePseudonym&)const;	 
 	/** Implements @c findChild2(). */
 	template<class T> inline daeMeta *_findChild3(const T&)const;
 
-	/**LEGACY
-	 * Previously "getValueAttribute".
+	/**LEGACY-SUPPORT
+	 * Formerly "getValueAttribute".
 	 * Gets the @c XS::Attribute for the non-element contents of a @c daeElement.
 	 * @return Returns the @c XS::Attribute pointer for the non-element contents of
 	 * this element type.
 	 */
-	NOALIAS_LINKAGE daeCharData *getValue()const
-	SNIPPET( return _value; )
+	NOALIAS_LINKAGE daeValue &getValue()const
+	SNIPPET( return *_value; )
 	
 	/**LEGACY
-	 * Previously "getIDAttribute."
+	 * Formerly "getIDAttribute."
 	 * Gets the @c XS::Attribute for the "id" attribute of a @c daeElement.
 	 * @return Returns the "id" @c XS::Attribute, or @c nullptr if the element type
 	 * does not have an "id" attribute.
@@ -168,33 +177,34 @@ COLLADA_(public) //ACCESSORS
 	 */
 	NOALIAS_LINKAGE daeAttribute *getFirstID()const 
 	SNIPPET( return _IDs; )
-
+		
 	/**
-	 * Previously "getMetaAttributes."
-	 * Gets the array of all known attributes on this element type.
-	 * This includes all meta attributes except those describing child
-	 * elements. It does include the value element.
-	 * @return Returns the array of @c daeMetaAttributeRefs.
+	 * Gets <xs:anyAttribute processContents="" namespace="">.
+	 * @return Returns a dummy if @c !getAllowsAnyAttribute().
 	 */
-	NOALIAS_LINKAGE const daeArray<daeAttribute> &getAttributes()const
-	SNIPPET( return (const daeArray<daeAttribute>&)_attribs; )
+	NOALIAS_LINKAGE const XS::AnyAttribute &getAnyAttribute()const;
 
-	template<class T>
-	/**LEGACY
-	 * Previously "getMetaAttribute."
+	/**LEGACY-SUPPORT
+	 * Formerly "getMetaAttributes."
+	 * Gets the array of all known attributes on this element type.
+	 * @note Ultimately this is the @c daeAnyAttribute map inside of 
+	 * the prototype element.
+	 */
+	NOALIAS_LINKAGE const daeArray<daeAttribute*> &getAttributes()const
+	SNIPPET( return daeOpaque(&_prototype)[sizeof(DAEP::Element)]; )
+
+	/**LEGACY-SUPPORT
+	 * Formerly "getMetaAttribute."
 	 * Gets the attribute named @a NCName. 
 	 * @note The library doesn't (yet) support QNames properly.
 	 * Some attribute names are NCNames with a colon, or a pseudo QName.
 	 */
-	inline daeAttribute *getAttribute(const T &pseudonym)const
+	inline daeAttribute *getAttribute(const daeName &name)const
 	{
-		return _getAttribute(typename daeBoundaryString2<T>::type(pseudonym));
+		const daeArray<daeAttribute*> &attrs = getAttributes();
+		for(size_t i=0;i<attrs.size();i++)
+		if(name==attrs[i]->getName()) return attrs[i]; return nullptr;
 	} 
-	/** Implements @c getAttribute(). */
-	NOALIAS_LINKAGE daeAttribute *_getAttribute(daeString pseudonym)const
-	SNIPPET( return getAttribute(daeHashString(pseudonym)); )
-	/** Implements @c getAttribute(). */
-	NOALIAS_LINKAGE daeAttribute *_getAttribute(const daeHashString &pseudonym)const;	
 
 	/**LEGACY, NOT-RECOMMENDED
 	 * THERE'S NO REASON TO USE THIS RIGHT NOW. IT COULD BE USED TO WALK THE
@@ -345,7 +355,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	LINKAGE const daeChildRef<> &pushBackWRT(daePseudoElement*, const daePseudonym&)const;
 
 	/**WARNING, LEGACY
-	 * Previously "create," second overload form.
+	 * Formerly "create," second overload form.
 	 * POST-2.5 THIS WON'T CREATE INSTANCES OF @c this @c daeMetaElement.
 	 * POST-2.5 @a parent becomes the parent of the created element, but
 	 * it's not yet among the children. This avoids parenting to the DOM.
@@ -374,7 +384,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 					 
 	template<class U> //See daeContents::__cursorize().
 	/**WARNING, LEGACY
-	 * Previously "place."
+	 * Formerly "place."
 	 * Places a child element into the @a parent element where the
 	 * calling object is the @c daeMetaElement for the parent element.
 	 *
@@ -400,7 +410,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 
 	template<class T, class U> //See daeContents::__cursorize().
 	/**WARNING, LEGACY
-	 * Previously "placeAfter."
+	 * Formerly "placeAfter."
 	 * Places a child element into @a parent not before @c after.
 	 *
 	 * @warning <xs:all> returns @c DAE_ORDER_IS_NOT_PRESERVED, which 
@@ -422,7 +432,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 
 	template<class T, class U> //See daeContents::__cursorize().
 	/**WARNING, LEGACY
-	 * Previously "placeBefore."
+	 * Formerly "placeBefore."
 	 * Places a child element into @a parent not after @c before.
 	 *
 	 * @warning <xs:all> returns @c DAE_ORDER_IS_NOT_PRESERVED, which 
@@ -482,7 +492,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 
 	template<class U> //See daeContents::__cursorize().
 	/**WARNING, LEGACY
-	 * Previously "remove."
+	 * Formerly "remove."
 	 * Removes a child element from its parent element.
 	 * @param parent Element That is the parent.
 	 * @param child Child element to remove.
@@ -512,7 +522,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	
 	template<class T> //DAEP::Element
 	/**
-	 * Previously "getContents."
+	 * Formerly "getContents."
 	 * Gets the contents-array of @a e.
 	 */
 	inline typename daeConstOf<T,daeContents>::type &getContentsWRT(T &e)const
@@ -522,7 +532,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	}
 	template<class This> //DAEP::Element
 	/**OVERLOAD
-	 * Previously "getContents."
+	 * Formerly "getContents."
 	 * Gets the contents-array of @a e.
 	 * This overload is just to receive @c this pointers/coceivably other rvalues.
 	 */
@@ -542,7 +552,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 		void operator()(E *ch){ if(ch!=nullptr) result.push_back(ch); } 
 	};
 	/**LEGACY
-	 * Previously "getChildren."
+	 * Formerly "getChildren."
 	 * Gets all of the children from an element of this type.
 	 * @param parent The element that you want to get the children from.
 	 * @param array The return value.  An elementref array to append this element's children to.
@@ -553,7 +563,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 		getContentsWRT(parent).for_each_child(f); return result;
 	}
 	/**LEGACY, CONST-PROPOGATING-FORM
-	 * Previously "getChildren."
+	 * Formerly "getChildren."
 	 * Gets all of the children from an element of this type.
 	 * @param parent The element that you want to get the children from.
 	 * @param array The return value.  An elementref array to append this element's children to.
@@ -584,7 +594,23 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 COLLADA_(private) //GENERATOR-SIDE APIs
 	
 	friend class domAny;
-	template<class T, class> friend class DAEP::Elemental;
+	template<class T, unsigned long long, class> 
+	friend class DAEP::Elemental;
+
+	/**GENERATOR-SIDE API
+	 * This is not required. It doesn't actually add the
+	 * <xs:anyAttribute> elements, but it belongs to the 
+	 * "addSoAndSo()" family of set up APIs.
+	 * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.C++}
+	 * addAnyAttribute()
+	 * .setProcessContents("strict")
+	 * .setNamespaceString("##any");
+	 */
+	inline XS::AnyAttribute &addAnyAttribute()
+	{
+		assert(getAllowsAnyAttribute());
+		return const_cast<daeAny&>(getAnyAttribute());
+	}
 
 	template<class T, int M, int N> 
 	/**GENERATOR-SIDE API
@@ -610,7 +636,7 @@ COLLADA_(private) //GENERATOR-SIDE APIs
 	 * Appends a @c daeValue that represents a field corresponding to an
 	 * XML complexType's "value" pseduo-attribute to the C++ version of this element type.
 	 */
-	inline daeValue &addValue(T &nul, daeClientStringCP (&typeQName)[M]){ return addAttribute(nul,typeQName,""); }
+	inline daeDefault &addValue(T &nul, daeClientStringCP (&typeQName)[M]){ return addAttribute(nul,typeQName,""); }
 
 	template<class T> //XS::Any, XS::Choice, XS::Element, XS::Group, or XS::Sequence
 	/**GENERATOR API
@@ -654,7 +680,7 @@ COLLADA_(private) //GENERATOR-SIDE APIs
 	//This is merged into the "pop" function so generators can ouptut less text.
 	template<unsigned long long N, unsigned maxO>
 	/**GENERATOR-SIDE API, OVERLOAD
-	 * Previously "daeCMPolicy::setMaxOrdinal()."
+	 * Formerly "daeCMPolicy::setMaxOrdinal()."
 	 *
 	 * @warning THIS IS FOR INNER "COMPOSITORS." OUTER COMPOSITORS SHOULD USE THE 
 	 * @c addContentModel() API THAT RECEIVES @c DAEP::Elemental::TOC.
@@ -677,7 +703,7 @@ COLLADA_(private) //GENERATOR-SIDE APIs
 	}
 	template<unsigned long long N, unsigned maxO, class T> //DAEP::Elemental TOC
 	/**GENERATOR-SIDE API, OVERLOAD
-	 * Previously "daeCMPolicy::setMaxOrdinal()."
+	 * Formerly "daeCMPolicy::setMaxOrdinal()."
 	 * In addition to calling @c popCM() this API precomputes placement algorithm 
 	 * data-points.
 	 *
@@ -740,6 +766,12 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	{
 		/*NOP*/ //Don't call the LEGACY nullptr default-constructor.
 	}
+	template<class> 
+	/**OVERLOAD Implements newPrototype(). */
+	inline void _maybe_prototype2(XS::Attribute&,daeAnySimpleType::TypedUnion*)
+	{
+		/*NOP*/ //By default this is the emptry string with daeStringRef type.
+	}
 	template<class VT> 
 	/**OVERLOAD Implements newPrototype(). */
 	inline void _maybe_prototype2(XS::Attribute &o,...)
@@ -750,6 +782,9 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	template<class VT> 
 	/**
 	 * Filters out @c daeArray & @c daeStringRef based values in @c _addAttribute(). 
+	 * TODO?
+	 * Thinking @c o._destructor can go if @c daeTypewriter or @c daePlatonic had a
+	 * "destruct" solution.
 	 */
 	inline void _maybe_prototype(XS::Attribute &o)
 	{
@@ -762,7 +797,7 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	 * This is for destructing the prototypes, since there's no clean way to
 	 * call the full constructor on them, in order to install the destructor.
 	 */
-	static void __prototype_destruct(void *a){ ((T*)a)->~T(); }
+	static void __prototype_destruct(const void *a){ ((T*)a)->~T(); }
 
 	template<class T> 
 	/**
@@ -777,7 +812,7 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	
 	friend class XS::Schema; template<class T>
 	/** Stage 2 of initialization-sequence. */
-	T *_continue_XS_Schema_addElement(typename T::Essentials &ee)
+	T *_continue_XS_Schema_addElement(DAEP::Parameters &ee)
 	{	
 		T *pt = (T*)_continue_XS_Schema_addElement2
 		(__placement_new<T>,ee.union_feature,ee.content_offset);
@@ -804,16 +839,13 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	XS::Element &_addChild2(XS::Element *out, int i, daeOffset os);
 
 	/** Implements @c addAttribute(). */	
-	LINKAGE XS::Attribute &_addAttribute(daeFeatureID,daeOffset,daeAlloc<>&(daeAllocThunk&),daeHashString,daePseudonym);
+	LINKAGE XS::Attribute &_addAttribute(daeFeatureID,daeOffset,daeAlloc<>&(daeAllocThunk&),daeName,daePseudonym);
 	
 #if defined(BUILDING_COLLADA_DOM) || defined(__INTELLISENSE__)
 
 		/** @c addAttribute() and @c daeElement::_cloneAnyAttribute() share this. */	
 		void _addAttribute_maybe_addID(daeAttribute &maybe_ID, const daeElement *prototype_or_domAny);
-		//SCHEDULED FOR REMOVAL
-		//This must remap _IDs and _IDs_id if the _attribs vector is reallocated.
-		XS::Attribute &_anyAttribute_maybe_addID(const daeElement *prototype_or_domAny);
-
+	
 		friend class daeDOM;
 		friend class daeModel;
 		friend class daeElement;
@@ -872,10 +904,9 @@ COLLADA_(protected) //INVISIBLE
 		T &_bring_to_life(T &t)
 		{
 			new(&t) T(); return t;
-		}
-		daeArray<XS::Attribute> _attribs;						
+		}					
 		daeAttribute *_IDs_id,*_IDs;
-		daeValue *_value;
+		daeDefault *_value;
 		const daeCM *_CMRoot, *_CMEntree;
 		XS::Element *_elem0;		
 		daeArray<XS::Element> _elems;
@@ -902,7 +933,7 @@ COLLADA_(protected) //INVISIBLE
 		 * @c daeMetaObject::_self_destruct() is used instead.
 		 * @note This is called by @c _self_destruct().
 		 */
-		~daeMetaElement(){ assert(_domAny_safe_prototype==_prototype); }
+		~daeMetaElement(){ _attribs().~daeArray(); }
 
 		//SKETCH/EXPERIMENTAL
 		friend class daeDocument;
@@ -921,15 +952,6 @@ COLLADA_(protected) //INVISIBLE
 		 */
 		static bool _typeLookup_unless(daeElement*);
 
-		/**SCHEDULED FOR REMOVAL
-		 * Historically each @c domAny object has their own copy of the 
-		 * master-metadata record. Implementing <xs:anyAttribute> should
-		 * make that practice obsolete. In the meantime this can be a way
-		 * to visualize @c _prototype in debugging sessions.
-		 */
-		daeElement *_domAny_safe_prototype;
-
-		friend class daeValue;
 		friend class XS::Schema;		
 		/**VARIABLE-LENGTH
 		 * THIS IS THE FINAL DATA-MEMBER. 
@@ -937,15 +959,24 @@ COLLADA_(protected) //INVISIBLE
 		 * @remarks THIS IS STRICTLY FOR PROTOTYPE-CONSTRUCTION. 
 		 * @c domAny::_meta DOESN'T HAVE ANYTHING IN THIS PLACE.
 		 */
-		union _Prototype
+		struct _Prototype
 		{
-			void *_ALIGNER;
+			//MSVC: Putting after struct doesn't work???
+			COLLADA_ALIGN(8)
 			//daeElement is not yet defined.			
 			operator daeElement*()const{ return (daeElement*)this; }
 			daeElement *operator->()const{ return (daeElement*)this; }			
 		}_prototype;
 	  //}_prototype;
 	  //}_prototype;
+		inline daeAny &_any()const
+		{
+			return daeOpaque(&_prototype)[_sizeof]; 
+		}
+		inline daeArray<XS::Attribute*> &_attribs()const
+		{
+			return daeOpaque(&_prototype)[sizeof(DAEP::Element)]; 
+		}
 
 	////^NO MORE MEMBERS BEYOND THIS POINT^////
 

@@ -412,12 +412,11 @@ daeOK daeLibXMLPlugin::writeContent(daeIO &IO, const daeContents &content)
 }
 
 void daeLibXMLPlugin::_writeElement(const daeElement &element)
-{
-	daeMeta *meta = element->getMeta();
-	const daeContents &content = meta->getContentsWRT(&element);
+{	
+	const daeContents &content = element.getContents();
 
 	//RAW: Intercept <source> elements for special handling.
-	if(_saveRawFile&&"source"==element->getNCName())
+	if(_saveRawFile&&"source"==element.getNCName())
 	{
 		const daeElement *child;
 		const daeElement *array = nullptr, *technique_common = nullptr;
@@ -439,12 +438,11 @@ void daeLibXMLPlugin::_writeElement(const daeElement &element)
 
 	xmlTextWriterStartElement(_writer,(xmlChar*)element.getNCName().string);
 	{
-		const daeArray<daeAttribute> &attrs = meta->getAttributes();		
-		for(size_t i=0,iN = attrs.size();i<iN;i++) 
-		_writeAttribute(attrs[i],element);
-		//Previously this came after _writeValue(element),
-		//-and they were not treated as mutually exclusive.
-		_writeContent2(element.getContents());
+		//Reminder: domAny is ambiguous with regard to value/content.
+		daeAnyAttribute &attrs = element.getAttributes();	
+		for(size_t i=0,iN=attrs.size();i<iN;i++) 
+		_writeAttribute(*attrs[i],element);
+		_writeContent2(content);
 		_writeValue(element);	
 	}
 	xmlTextWriterEndElement(_writer);	
@@ -488,9 +486,9 @@ void daeLibXMLPlugin::_writeContent2(const daeContents &content)
 	else _writeElement(content[i++]);
 }
 
-void daeLibXMLPlugin::_writeAttribute(daeAttribute &attr, const daeElement &element)
+void daeLibXMLPlugin::_writeAttribute(daeData &attr, const daeElement &element)
 {
-	attr->memoryToStringWRT(&element,_CD);
+	attr.memoryToStringWRT(&element,_CD);
 
 	//REMINDER: TO SUPPORT LEGACY BEHAVIOR, <COLLADA> HAS
 	//BOTH-REQUIRED-AND-DEFAULT ON ITS version ATTRIBUTES.
@@ -498,17 +496,25 @@ void daeLibXMLPlugin::_writeAttribute(daeAttribute &attr, const daeElement &elem
 	//  - The attribute isn't required AND
 	//     - The attribute has no default value and the current value is ""
 	//     - The attribute has a default value and the current value matches the default
-	if(!attr->getIsRequired())	
-	if(attr->getDefaultString()==nullptr)
+	daeValue *def = attr.findDefault();
+	if(_CD.empty())
 	{
-		if(_CD.empty())	return;
+		if(attr.getIsRequired())
+		{	
+			//NEW: Empty/required attribute is probably illegal. So try to fill it out?
+			if(def!=nullptr) def->defaultToString(_CD);
+		}
+		else return;
 	}
-	else if(0==attr->compareToDefaultWRT(&element))
-	return;
+	else if(def!=nullptr)
+	{
+		if(def->compareIsDefaultWRT(&element))
+		return;
+	}
 
 	xmlTextWriterStartAttribute(_writer,(xmlChar*)attr.getName().string);
 	
-	if(_maybeExtendedASCII(attr))
+	if(_maybeExtendedASCII(attr,element))
 	{
 		//This an old feature request.
 		//_CD is extended Latin. Put UTF8 into the _X_CD buffer.
@@ -523,7 +529,7 @@ void daeLibXMLPlugin::_writeAttribute(daeAttribute &attr, const daeElement &elem
 void daeLibXMLPlugin::_writeValue(const daeElement &element)
 {
 	if(!element.getCharData(_CD).empty()) 
-	if(_maybeExtendedASCII(*element.getCharDataObject()))
+	if(_maybeExtendedASCII(element.getCharData(),element))
 	{
 		//This an old feature request.
 		//_CD is extended Latin. Put UTF8 into the _X_CD buffer.
@@ -578,14 +584,15 @@ const daeElement &unused_array, const daeElement &unused_technique_common)
 	#error The types are not guaranteed to be daeULong. (Or even to exist.)
 	#endif
 	//There probably should be better APIs for this sort of thing.	
-	daeULong &stride = accessor->getAttributeObject("stride")->getWRT(accessor);	
+	daeULong &stride = accessor->getAttribute("stride").getWRT(accessor);	
 	if(stride_floor>stride) stride = stride_floor;
-	daeAttribute *count = array->getAttributeObject("count");
-	assert(count->getSize()==sizeof(daeULong)
-	&&(const daeULong&)count->getWRT(array)<COLLADA_UPTR_MAX);
-	size_t i,iN = (const size_t&)count->getWRT(array);
+	daeData &count = array->getAttribute("count");
+	assert(count.getDefaultSize()==sizeof(daeULong)
+	&&(const daeULong&)count.getWRT(array)<COLLADA_UPTR_MAX);
+	size_t i,iN = (const size_t&)count.getWRT(array);
 	
 	daeStringCP a[33] = "#";
+	COLLADA_SUPPRESS_C(4996)
 	sprintf(a+1,"%d",(int)_rawByteCount); 
 	size_t snip = _raw.size(); _raw.append(a);
 	accessor->setAttribute("source",_raw);
@@ -599,9 +606,10 @@ const daeElement &unused_array, const daeElement &unused_technique_common)
 		for(const y&i0=valArray->getRaw();i<iN;i++)\
 		_rawIO->writeOut(&(tmp=(&i0)[i]),sizeof(x));\
 	}else
-	daeCharData *arrayCD = array->getCharDataObject();
-	int atomic_type = arrayCD->getType()->where<daeAtom>().getAtomicType();	
-	const daeAlloc<> *valArray = (daeAlloc<>*const&)arrayCD->getWRT(array);
+	daeData &arrayCD = array->getCharData();
+	int atomic_type = 
+	arrayCD.getTypeWRT(array).where<daeAtom>().getAtomicType();	
+	const daeAlloc<> *valArray = (daeAlloc<>*const&)arrayCD.getWRT(array);
 	COLLADA_SUPPRESS_C(4244) //possible loss of data
 	_(int,daeInt,INT)_(int,daeLong,LONG)_(float,daeFloat,FLOAT)_(float,daeDouble,DOUBLE)
 	{

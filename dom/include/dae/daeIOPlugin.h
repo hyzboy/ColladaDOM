@@ -108,7 +108,7 @@ static struct daeCRT
 
 }daeCRT_default;
 
-/**
+/**NEVER-CONST
  * The daeIO class is like C's FILE object for URIs.
  * @see @c daeIOController::openIO().
  *
@@ -151,19 +151,8 @@ COLLADA_(public)
 	 * Request Partial-Content; Advanced use
 	 * of @c getLock().
 	 */
-	struct Range
-	{
-		size_t first,second; 
-		size_t limit_to_size(size_t s)
-		{
-			if(first>s) first = s;
-			if(second>s) second = s; return s;
-		}		
-		size_t size(){ return second-first; }
-		bool empty(){ return first==second; }
-
-		void offset(daeOffset os){ first+=os; second+=os; }
-	};
+	typedef daePartition Range;
+	
 	/**
 	 * Gets read & write locks on the files.
 	 * 
@@ -448,7 +437,7 @@ COLLADA_(public) //daePlatform::openURI() support
 	}
 };
 
-/**
+/**NEVER-CONST
  * The @c daeIOPlugin class provides the input/output plugin interface, which is
  * the interface between the COLLADA runtime and the backend storage. A native
  * COLLADA XML plugin implementation is provided along with this interface.
@@ -549,7 +538,7 @@ COLLADA_(private)
 	virtual daeOK writeContent(daeIO &IO, const daeContents &content) = 0;	
 
 	/**
-	 * Previously "writeDOM."
+	 * Formerly "writeDOM."
 	 * @param URI is parented to @c daeDoc or @c daeObject or it is
 	 * @c nullptr. It's as close to @c getRequest().localURI as can
 	 * be. Otherwise the plugin is left to its own devices, and may
@@ -602,7 +591,7 @@ COLLADA_(public) //daeIOPlugin methods
  */
 typedef daeIOSecond<daeIOPlugin::Demands::unimplemented> daeIOEmpty;
 
-/**ZAE
+/**ZAE, NEVER-CONST
  * @c daePlatform and @c daeAtlas implement this interface. They're
  * @c daeIO factories.
  */
@@ -664,6 +653,8 @@ COLLADA_(public) //UTILITIES (use if you want)
 	 */
 	class Stack : private std::vector<T*>
 	{
+		typedef std::vector<T*> vector; //GCC
+
 	COLLADA_(public)
 
 		~Stack(){ clear(); }void clear()
@@ -718,7 +709,7 @@ COLLADA_(public) //UTILITIES (use if you want)
 	}
 };
 
-/**
+/**NEVER-CONST
  * The daePlatform class is an abstract representation
  * of the operating-system and computer network. 
  *

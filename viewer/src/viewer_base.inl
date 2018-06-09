@@ -579,8 +579,8 @@ struct TestIO : daeIO //QUICK & DIRTY
 		if(rngI!=nullptr) if(TestIO_HTTP_agent.connected()) 
 		{
 			#ifdef NDEBUG
-			#error Keep the resume_RFC1123 timestamp and provide a 
-			#error way for to set the daeIO's timestamp in advance.
+			#error "Keep the resume_RFC1123 timestamp and provide a"
+			#error "way for to set the daeIO's timestamp in advance."
 			#endif
 			TestIO_HTTP_agent.~HTTP_agent();
 			new(&TestIO_HTTP_agent) HTTP_agent(&I.getRequest(),rngI);
@@ -761,12 +761,12 @@ static struct TestPlatform : daePlatform //SINGLETON
 			zae->openDoc<domAny>("manifest.xml")->getDocument();			
 			if(manifest_xml!=nullptr
 			&&!manifest_xml->getRoot().empty())
-			{
+			{	
 				daeElementRef dae_root = manifest_xml->getRoot();
 				if("dae_root"!=dae_root->getNCName())
 				dae_root = dae_root->getDescendant("dae_root"); 
 				if(dae_root!=nullptr)				
-				URI = dae_root->getCharData();
+				URI = dae_root->string();
 			}
 			if(!URI.empty())
 			{

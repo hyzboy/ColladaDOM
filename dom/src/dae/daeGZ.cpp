@@ -59,12 +59,13 @@ typedef unsigned long long /*mz_*/uint64_t;
 static daeCTC<CHAR_BIT==8> _uint8_check;
 static daeCTC<sizeof(uint16_t)*CHAR_BIT==16> _uint16_check;
 static daeCTC<sizeof(uint32_t)*CHAR_BIT==32> _uint32_check;
-#if COLLADA_UPTR_MAX==0xFFffFFffFFffFFffULL
+#if 0 && COLLADA_UPTR_MAX==0xFFffFFffFFffFFffULL
 #define TINFL_BITBUF_SIZE 64
+typedef uint64_t tinfl_bit_buf_t;
 #else
 #define TINFL_BITBUF_SIZE 32
+typedef uint32_t tinfl_bit_buf_t;
 #endif
-typedef uint32_t tinfl_bit_buf_t; //uint64_t
 }
 enum // Internal/private bits
 {
@@ -282,7 +283,7 @@ const uint8_t*pIn_buf_next, size_t*pIn_buf_size, uint8_t*pOut_buf_start, uint8_t
 				while(pIn_buf_cur>=pIn_buf_end)
 				TINFL_CR_RETURN(38,decomp_flags&TINFL_FLAG_HAS_MORE_INPUT?TINFL_STATUS_NEEDS_MORE_INPUT:TINFL_STATUS_FAILED_CANNOT_MAKE_PROGRESS)				
 
-				size_t n = std::min(counter,std::min<size_t>(pOut_buf_end-pOut_buf_cur,pIn_buf_end-pIn_buf_cur));
+				size_t n = std::min<size_t>(counter,std::min(pOut_buf_end-pOut_buf_cur,pIn_buf_end-pIn_buf_cur));
 				memcpy(pOut_buf_cur,pIn_buf_cur,n);				
 				pIn_buf_cur+=n; pOut_buf_cur+=n; 
 				counter-=(unsigned)n;
@@ -299,11 +300,11 @@ const uint8_t*pIn_buf_next, size_t*pIn_buf_size, uint8_t*pOut_buf_start, uint8_t
 				uint8_t *p = r->m_tables[0].m_code_size; 
 				r->m_table_sizes[0] = 288; r->m_table_sizes[1] = 32; 
 				memset(r->m_tables[1].m_code_size,5,32); 
-				unsigned i = 0;
-				for(;i<=143;++i) *p++ = 8; 
-				for(;i<=255;++i) *p++ = 9;
-				for(;i<=279;++i) *p++ = 7; 
-				for(;i<=287;++i) *p++ = 8;
+				int i = 0;
+				for(;i<=143;i++) *p++ = 8; 
+				for(;i<=255;i++) *p++ = 9;
+				for(;i<=279;i++) *p++ = 7; 
+				for(;i<=287;i++) *p++ = 8;
 			}
 			else
 			{
@@ -1404,7 +1405,8 @@ static bool tdefl_compress_normal(tdefl_compressor *d)
 			unsigned hash = d->m_dict[ins_pos&TDEFL_LZ_DICT_SIZE_MASK];
 			hash<<=TDEFL_LZ_HASH_SHIFT;
 			hash^=d->m_dict[(ins_pos+1)&TDEFL_LZ_DICT_SIZE_MASK];
-			unsigned num_bytes_to_process = (unsigned)std::min(src_buf_left,TDEFL_MAX_MATCH_LEN-d->m_lookahead_size);
+			unsigned num_bytes_to_process =
+			std::min<unsigned>(src_buf_left,TDEFL_MAX_MATCH_LEN-d->m_lookahead_size);
 			const uint8_t *pSrc_end = pSrc+num_bytes_to_process;
 			src_buf_left-=num_bytes_to_process;
 			d->m_lookahead_size += num_bytes_to_process;
@@ -1502,7 +1504,7 @@ static bool tdefl_compress_normal(tdefl_compressor *d)
 		}
 		else if(!cur_match_dist)
 		{
-			tdefl_record_literal(d,d->m_dict[std::min(cur_pos,sizeof(d->m_dict)-1)]);
+			tdefl_record_literal(d,d->m_dict[std::min<size_t>(cur_pos,sizeof(d->m_dict)-1)]);
 		}
 		else if(d->m_greedy_parsing||0!=(d->m_flags&TDEFL_RLE_MATCHES)||cur_match_len>=128)
 		{
@@ -1511,7 +1513,7 @@ static bool tdefl_compress_normal(tdefl_compressor *d)
 		}
 		else
 		{
-			d->m_saved_lit = d->m_dict[std::min(cur_pos,sizeof(d->m_dict)-1)];
+			d->m_saved_lit = d->m_dict[std::min<size_t>(cur_pos,sizeof(d->m_dict)-1)];
 			d->m_saved_match_dist = cur_match_dist;
 			d->m_saved_match_len = cur_match_len;
 		}
@@ -1545,7 +1547,7 @@ static tdefl_status tdefl_flush_output_buffer(tdefl_compressor *d)
 	*d->m_pIn_buf_size = d->m_pSrc-(const uint8_t*)d->m_pIn_buf;	
 	if(0!=d->m_pOut_buf_size)
 	{
-		size_t n = std::min(*d->m_pOut_buf_size-d->m_out_buf_ofs,d->m_output_flush_remaining);
+		size_t n = std::min<size_t>(*d->m_pOut_buf_size-d->m_out_buf_ofs,d->m_output_flush_remaining);
 		memcpy((uint8_t*)d->m_pOut_buf+d->m_out_buf_ofs,d->m_output_buf+d->m_output_flush_ofs,n);
 		d->m_output_flush_ofs+=(unsigned)n;
 		d->m_output_flush_remaining-=(unsigned)n;
@@ -1651,12 +1653,13 @@ extern void *new_tdefl_compressor(bool(*pPut_buf_func)(const void*,size_t,void*)
 {
 	enum{ flags=0xFFF };
 
-	tdefl_compressor *d = (tdefl_compressor*)io;
-	if(d==nullptr) d = new tdefl_compressor();
 	if(nullptr==pPut_buf_func)
 	{
-		delete d; return nullptr;
+		delete (tdefl_compressor*)io;
+		return nullptr;
 	}
+	tdefl_compressor *d = (tdefl_compressor*)io;
+	if(d==nullptr) d = new tdefl_compressor();
 
     d->m_pPut_buf_func = pPut_buf_func;
     d->m_pPut_buf_user = pPut_buf_user;

@@ -138,11 +138,27 @@
       <ExpandedItem>*(daeDBaseString*)(_string-size_t(_string)%2-daeStringRef_debase)</ExpandedItem>
     </Expand>
   </Type>
-  <Type Name="ColladaDOM_3::XS::Attribute">
-    <DisplayString Condition="_default.string">{_attribute_name.string,sb}="{_default.string,sb}"</DisplayString>
-    <DisplayString>{_attribute_name.string,sb}=""</DisplayString>
+  <Type Name="ColladaDOM_3::daeData">
+    <DisplayString Condition="__vizDefault">{_attribute_name_string,sb}="{__vizDefault,sb}"</DisplayString>
+    <DisplayString>{_attribute_name_string,sb}=""</DisplayString>
     <Expand>
-      <ExpandedItem>*(daeValue*)this</ExpandedItem>
+      <Synthetic Name="(daeDefault*)this">
+        <Expand>
+           <ExpandedItem>*(daeDefault*)this,nd</ExpandedItem>
+        </Expand>
+      </Synthetic>
+      <Synthetic Name="(daeAST::TypedUnion*)(this+1)">
+        <Expand>
+          <!--Multi-inheritance bug?? In't act like daeDefault??
+          <ExpandedItem>*(daeAST::Data*)this,nd</ExpandedItem>-->
+          <ExpandedItem>*(daeAST::TypedUnion*)(this+1),nd</ExpandedItem>
+        </Expand>
+      </Synthetic>
+    </Expand>
+  </Type>
+  <Type Name="ColladaDOM_3::daeDefault">
+    <Expand>
+      <ExpandedItem>*(daeDefault*)this,nd</ExpandedItem>
     </Expand>
   </Type>
   <Type Name="ColladaDOM_3::daeDocument">    

@@ -47,9 +47,7 @@ daeOK daeIOPluginCommon::addDoc(daeDocRef &out, daeMeta*)
 
 daeOK daeIOPluginCommon::readContent(daeIO &IO, daeContents &content)
 {
-	_readFlags = daeElement::xs_anyAttribute_is_still_not_implemented;
-
-	if(!_read(IO,content))
+	_readFlags = 0; if(!_read(IO,content))
 	{
 		const daeURI *URI = getRequest().remoteURI;
 		daeEH::Error<<"Failed to load "<<(URI!=nullptr?URI->data():"XML document from memory");
@@ -82,46 +80,52 @@ daeElement &daeIOPluginCommon::_beginReadElement(daePseudoElement &parent, const
 
 		//NEW: determine if extended ASCII.
 		//(Maybe attributes are so short that this is self-defeating??)
-		daeAttribute *attr = child->getAttributeObject(name);
-		if(attr==nullptr) goto unattributed;
+		daeData &attr = child->getAttribute(name);
+
+		daeOK OK;
+		//This is no longer possible, but still
+		//how can invalid attributes be handled.		
+		if(0&&attr==nullptr) goto unattributed;
+
 		//This an old feature request.		
 		//It isn't said why the document isn't just written with a Latin declaration.
 		//NOTE THAT MAKING THE NAMES LATIN WOULDN'T WORK IF THE METADATA ISN'T LATIN.
-		if(_maybeExtendedASCII(*attr))
+		if(_maybeExtendedASCII(attr,*child))
 		{
 			value = _encoder(value,_CD);
 		}
-		if(!attr->stringToMemoryWRT(child,value)) unattributed:
+		OK = attr.stringToMemoryWRT(child,value); if(!OK) unattributed:
 		{
 			if(!value.empty()) //Some files had bad attributes.
 			{
-				_readFlags|=_readFlag_unattributed;
-				daeCTC<daeElement::xs_anyAttribute_is_still_not_implemented>();
-				daeEH::Error<<"DATA LOSS\n"
-				"Could not create an attribute "<<name<<"=\""<<value<<"\""
+				//Expecting daeAnyAttribute to pick up any attribute.
+				//_readFlags|=_readFlag_unattributed;
+				_readFlags|=_readFlag_data_loss;
+				daeEH::Error<<"DATA LOSS: "<<daeErrorString(OK)<<"\n"
+				//"Could not create an attribute "<<name<<"=\""<<value<<"\""
+				"Could not store an attribute "<<name<<"=\""<<value<<"\""
 				" at line "<<_errorRow()<<".\n"
-				"(Could be a schema violation.)\n"
-				"UNFORTUNATELY THERE ISN'T A SYSTEM IN PLACE TO PRESERVE THE ATTRIBUTE.";
+				"(Should be a schema/ABI violation.)\n";
 			}
 		}
 	}
 	_attribs.clear(); return *child;
 }
 
-void daeIOPluginCommon::_readElementText(daeElement &element, const daeHashString &textIn)
+void daeIOPluginCommon::_readElementText(daeElement &el, const daeHashString &textIn)
 {
 	daeHashString text = textIn;
-	daeCharData *CD = element.getCharDataObject();
-	if(CD!=nullptr)
+	if(el.hasCharData())
 	{
-		if(_maybeExtendedASCII(*CD))
+		daeData &CD = el.getCharData();
+		if(_maybeExtendedASCII(CD,el))
 		{
 			text = _encoder(text,_CD);
 		}
 		#ifdef NDEBUG
 		#error And comment/PI peppered text?
 		#endif
-		if(CD->stringToMemoryWRT(&element,text))
+		if(CD.stringToMemoryWRT(&el,text))
 		return;
 
 		//It's tempting to default to mixed text, but
@@ -132,7 +136,7 @@ void daeIOPluginCommon::_readElementText(daeElement &element, const daeHashStrin
 	}
 	else //NEW: assuming mixed-text/author knows best.
 	{
-		element.getContents().insert<' '>(_encode(text,_CD));
+		el.getContents().insert<' '>(_encode(text,_CD));
 		return;
 	}
 
@@ -140,16 +144,16 @@ void daeIOPluginCommon::_readElementText(daeElement &element, const daeHashStrin
 
 	daeEH::Warning<<
 	"The DOM was unable to set a value for element of type "<<
-	element.getTypeName()<<" at line "<<_errorRow()<<".\n"
+	el.getTypeName()<<" at line "<<_errorRow()<<".\n"
 	"Probably a schema violation.\n"
 	"(2.5 policy is to add the value as a mixed-text text-node.)";
 }
 
-bool daeIOPluginCommon::_maybeExtendedASCII(const daeValue &v)
+bool daeIOPluginCommon::_maybeExtendedASCII(const daeData &v, const daeElement &e)
 {	
 	if(nullptr!=daeIOPluginCommon::_encoder)
 	{
-		switch(v.getType()->where<daeAtom>().getAtomicType())
+		switch(v.getTypeWRT(e).where<daeAtom>().getAtomicType())
 		{
 		case daeAtomicType::ENUMERATION:
 
@@ -159,7 +163,9 @@ bool daeIOPluginCommon::_maybeExtendedASCII(const daeValue &v)
 			//return _maybeExtendedASCII(st.getRestriction().getBase());
 
 		case daeAtomicType::EXTENSION: //Could be anything?
-		case daeAtomicType::STRING: case daeAtomicType::TOKEN: return true;
+		case daeAtomicType::STRING: case daeAtomicType::TOKEN: 
+			
+			return true;
 		}
 	}
 	return false;

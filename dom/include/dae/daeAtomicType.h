@@ -34,7 +34,20 @@ struct daeAtomicType
 {
 	enum
 	{
-	/** extension atomic type */
+		//NOTICE: Do NOT add "LIST" or "ARRAY" to this!
+		//Lists are not "atomic" and so use 0 along with
+		//daeAtomicType::EXTENSION. Note that, these enum
+		//only signify binary compatibility independent of
+		//schema-based types.
+		
+	/** extension/list atomic type 
+	 * 
+	 * @note All @c daeArray use this value. In addition
+	 * for xs:anySimpleType, when the array's subscripts
+	 * vary in type the @c daeAtom type is this type too.
+	 * In short this value says it alone is insufficient 
+	 * to draw a conclusion. It's ambiguous.
+	 */
 	EXTENSION = 0,
 	/** daeByte atomic type */
 	BYTE = -int(sizeof(daeByte)),
@@ -70,6 +83,7 @@ struct daeAtomicType
 	//FYI: It's impractical to do STRING|TOKEN because
 	//a negative value will result in a false positive.
 	/**WARNING
+	 * @see @c daeTypewriter::hasStringType().
 	 *
 	 * On STRING:
 	 * daeStringRef/daeTokenRef atomic type 
@@ -86,8 +100,24 @@ struct daeAtomicType
 	 * way synonymous with xs:token and if a document
 	 * saves/writes/outputs a space it may be as #x20.
 	 * @see @c daeTypist<daeTokenRef>
+	 *
+	 * STRONG CASE FOR TOKEN?
+	 * @c daeStringRef_sys_typewrit() is why TOKEN is
+	 * ultimately worth keeping around, even while it
+	 * seems like a chore to do 2 tests to single out
+	 * strings. I BELIEVE OTHERWISE IT CAN BE REMOVED.
 	 */
-	STRING, TOKEN, 
+	STRING,TOKEN, 
+	/**
+	 * This type always yields an empty string. 
+	 * Its purpose is to appear as if there is no 
+	 * value so code can be written without @c nullptr
+	 * tests, and so on. @c daeTypewriter::unserialize() 
+	 * is incompatible with @c VOID... it returns 
+	 * DAE_ERR_NOT_IMPLEMENTED and calls the @c assert()
+	 * API and may involve @c daeErrorHandler too.
+	 */
+	VOID,
 	};
 
 	daeAtomicType()
@@ -97,7 +127,7 @@ struct daeAtomicType
 };
 
 template<class=void> 
-/**
+/**NEVER-CONST
  * This class is specialized to implement @c daeType.
  * This is a default/starter implementation which is
  * typically used as a base class by specializations.
@@ -241,7 +271,7 @@ COLLADA_(public) //shaping functions
 	}
 };
 
-/**
+/**NEVER-CONST
  * The @c daeTypewriter class implements a standard interface for
  * data elements in the reflective object system.
  *
@@ -263,7 +293,7 @@ COLLADA_(public) //ABSTRACT INTERFACE
 	 * @param src Memory location of the value to copy from.
 	 * @param dst Memory location of the value to copy to.
 	 */
-	virtual void copy(const daeOpaque src, daeOpaque dst) = 0;
+	virtual void copy(const daeOpaque src, daeOpaque dst){ return; }
 
 	/**PURE, ABSTRACT INTERFACE
 	 * Performs a virtual comparison operation between two values of the same atomic type.
@@ -272,8 +302,32 @@ COLLADA_(public) //ABSTRACT INTERFACE
 	 * @return Returns a positive integer if value1 > value2, a negative integer if 
 	 * value1 < value2, and 0 if value1 == value2.
 	 */
-	virtual int compare(const daeOpaque value1, const daeOpaque value2) = 0;
+	virtual int compare(const daeOpaque value1, const daeOpaque value2){ return 0; }
 	
+	/**PURE, ABSTRACT INTERFACE
+	 * Writes @a src to @ dst. @a src is untagged, opaque memory (not type-checked.)
+	 * @return Returns a client defined @c DAE_ERROR @c enum. @a dst is 0 terminated.
+	 */
+	virtual daeOK serialize(const daeOpaque src, daeArray<daeStringCP> &dst){ return DAE_OK; }	
+		
+	/**ABSTRACT INTERFACE
+	 * Writes @a src to @ dst. @a dst is untagged, opaque memory (not type-checked.)
+	 * @param srcEnd The CP after the last CP to be written.
+	 * @return Returns a client defined @c DAE_ERROR @c enum.
+
+	 * REMINDER: If a desire is to minimize reallocations, the 
+	 * optimal route is for the loader to daeObject::reAlloc().
+	 * But it's only safe to do so if the array is empty or if
+	 * the type of the daeArray is raw-copyable plain-old-data.
+	 * IN THIS CASE THE LOADER SHOULD COUNT THE ' ' CHARACTERS.
+	 */	
+	virtual daeOK unserialize(const daeStringCP *srcBegin, const daeStringCP *srcEnd, daeOpaque dst)
+	{
+		assert(!"daeMetaElement_voidwriter::unserialize"); return DAE_ERR_NOT_IMPLEMENTED;
+	}
+
+
+COLLADA_(public) //LEGACY-SUPPORT
 	/**LEGACY
 	 * Writes @a src to @ dst. @a src is untagged, opaque memory (not type-checked.)
 	 * @return Returns a client defined @c DAE_ERROR @c enum. @a dst is 0 terminated.
@@ -282,12 +336,6 @@ COLLADA_(public) //ABSTRACT INTERFACE
 	{
 		dst.clear(); return serialize(src,dst);
 	}
-
-	/**PURE, ABSTRACT INTERFACE
-	 * Writes @a src to @ dst. @a src is untagged, opaque memory (not type-checked.)
-	 * @return Returns a client defined @c DAE_ERROR @c enum. @a dst is 0 terminated.
-	 */
-	virtual daeOK serialize(const daeOpaque src, daeArray<daeStringCP> &dst) = 0;	
 
 	/**LEGACY
 	 * Writes @a src to @ dst. @a dst is untagged, opaque memory (not type-checked.)
@@ -328,25 +376,42 @@ COLLADA_(public) //ABSTRACT INTERFACE
 		return unserialize(src.string,src.string+src.extent,dst); 
 	}
 
-	/**ABSTRACT INTERFACE
-	 * Writes @a src to @ dst. @a dst is untagged, opaque memory (not type-checked.)
-	 * @param srcEnd The CP after the last CP to be written.
-	 * @return Returns a client defined @c DAE_ERROR @c enum.
-
-	 * REMINDER: If a desire is to minimize reallocations, the 
-	 * optimal route is for the loader to daeObject::reAlloc().
-	 * But it's only safe to do so if the array is empty or if
-	 * the type of the daeArray is raw-copyable plain-old-data.
-	 * IN THIS CASE THE LOADER SHOULD COUNT THE ' ' CHARACTERS.
-	 */	
-	virtual daeOK unserialize(const daeStringCP *srcBegin, const daeStringCP *srcEnd, daeOpaque dst) = 0;
-
 COLLADA_(public) //ACCESSORS
 	/**
 	 * Gets @c sizeof the underlying type.
 	 * This is different from @c getSize() for arrays, etc.
 	 */
 	daeSize getSize(){ return _sizeof; }
+	
+	/**
+	 * Tells if the type is in fact @c daeArray or not.
+	 * @note @c where<daeArray>() is always so, however
+	 * @c where<daeAtom>() can be for higher-dimensional
+	 * arrays. The addition of @c isAnySimpleType() meant
+	 * that doing @c this==&_daeArrayWriter would fail for
+	 * xs:anySimpleType types, even in the xs:list scenario.
+	 */
+	inline bool hasListType()const
+	{
+		//I think this would work, but it is a far deeper
+		//comparison than this==_daeArrayWriter and would
+		//not work for the 2D array case. (The array case
+		//might not have real world implications.)
+		//return _typeID==_daeArrayWriter->typeID; 
+		return 1==_list; 
+	}
+
+	/**RECOMMENDED
+	 * Helps to test for both "TOKEN" and "STRING" types.
+	 * It's desirable to remove TOKEN, so if that occurs
+	 * code that uses this method will be left unchanged.
+	 */
+	inline bool hasStringType()const
+	{
+		if(daeAtomicType::TOKEN==_atomType
+		||daeAtomicType::STRING==_atomType)
+		return true; return false;
+	}
 
 	#ifndef COLLADA_NODEPRECATED
 	COLLADA_DEPRECATED("getAtomicType")
@@ -363,10 +428,22 @@ COLLADA_(public) //ACCESSORS
 	 * @c _daeAtomWriter->_atomType. While nice in theory, it's
 	 * surprisingly easy to write code that corrupts array values.
 	 * @see @c where<daeAtom>().
-	 * 
 	 */
 	int getAtomicType(){ return /*_daeAtomWriter->*/_atomType; }
 
+	/**
+	 * Tells if @c daeAtomicType::EXTENSION!=getAtomicType(), in 
+	 * which case there is a standard binary representation, other
+	 * than an array (see @c hasListType()) or an extension.
+	 * @note This should be used to determine if the underlying type is
+	 * a standard binary representation.
+	 *
+	 * @note "ATOMIC" is not a type. Here it means all built-in types
+	 * except for lists.
+	 * @see @c hasListType().
+	 */
+	bool hasAtomicType(){ return daeAtomicType::EXTENSION!=_atomType; }
+	
 	/**
 	 * Gets the string associated with this type.
 	 * The pointer will be unique for a given string.
@@ -374,16 +451,38 @@ COLLADA_(public) //ACCESSORS
 	 * @return Returns the string associated with this type.
 	 */
 	inline daeString getTypeID()const{ return _typeID; }	
-	
+			  
+	/**
+	 * Tells if @c unserialize() expects its @c daeOpaque to
+	 * be the @c union value inside of its @c daeAnySimpleType.
+	 * @c where() must be used to obtain a compatible @c daeAtom
+	 * or @c daeArray based @c daeTypewriter in order to assign to
+	 * a value of the same type that is not a @ daeAnySimpleType or
+	 * where changing the value's type is being avoided.
+	 * @see @c where().
+	 *
+	 * @note NOTE "hasAnySimpleType" since this isn't testing
+	 * the underlying (dynamic) type and the ending -Type comes
+	 * from "xs:anySimpleType." 
+	 */
+	inline bool isAnySimpleType(){ return _daeAtomWriter!=this&&this!=_daeArrayWriter; }
+
 COLLADA_(private) 
 
-	template<class,class> friend class daeType;
+	friend class daeAnySimpleTypewriter;
+	template<class,class> friend class daeType;	
 
-	int _version;
+	enum{ _versions=1 };
+	unsigned _version:4,_list:1;
 	int _atomType;
 	daeSize _sizeof;
-	daeString _typeID; 
-	daeTypewriter *_daeAtomWriter, *_daeArrayWriter;
+	daeString _typeID;
+	/**
+	 * @note @c this is one of these unless it is xs:anySimpleType
+	 * based, in which case there are 3 @c daeTypewriter available
+	 * and @c unserialize() expects @c daeAnySimpleType based data.
+	 */
+	daeTypewriter *_daeAtomWriter,*_daeArrayWriter;
 
 	COLLADA_NOALIAS
 	#ifdef NDEBUG
@@ -401,35 +500,61 @@ COLLADA_(public) //These have to be public.
 	/**
 	 * @c typeid can be deduced from the typist in this case.
 	 */
-	daeTypewriter(T*,daeTypist<T>*):_version(1),_sizeof(sizeof(T))
+	daeTypewriter(T*,daeTypist<T>*):_list()
 	{
-		_typeID = _ID(typeid(T).name());
+		_init(typeid(T),sizeof(T));
 	}
 	template<class T>
 	/**
 	 * @c typeid can be deduced from the typist in this case.
 	 */
-	daeTypewriter(daeArray<T>*,daeTypist<T>*):_version(1),_sizeof(sizeof(daeArray<T>))
+	daeTypewriter(daeArray<T>*,daeTypist<T>*):_list(1)
 	{
-		_typeID = _ID(typeid(daeArray<T>).name());
+		_init(typeid(daeArray<T>),sizeof(daeArray<T>));
+	}
+	template<class T>
+	/**HYPOTHETICAL?
+	 * @c typeid can be deduced from the typist in this case.
+	 */
+	daeTypewriter(daeArray<T>*,daeTypist<daeArray<T>>*):_list(1)
+	{			
+		//ASSUMING WON'T WORK since 2D array serialization is
+		//impossible. Most likely a template is automatically
+		//making such a type and so a review will be in order.
+		assert(!_list); 
+
+		_init(typeid(daeArray<T>),sizeof(daeArray<T>));
 	}
 	template<class T> //daeEnumeration vis-a-vis daeEnumTypist
 	/**
 	 * Call @c setTypeID() manually if the typist is @c not daeTypist<T>.
 	 */
-	daeTypewriter(T*,...):_version(1),_sizeof(sizeof(T))
+	daeTypewriter(T*,...):_list()
 	{
-		_typeID = nullptr;
+		_init(typeid(void),sizeof(T)); _typeID = nullptr;
 	}	
+	/**WORKAROUND
+	 * @c daeAtomicType::VOID Constructor
+	 */
+	daeTypewriter():_list(),_atomType(daeAtomicType::VOID)
+	{
+		_init(typeid(void),0); _daeAtomWriter = _daeArrayWriter = this;
+	}
+	void _init(const std::type_info &ti, size_t so)
+	{
+		_version = _versions; _sizeof = so; _typeID = _ID(ti.name());
+	}
 	/**
 	* Manually sets the string returned by @c getTypeID() for both
 	* of the lined atom & array typewriters, if not previously set.
 	*/
-	template<class T> inline void setTypeID()
+	template<class T> inline void setTypeID(bool list=false)
 	{
 		if(_typeID==nullptr)
 		{
+			_daeArrayWriter->_list = list?1:0;
 			_daeAtomWriter->_typeID = _ID(typeid(T).name());
+			_daeArrayWriter->_list = 1;
 			_daeArrayWriter->_typeID = _ID(typeid(daeArray<T>).name());
 		}
 		else assert(0);
@@ -451,7 +576,7 @@ COLLADA_(public)
 
 	/**CUTE
 	 * Gets a @c daeTypewriter appropriate for atomic types.	 
-	 * GCC/C++ require this to be defined outside of @c daeTypewriter.
+	 * GCC/C++ require this to be defined outside the class.
 	 */
 	template<class daeAtom> inline daeTypewriter &where();
 	/**
@@ -463,7 +588,7 @@ COLLADA_(public)
 template<> 
 /**CUTE, EXPLICIT-SPECIALIZATOIN
  * Gets a @c daeTypewriter appropriate for atomic types.
- * GCC/C++ require this to be defined outside of @c daeTypewriter.
+ * GCC/C++ require this to be defined outside the class.
  */
 inline daeTypewriter &daeTypewriter::where<daeAtom>(){ return *_daeAtomWriter; }
 template<> 
@@ -473,6 +598,24 @@ template<>
  * GCC/C++ require this to be defined outside of @c daeTypewriter.
  */
 inline daeTypewriter &daeTypewriter::where<daeArray>(){ return *_daeArrayWriter; }	
+  
+/**NEVER-CONST
+ * This is a restricted typerwriter for xs:anySimpleType support where
+ * vales are static.
+ * @see @c XS::Attribute::getType() versus @c XS::Attribute::getTypeWRT().
+ */
+class daeTypewriter2 : private daeTypewriter
+{
+COLLADA_(public)
+
+	using daeTypewriter::copy;
+	using daeTypewriter::compare;
+	using daeTypewriter::serialize;
+	using daeTypewriter::unserialize;
+	using daeTypewriter::memoryToString;
+	using daeTypewriter::stringToMemory;
+	using daeTypewriter::isAnySimpleType;
+};
 
 template<int buffer_size>
 /**INTERNAL
@@ -575,16 +718,16 @@ public: //NOT GOOD //NOT GOOD //NOT GOOD //NOT GOOD //NOT GOOD
 		assert(current<=end); return end-current;
 	}
 };
-		
+						  
 template<class T, class /*Typist*/U=daeTypist<T>>
-/**
+/**NEVER-CONST
  * @c daeType implements an instance of @c daeTypewriter. It has
  * facilities for tandom "atom" & "array" typewriters. It's easy
  * to use: You simply construct it, and then get the atom writer
  * via the @c daeTypewriter& conversion operator. Generally this
  * process is automatic. The array typewriter is obtained via an
  * API belonging to @c daeTypewriter. It cannot be done directly.
- * @see @c daeTypewriter::per().
+ * @see @c daeTypewriter::where().
  */
 class daeType
 {
@@ -829,7 +972,10 @@ struct daeTypist10 : daeTypist<>
 	 */
 	static daeOK encodeXML(std::istream &src, I &dst)
 	{
-		if(system_type<0&&sizeof(int)==sizeof(I))
+		//The '-' check is for daeAST::TypedUnion handling, but
+		//also, Visual Studio, while converting to unsigned int
+		//does not fail if the figure after sign exceeds INTMAX.
+		if(system_type<0&&sizeof(int)==sizeof(I)&&'-'!=src.peek())
 		{				
 			//I think -1 will convert to an unsigned value, but
 			//4294967295 (0xFFFFFFFF) into 32 signed bits fails.
@@ -861,27 +1007,27 @@ struct daeTypist10<I,sizeof(char)> : daeTypist<>
 		if(!src.fail()) dst = (I)proxy; return OK;
 	}
 };
-template<> struct daeTypist<daeByte> : daeTypist10<daeByte> //xs:byte
+template<> struct daeTypist<char> : daeTypist10<char> //xs:byte?
 {};
-template<> struct daeTypist<daeUByte> : daeTypist10<daeUByte> //xs:unsignedByte
+template<> struct daeTypist<signed char> : daeTypist10<signed char> //xs:byte?
 {};
-template<> struct daeTypist<daeTypic //xs:short
-<(sizeof(daeShort)>sizeof(daeByte)),daeShort,class notShort>::type> : daeTypist10<daeShort> 
+template<> struct daeTypist<unsigned char> : daeTypist10<unsigned char> //xs:unsignedByte?
 {};
-template<> struct daeTypist<daeTypic //xs:unsignedShort
-<(sizeof(daeShort)>sizeof(daeByte)),daeUShort,class notUShort>::type> : daeTypist10<daeUShort> 
+template<> struct daeTypist<short> : daeTypist10<short> //xs:short?
 {};
-template<> struct daeTypist<daeTypic //xs:int
-<(sizeof(daeInt)>sizeof(daeShort)),daeInt,class notInt>::type> : daeTypist10<daeInt>
+template<> struct daeTypist<unsigned short> : daeTypist10<unsigned short> //xs:unsignedShort?
 {};
-template<> struct daeTypist<daeTypic //xs:unsignedInt
-<(sizeof(daeInt)>sizeof(daeShort)),daeUInt,class notUInt>::type> : daeTypist10<daeUInt> 
+template<> struct daeTypist<int> : daeTypist10<int> //xs:int?
 {};
-template<> struct daeTypist<daeTypic //xs:long
-<(sizeof(daeLong)>sizeof(daeInt)),daeLong,class notLong>::type> : daeTypist10<daeLong>
+template<> struct daeTypist<unsigned int> : daeTypist10<unsigned int> //xs:unsignedInt?
 {};
-template<> struct daeTypist<daeTypic //xs:unsignedLong
-<(sizeof(daeLong)>sizeof(daeInt)),daeULong,class notULong>::type> : daeTypist10<daeULong>
+template<> struct daeTypist<long> : daeTypist10<long> //xs:long?
+{};
+template<> struct daeTypist<unsigned long> : daeTypist10<unsigned long> //xs:unsignedLong?
+{};
+template<> struct daeTypist<long long> : daeTypist10<long long> //xs:long?
+{};
+template<> struct daeTypist<unsigned long long> : daeTypist10<unsigned long long> //xs:unsignedLong?
 {};
 
 template<class FP, class I, I NaN, I INF, I _INF>
@@ -903,12 +1049,11 @@ struct daeTypistFP : daeTypist<>
 		else if((I&)src==_INF) dst << "-INF"; else dst << src; return DAE_OK;
 	}
 	static daeOK encodeXML(std::istream &src, FP &dst)
-	{						
-		src >> dst; if(!src.fail()) return DAE_OK;
-		#ifdef NDEBUG
-		#error Test this. Especially -INF.
-		#endif
+	{	
+		char sign = src.peek(); //Lost on failure.
+		src >> dst; if(!src.fail()) return DAE_OK;		
 		src.clear();		
+		
 		char buf[8]; src >> std::setw(sizeof(buf)) >> buf;
 		switch(buf[0])
 		{
@@ -919,8 +1064,11 @@ struct daeTypistFP : daeTypist<>
 		case 'I': if(buf[1]!='N'||buf[2]!='F'||buf[3]!='\0') break;
 		//These could become overwhelming. (Could store a flag?)
 		//daeEH::Warning<<"INF encountered while setting an attribute or value";
-		(I&)dst = INF; return DAE_OK;
+		(I&)dst = sign=='-'?_INF:INF; return DAE_OK;
+		//KEEPING THIS HERE IN CASE COMPILERS BEHAVE DIFFERENTLY.
 		case '-': if(buf[1]!='I'||buf[2]!='N'||buf[3]!='F'||buf[4]!='\0') break;
+		//DOCUMENT ME (compiler quirks... MSVC2015 eats the sign.)
+		assert(0);
 		//These could become overwhelming. (Could store a flag?)
 		//daeEH::Warning<<"-INF encountered while setting an attribute or value";
 		(I&)dst = _INF; return DAE_OK;
@@ -1049,9 +1197,20 @@ template<> struct daeTypist<daeTokenRef> : daeTypist<daeStringRef> //xs:token
 	}
 };	
 
-/**INTERNAL */
+/**TODO, INTERNAL 
+ * 
+ * @todo This header takes up a lot of space for very little.
+ * It especially increases the footprint of xs:anySimpleType
+ * data units, and doesn't add much to arrays of binary data.
+ * A time type might eventually make xs:anySimpleType larger
+ * anyway. The only way to excise this header is to make the
+ * @c daeBinary class to not build on @c daeArray, or to not
+ * use @c public inheritance.
+ */
 struct __daeBinary__static
 { 
+	//REMINDER: Don't change this to "short" since there
+	//must be 8 bytes to __daeBinary__static in total...
 	int _base; 	
 	//HACK: daeBinary needs this structure to be 8 bytes
 	//to make daeBinary<N,0> and daeBinary<N,!0> line up.
@@ -1291,23 +1450,44 @@ COLLADA_(public) //Serialization APIs
 		for(i=0;i<CHAR_BIT;i+=8) //This is academic.
 		for(j=i+4;j>=i;j-=4) 
 		{
-			nibble = src.get(); 
-			if(nibble>='a'&&nibble<='f')
+			nibble = src.get(); 			
+			if(nibble<'0'||nibble>'9')
 			{
-				nibble = 10+nibble-'a';
-			}
-			else if(nibble<'0'||nibble>'9')
-			{
-				//EOF==get() is setting the failbit???
-				if(src.eof()) //clear();
-				src.clear(~src.failbit&src.rdstate());
-				else src.putback(nibble);				
-				if(j!=4) if(j%8!=0)
+				//Give priority to 0~9.
+				nibble = tolower(nibble);
+				if(nibble<'a'||nibble>'f')
 				{
-					setSurplus(CHAR_BIT-j-4); 
-					daeArray<char>::push_back(value);
-				}//Enforce two chars per value?
-				else src.setstate(src.failbit); return;
+					if(!src.eof()) 
+					{
+						//Preserve state?
+						src.putback(nibble);
+						//Signal illegal character so list
+						//processing halts. 
+						if(!COLLADA_isspace(nibble))
+						goto fail;
+					}
+					else //clear();
+					{
+						//EOF==get() is setting the failbit???
+						src.clear(~src.failbit&src.rdstate());
+					}
+					//Enforce two chars per value?
+					if(j!=4) if(j%8!=0)
+					{
+						setSurplus(CHAR_BIT-j-4); 
+						daeArray<char>::push_back(value);
+					}
+					else 
+					{
+						//And what about _failure_to_unserialize?
+						//These could become overwhelming. (Could store a flag?)
+						//daeEH::Error<<"hexBinary had odd character?";
+
+						fail: src.setstate(src.failbit); 
+					}
+					return;
+				}
+				else nibble = 10+nibble-'a';
 			}//Can Endianness be related to CHAR_BIT?
 			else nibble-='0'; value+=nibble<<j;
 		}		
@@ -1383,6 +1563,195 @@ template<> struct daeTypist<daeBinary<16/*,N*/>> : daeTypist<daeBinary<>> //xs:h
 template<> struct daeTypist<daeBinary<64/*,N*/>> : daeTypist<daeBinary<>> //xs:base64Binary
 {	
 	enum{ binary_type,system_type=daeAtomicType::BINARY };
+};
+
+/**NEVER-CONST
+ * @c daeAnySimpleTypewriter facilitates xs:anySimpleType logic.
+ * @note This class is derived (backward) from @c daeData. It's
+ * more of an afterthought, given that xs:anySimpleType is very
+ * low priority, by nature.
+ */
+class daeAnySimpleTypewriter : public daeTypewriter
+{	
+COLLADA_(private) //UTILITIES
+
+	typedef void *A; //alignment
+	enum{ _A = -(int)sizeof(A) };	
+	size_t _size(daeOpaque);
+	bool _reset_type(daeOpaque,size_t);
+	inline daeTypewriter *_typewriter()
+	{
+		return hasListType()?_daeArrayWriter:_daeAtomWriter;
+	}
+	friend daeData;
+	static daeAnySimpleTypewriter*&_type(daeOpaque o){ return o[_A]; }
+	static daeAnySimpleTypewriter *_type(daeString,daeString,size_t&);
+
+COLLADA_(public) //daeTypewriter methods
+
+	virtual void copy(const daeOpaque src, daeOpaque dst)
+	{	
+		_assert_this_and_type(dst);
+		if(this!=_type(src)) 
+		return _type(src)->copy(src,dst);
+		if(this==_type(dst)||_reset_type(dst,_size(src)))
+		_typewriter()->copy(src,dst);
+		else assert(0); //programmer error
+	}
+
+	virtual int compare(const daeOpaque a, const daeOpaque b)
+	{
+		_assert_this_and_type(b);
+		if(this!=_type(a)) 
+		return _type(a)->compare(a,b);
+		if(this==_type(b)) 
+		return _typewriter()->compare(a,b);
+		//This works but the integer family of types could
+		//stand to be comparable...
+		//return this>_type(b)?1:-1;		
+		int s = getAtomicType(); 
+		int t = _type(b)->getAtomicType();		
+		//WARNING: This sorts arrays between -1 and 0. But		
+		//if s==0||t==0 were the condition arrays would be
+		//interleaved alongside their types instead. Which
+		//is not enough of an improvement to make a change.
+		if(s==t)
+		{
+			assert(s==0);
+			//TODO? Array comparison in terms of values is
+			//not really practical.			
+			return this>_type(b)?1:-1;		
+		}
+		//HACK? This allows for the following relationship
+		//xs:long < xs:int < xs:uint < xs:ulong
+		//(daeAnySimpleTypewriter doesn't use the byte and
+		//short types, but they would work too if it did.)
+		//daeAtomicType just happens to be set up this way
+		//and it just happens that negative values are set
+		//to use xs:int and xs:long, and 64-bit values are
+		//always more than what the 32-bit value will hold.	
+		return s-t;
+	}
+
+	virtual daeOK serialize(const daeOpaque src, daeArray<daeStringCP> &dstIn)	
+	{
+		_assert_this_and_type(src);
+		return _type(src)->_typewriter()->serialize(src,dstIn);
+	}
+
+	virtual daeOK unserialize(const daeStringCP *srcIn, const daeStringCP *srcEnd, daeOpaque dst)
+	{
+		_assert_this_and_type(dst);
+		daeAnySimpleTypewriter *type; size_t size;
+		type = _type(srcIn,srcEnd,size);
+		return type->_unserialize2(srcIn,srcEnd,dst,size);
+	}
+	friend class daeDefault;
+	inline daeOK _unserialize2(daeString srcIn, daeString srcEnd, daeOpaque dst, size_t size)
+	{
+		if(_type(dst)!=this&&!_reset_type(dst,size)
+		||DAE_OK!=_typewriter()->unserialize(srcIn,srcEnd,dst).error)
+		return _failure_to_unserialize(srcIn,srcEnd,dst,size);
+		return DAE_OK;		
+	}
+	/**PROGRAMMER ERROR?
+	 * @note This is promoting 32-bit values to 64-bit types in order
+	 * to not have to parse the individual values of arrays carefully.
+	 * Falls back to xs:string in cases where @c _type() has selected
+	 * an incompatible binary representation. 
+	 * @note This should not occur, but if data were dropped it would
+	 * be unacceptable.
+	 */
+	daeOK _failure_to_unserialize(daeString,daeString,daeOpaque,size_t);
+
+COLLADA_(private) //daeAnySimpleType relationship
+
+	friend class daeAnySimpleType;
+	/**
+	 * @c daeAnySimpleType Constructor 
+	 *
+	 * @param decayed_type is an invariant typewriter
+	 * pair which @c daeTypewriter::where<>() returns.
+	 */
+	daeAnySimpleTypewriter(daeTypewriter &decayed_type)
+	:daeTypewriter(decayed_type)
+	{
+		assert(isAnySimpleType()&&!decayed_type.isAnySimpleType());
+	}
+
+COLLADA_(private) //_DEBUG	
+	/**
+	 * Checks to see if there is really a typewriter pointer
+	 * in front of the data. These typewriters must be known
+	 * to the COLLADA-DOM library.
+	 */
+	inline void _assert_this_and_type(daeOpaque b)
+	{
+		#if defined BUILDING_COLLADA_DOM && defined(_DEBUG)
+		extern void daeAnySimpleType_assert(daeTypewriter*);
+		this->_assert_daeAnySimpleTypewriter();
+		_type(b)->_assert_daeAnySimpleTypewriter();
+		#endif
+	}
+	/** Implements @c _assert_this_and_type(). */
+	void _assert_daeAnySimpleTypewriter();
+};
+
+/**
+ * @c daeAnySimpleType implements @c daeType for an xs:anySimpleType 
+ * based data. In addition it has some unrelated inner classes which
+ * are organized below it mainly so it acts like a @c namespace. Its
+ * inner classes would have very convoluted names if they weren't so.
+ * Plus, it's easier to manage C++ friendship relationships this way.
+ *
+ * @note This class mainly simplifies the 4 typewriter setup that is
+ * required by @c daeAnySimpleTypewriter. Although @c daeArray based
+ * typewriters are often not required, it's often desirable to cover
+ * both types together.
+ */
+class daeAnySimpleType
+{
+COLLADA_(public) //NAMESPACE
+
+	//Unit needs to be public since 
+	//it's xs::anySimpleType.
+
+	class TypedUnion; 
+	class Data;
+
+COLLADA_(private) //INTERNAL
+	
+	daeAnySimpleTypewriter _daeAtomWriter;
+	daeAnySimpleTypewriter _daeArrayWriter;
+
+COLLADA_(public) //INTERNAL
+	/**
+	 * @c daeAnySimpleTypewriter Constructor
+	 */
+	daeAnySimpleType(daeTypewriter &decayed_type)
+	:_daeAtomWriter(decayed_type.where<daeAtom>()),
+	_daeArrayWriter(decayed_type.where<daeArray>())
+	{}
+
+COLLADA_(public) //OPERATORS
+	/**INTERNAL
+	 * Use [1] to access the @c daeArray typewriter.
+	 * Add 2 to the subscript to access the unowned 
+	 * typewriters.
+	 */
+	inline operator daeAnySimpleTypewriter*()
+	{
+		return &_daeAtomWriter;
+	}
+	/**INTERNAL
+	 * C2819 says -> is different from a conversion
+	 * to pointer operator. This accesses the owned
+	 * atom typewriter in cases where any will work.
+	 */
+	inline daeAnySimpleTypewriter *operator->()
+	{
+		return &_daeAtomWriter;
+	}
 };
 
 //---.
