@@ -110,9 +110,6 @@ XS::Attribute::Attribute(int)
 	st->_itemType = st;
 	st->_value_typewriter = 
 	_type.writer = &daeMetaElement_voidwriter;
-	#ifdef _DEBUG
-	__vizDefault = 
-	#endif
 	st->_name = _type.alias = 
 	_attribute_name_string = (char*)&_offset;
 	st->_restriction = nullptr;

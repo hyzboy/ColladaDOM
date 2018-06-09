@@ -126,7 +126,7 @@ COLLADA_(public) //OPERATORS (legacy compatibility layer)
 
 	//REMINDER: These should match daeData::getType() and
 	//daeDefault::getType(). Switching to daeTypewriter2*
-	//diminishes theeir utility to the point that there's
+	//diminishes their utility to the point that there is
 	//no other reason to keep them around.
 
 	inline operator daeTypewriter2*()const

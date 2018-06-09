@@ -394,6 +394,7 @@ COLLADA_(public) //TYPE-SYSTEM ACCESSORS
 
 COLLADA_(public) //SUPPLEMENTAL
 	/**
+	 * Formerly "getType."
 	 * Gets the type of the default, which is fixed for xs:anySimpleType, and for
 	 * other data, avoids the overhead of @c getTypeWRT(), but shouldn't be mixed
 	 * with @c getWRT(). This is nonessential but users may find it helpful.
@@ -405,6 +406,7 @@ COLLADA_(public) //SUPPLEMENTAL
 	}
 
 	/**
+	 * Formerly "getSize."
 	 * Gets the size of the default, which is fixed for xs:anySimpleType, and for
 	 * other data. This is nonessential but users may find it helpful.
 	 * Supplementing deprecated @c getSize().	 
