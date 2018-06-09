@@ -299,12 +299,12 @@ xs_(daeTokenRef,language),
 xs_(daeTokenRef,Name),
 xs_(daeTokenRef,NCName),
 xs_(daeTokenRef,NMTOKEN),&
-daeStringRef_xs_NMTOKENS = daeStringRef_xs_NMTOKEN,
+daeStringRef_xs_NMTOKENS = daeStringRef_xs_NMTOKEN.where<daeArray>(),
 xs_(daeTokenRef,ID),
 xs_(daeTokenRef,IDREF),&
-daeStringRef_xs_IDREFS = daeStringRef_xs_IDREF,
+daeStringRef_xs_IDREFS = daeStringRef_xs_IDREF.where<daeArray>(),
 xs_(daeTokenRef,ENTITY),&
-daeStringRef_xs_ENTITIES = daeStringRef_xs_ENTITY;
+daeStringRef_xs_ENTITIES = daeStringRef_xs_ENTITY.where<daeArray>();
 #undef xs_
 
 //A content-typewriter is a big side project.
@@ -379,42 +379,42 @@ extern daeTypewriter *daeStringRef_xs_(daeName name)
 	if(name[0]!='x'||name[1]!='s'||name[2]!=':')
 	return nullptr;
 	name.string+=3; name.extent-=3;
-	#define _(x) if(#x==name) return &daeStringRef_xs_##x//;
+	#define _(x) if(#x==name) return &daeStringRef_xs_##x;
 	switch(name[0])
 	{
-	case 'a':_(anyURI);_(anySimpleType);
+	case 'a':_(anyURI)_(anySimpleType)
 	break;
-	case 'b':_(boolean);_(base64Binary);_(byte);
+	case 'b':_(boolean)_(base64Binary)_(byte)
 	break;
-	case 'd':_(double);_(dateTime);_(date);_(decimal);_(duration);
+	case 'd':_(double)_(dateTime)_(date)_(decimal)_(duration)
 	break;
-	case 'E':_(ENTITY);_(ENTITIES).where<daeArray>();
+	case 'E':_(ENTITY)_(ENTITIES)
 	break;
-	case 'f':_(float);
+	case 'f':_(float)
 	break;
-	case 'g':_(gDay);_(gYear);_(gMonth);_(gYearMonth);_(gMonthDay);
+	case 'g':_(gDay)_(gYear)_(gMonth)_(gYearMonth)_(gMonthDay)
 	break;
-	case 'h':_(hexBinary); 
+	case 'h':_(hexBinary) 
 	break;
-	case 'i':_(int);_(integer);
+	case 'i':_(int)_(integer)
 	break; 
-	case 'I':_(ID);_(IDREF);_(IDREFS).where<daeArray>();
+	case 'I':_(ID)_(IDREF)_(IDREFS)
 	break;
-	case 'l':_(long);_(language); 
+	case 'l':_(long)_(language) 
 	break;
-	case 'n':_(normalizedString);_(negativeInteger);_(nonNegativeInteger);_(nonPositiveInteger);
+	case 'n':_(normalizedString)_(negativeInteger)_(nonNegativeInteger)_(nonPositiveInteger)
 	break;
-	case 'N':_(NCName);_(Name);_(NMTOKEN);_(NMTOKENS).where<daeArray>();_(NOTATION); 
+	case 'N':_(NCName)_(Name)_(NMTOKEN)_(NMTOKENS)_(NOTATION) 
 	break;
-	case 'p':_(positiveInteger); 
+	case 'p':_(positiveInteger) 
 	break;
-	case 'Q':_(QName); 
+	case 'Q':_(QName) 
 	break;
-	case 's':_(string);_(short);
+	case 's':_(string)_(short)
 	break;
-	case 't':_(token);_(time);
+	case 't':_(token)_(time)
 	break;
-	case 'u':_(unsignedLong);_(unsignedInt);_(unsignedShort);_(unsignedByte); 
+	case 'u':_(unsignedLong)_(unsignedInt)_(unsignedShort)_(unsignedByte) 
 	break;
 	}return nullptr;
 	#undef _

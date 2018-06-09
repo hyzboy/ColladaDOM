@@ -317,7 +317,7 @@ COLLADA_(public) //ABSTRACT INTERFACE
 
 	 * REMINDER: If a desire is to minimize reallocations, the 
 	 * optimal route is for the loader to daeObject::reAlloc().
-	 * But it's only safe to do so if the array is empty or if
+	 * But it's only best to do so if the array is empty or if
 	 * the type of the daeArray is raw-copyable plain-old-data.
 	 * IN THIS CASE THE LOADER SHOULD COUNT THE ' ' CHARACTERS.
 	 */	
@@ -600,7 +600,7 @@ template<>
 inline daeTypewriter &daeTypewriter::where<daeArray>(){ return *_daeArrayWriter; }	
   
 /**NEVER-CONST
- * This is a restricted typerwriter for xs:anySimpleType support where
+ * This is a restricted typewriter for xs:anySimpleType support where
  * vales are static.
  * @see @c XS::Attribute::getType() versus @c XS::Attribute::getTypeWRT().
  */
@@ -956,6 +956,7 @@ template<> struct daeTypist<daeBoolean> : daeTypist<> //xs:boolean
 };
 
 //REMINDER: system_type must be visible to XS::Schema::XS::Schema::_typewrit().
+//REMINDER: The "size" parameter is strictly for specializing for 1==sizeof(I).
 template<class I, int size=sizeof(I)>
 /**
  * This is very simple now, but later when std::iostream isn't relied upon, it's
@@ -977,6 +978,7 @@ struct daeTypist10 : daeTypist<>
 		//does not fail if the figure after sign exceeds INTMAX.
 		if(system_type<0&&sizeof(int)==sizeof(I)&&'-'!=src.peek())
 		{				
+			daeCTC<sizeof(int)==4>();
 			//I think -1 will convert to an unsigned value, but
 			//4294967295 (0xFFFFFFFF) into 32 signed bits fails.
 			//TWO'S-COMPLEMENT
@@ -1704,6 +1706,7 @@ COLLADA_(private) //_DEBUG
  * inner classes would have very convoluted names if they weren't so.
  * Plus, it's easier to manage C++ friendship relationships this way.
  *
+ * CORRECTION: NOT 4... 2 (There was 4, before TypedUnion::_offset.)
  * @note This class mainly simplifies the 4 typewriter setup that is
  * required by @c daeAnySimpleTypewriter. Although @c daeArray based
  * typewriters are often not required, it's often desirable to cover
@@ -1713,7 +1716,7 @@ class daeAnySimpleType
 {
 COLLADA_(public) //NAMESPACE
 
-	//Unit needs to be public since 
+	//TypedUnion needs to be public since 
 	//it's xs::anySimpleType.
 
 	class TypedUnion; 
@@ -1736,8 +1739,6 @@ COLLADA_(public) //INTERNAL
 COLLADA_(public) //OPERATORS
 	/**INTERNAL
 	 * Use [1] to access the @c daeArray typewriter.
-	 * Add 2 to the subscript to access the unowned 
-	 * typewriters.
 	 */
 	inline operator daeAnySimpleTypewriter*()
 	{

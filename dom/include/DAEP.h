@@ -68,7 +68,7 @@ COLLADA_(public) COLLADA_SUPPRESS_C(4624)
 /**NOP @c note is undefined. */
 template<> class Proto<void>{};
 
-/**ABSTRACT BASE-CLASS, 8B-ALIGNMENT 
+/**ABSTRACT BASE-CLASS
  *
  * @class COLLADA::DAEP::Object
  *

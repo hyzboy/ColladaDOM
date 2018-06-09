@@ -149,7 +149,7 @@
       </Synthetic>
       <Synthetic Name="(daeAST::TypedUnion*)(this+1)">
         <Expand>
-          <!--Multi-inheritance bug?? In't act like daeDefault??
+          <!--Multi-inheritance bug?? Nothing like daeDefault??
           <ExpandedItem>*(daeAST::Data*)this,nd</ExpandedItem>-->
           <ExpandedItem>*(daeAST::TypedUnion*)(this+1),nd</ExpandedItem>
         </Expand>

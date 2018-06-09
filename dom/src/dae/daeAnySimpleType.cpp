@@ -475,7 +475,7 @@ daeAnySimpleTypewriter::_type(daeString srcIn, daeString srcEnd, size_t &size)
 
 	case HEX|DEC: //xs:hexBinary 
 
-		//Treat as a string if it there's any
+		//Treat as a string where there's any
 		//possibility it is a word/identifier.		
 		if(srcEnd-srcIn<32)	
 		goto string;
@@ -525,8 +525,8 @@ daeAnySimpleTypewriter::_type(daeString srcIn, daeString srcEnd, size_t &size)
 	case DP: //A period? 
 	case DP|HEX: //E.g. "cad.dae."
 	case SIGN: //A dash? 
-	case 0: //empty/whitespace strings?	
-	string: //last resort
+	case 0: //Empty/whitespace strings?	
+	string:
 
 		//REMINDER: Cannot be an array.
 		return daeAnySimpleType_string;
