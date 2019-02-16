@@ -26,9 +26,13 @@ COLLADA_(namespace)
  */
 struct daeObjectType
 {
-	//REF is used by URIs and IDREFs.
-	//ANY and above are element types.
-	//_ is 0, and indicates undeclared.
+	/**
+	 * REF is used by URIs and IDREFs.
+	 * ANY and above are element types.
+	 * _ is 0, and indicates undeclared.
+	 * _ or 0 is the pseudo-element type.
+	 * @see @c daeDocument::_PseudoElement
+	 */
 	enum{ REF=-3,DOM,DOC,_,ANY };
 };
 
@@ -132,7 +136,7 @@ COLLADA_(public) //__DAEP__Object__v1__model mutator APIs
 	/** Note: @c DAEP::Value uses this to forbid subobjects. */
 	template<class T> struct __subobject_flag
 	{ 
-		typedef char Yes; typedef long No;	
+		typedef char Yes, (&No)[2];	
 		static Yes Value(DAEP::Object*); static No Value(...);
 		enum{ value=sizeof(Yes)==sizeof(Value((T*)nullptr)) };
 	};	
@@ -220,12 +224,11 @@ COLLADA_(protected)
 	/**
 	 * This is the @c COLLADA::DOM_process_share ID.
 	 */	
-	size_t _ps;
+	const size_t _ps;
 	/**
 	 * This points at @c COLLADA::DOM_process_share.
-	 * @note The type is likely to change at some point.
 	 */	
-	daePShare *_tag;
+	const daePShare *const _ptr;
 	/**
 	 * This is a singly-linked-list; ostensibly used
 	 * by the destructor to delete the DAEP Models it has.
@@ -246,10 +249,10 @@ COLLADA_(protected)
 	/**
 	 * Default Constructor
 	 */
-	daeProcessShare_base():_deleteList(),_opaqueModel()
-	{
-		_ps = DOM_process_share; _tag = &DOM_process_share; 
-	}	
+	daeProcessShare_base
+	(size_t ps=DOM_process_share.tags.moduleTag
+	,const daePShare *ptr=&DOM_process_share)
+	:_ps(ps),_ptr(ptr),_deleteList(),_opaqueModel(){}	
 
 COLLADA_(public)
 	/**
@@ -289,7 +292,20 @@ COLLADA_(private)
 	/**
 	 * @c _default() using this constructor to capture the "vptr"
 	 */
-	daeProcessShare(size_t ps, daePShare *tag){ _ps = ps; _tag = tag; }
+	daeProcessShare(size_t ps, daePShare *ptr)
+	:daeProcessShare_base(_ps,_ptr){}
+
+COLLADA_(public)
+	/**
+	 * Implements @c XS::Import::getSchemaLocation().
+	 * Most likely an empty string unless @c this is an @c XS::Schema
+	 * object. Non schema objects are free to assign any string to it.
+	 * Corresponds to <xs:import schemaLocation> & xsi:schemaLocation.
+	 */
+	daeStringRef_base getLocation()const
+	{
+		return __DAEP__Make__location;
+	}
 
 COLLADA_(public)
 	/**
@@ -299,12 +315,12 @@ COLLADA_(public)
 	 */
 	COLLADA_DOM_LINKAGE DAEP::Model &getOpaqueModel();
 
-	template<int Features, class This, int N>
+	template<int Features, class This>
 	/**
 	 * This is for implementing "__DAEP__Object__v1__model." It works
 	 * like @c XS::Schema::addElement() more or less.
 	 */
-	daeModel &addModel(This *toc, daeClientStringCP (&cplusplus_ident)[N])
+	daeModel &addModel(This *toc, daeClientString2 cplusplus_ident)
 	{
 		const daeObject *upcast = toc; (void)upcast;
 		daeFeatureID ff = (daeFeatureID)(Features*(Features<=0?1:-1));
@@ -312,22 +328,20 @@ COLLADA_(public)
 		return o.setName(cplusplus_ident);
 	}
 };
-										     
+							
 /**
  * COLLADA C++ class that implements the new version 2.5 object model.
  *
  * @class COLLADA::daeObject
  *
- * There are precisely 3 data-members:
+ * There are precisely 3 data-members (in addition to a virtual-table):
  * - _refs: ref counter. Interlocked (Atomic) functions are 32-bit only.
  * - _tags: four bytes, used to track various states; fills 32-bit hole.
  * - _containingObject: points upstream until an object contains itself.
- * @see @c DAEP::Object.
+ * @see @c DAEP::Object and @c daeObjectTags.
  *
- * __DAEP__Object__tags
+ * __DAEP__Object__tags (daeObjectTags)
  * ====================
- * This is a 32-bit field holding 4 @c daeTag. It corresponds to @c daeElementTags.
- * If @c daeTag is larger than 8 bits, this field must be larger to accommodate them.
  * - 1st tag is available for object-based classes to use anyway they like.
  * - 2nd tag is available for user-defined subclasses to use as they see fit.*
  * - 3rd tag is the virtual-table-layout version number. It is byte-addressable.
@@ -335,20 +349,13 @@ COLLADA_(public)
  * * Elements cannot be "user-defined." Tags 1,2&3 identify their namespace/prefix.
  * **The share cannot be separate from the tags, as the namespace is dependent on it.
  * @see @c daeElementTags.
- *
- * VIRTUAL INHERITANCE
- * ===================
- * @note Virtual inheritance is used only to
- * better ensure that the DAEP classes overlay
- * properly when they're @c reinterpret_cast to
- * their "daeX" counterparts. 
- * (This is because @c daeElement cannot inherit
- * from both @c DAEP::Element and @c daeObject.)
  */
 class daeObject : public DAEP::Object
 {	
 	//Microsoft's Natvis can't seem to find namespaces???
 	typedef DAEP::Object __super_natvis;
+
+	template<class> friend struct daeNullable;
 
 COLLADA_(public)
 	/**WORKAROUND
@@ -360,8 +367,6 @@ COLLADA_(public)
 
 COLLADA_(private)
 
-	template<class> friend class daeSmartRef;
-
 	/**NOT-THREAD-SAFE
 	 * Increments the reference count of this element.
 	 * @note Should not be used externally if daeSmartRefs are being used, they call it
@@ -370,7 +375,12 @@ COLLADA_(private)
 	 * ===================
 	 * InterlockedIncrement or something else is needed here.
 	 */
-	inline void _ref()const{ if(this!=nullptr) __DAEP__Object__refs++; }
+	inline void _ref()const
+	{
+		assert(this!=nullptr); //See daeNullable.
+
+		__DAEP__Object__refs++; 
+	}
 
 	/**NOT-THREAD-SAFE
 	 * Decrements the reference count and deletes the object if reference count is zero.
@@ -382,14 +392,17 @@ COLLADA_(private)
 	 */
 	inline void _release()const
 	{
+		assert(this!=nullptr); //See daeNullable.
+
 		//Notice. There are 3 types of references.
 		//1: embedded. These never hit 0, and are very large numbers.
 		//2: subobject. These are always less than 0. They require <=0 to be below.
 		//3: regular. These are deleted when 0. Either by the database, or the DAEP Make object.
 
-		if(this!=nullptr&&--__DAEP__Object__refs<=0) __DAEP__Object__0(); //_release2();
+		if(--__DAEP__Object__refs<=0) __DAEP__Object__0(); //_release2();
 	}		
-
+	
+	friend class daeSmartRef_base;
 	/**
 	 * Releases on the condition that the caller is the last remaining reference holder.
 	 * This is used to "compact" @c daeDOM::_closedDocs; including any archives therein.
@@ -397,9 +410,11 @@ COLLADA_(private)
 	 */
 	inline bool _compact()const
 	{
+		assert(this!=nullptr);
+
 		//_release() checks for nullptr regardless, so do it here. (It'll be optimized.)
 		//>1 is used instead of !=1 in order to ensure compaction. (Sub 1 won't delete.)
-		if(this==nullptr||__DAEP__Object__refs>1) return false; _release(); return true;
+		if(__DAEP__Object__refs>1) return false; _release(); return true;
 	}
 	
 COLLADA_(public) //UNADVERTISED METHODS
@@ -419,26 +434,29 @@ COLLADA_(public) //UNADVERTISED METHODS
 		return (daeUInt)__DAEP__Object__refs>=__DAEP__Object__refs_embedding_threshold; 
 	}
 
-	/**
+	friend class daeDefault;	
+	friend class daeSmartTag_base;
+	/**MUTABLE
 	 * This tag is free to be used by object-based classes.
-	 * The class can also use @c (&_getClassTag())[1], or define a method that
 	 * its user-defined subclasses may use. If such a method is not defined by
 	 * the class, then it reserves the right to both tags.
 	 */
-	inline daeTag &_getClassTag(){ return (daeTag&)__DAEP__Object__tags; }
-	/**CONST-FORM 
+	protected: inline daeObjectTags &_getObjectTags()const
+	{
+		return *(daeObjectTags*)&__DAEP__Object__tags; 
+	}
+	/**WARNING, CONST-FORM 
+	 * @warning & on return type is subject to change, please don't rely on it.
+	 *
 	 * This tag is available to sub-classes. 
-	 * @see the non-const @c _getClassTag() Doxygentation. 
+	 * @see the non-const @c getObjectTags() Doxygentation. 
 	 */
-	inline const daeTag &_getClassTag()const{ return (daeTag&)__DAEP__Object__tags; }
+	public: inline daeObjectTags getObjectTags()const
+	{
+		return *(daeObjectTags*)&__DAEP__Object__tags; 
+	}
 
-	/** 
-	 * @return Returns the virtual-method-tables' version.
-	 * @note The version is incremented anytime any method is added to any object.
-	 */
-	inline daeTag _getVersion()const{ return ((daeTag*)&__DAEP__Object__tags)[2]; }
-
-	/** ASSUMES 8-BIT TAGS
+	/**
 	 * @return Returns the process-share ID. This is limited to 7-bits, unless 
 	 * the @c daeElementTag structure is extended to 64 bits (or greater if some
 	 * systems are not byte-addressable.)
@@ -446,10 +464,7 @@ COLLADA_(public) //UNADVERTISED METHODS
 	 * originates this object. If there are more than 7-bits worth, they must wait
 	 * for a share to open up.
 	 */
-	inline daeUInt _getPShare()const
-	{
-		daeCTC<CHAR_BIT==8>(); return __DAEP__Object__tags>>25; 
-	}
+	inline unsigned int _getPShare()const{ return __DAEP__Object__tags>>25; }
 	/**
 	 * This is offered for symmetry with @c getDefaultProcessShare().
 	*/
@@ -469,11 +484,6 @@ COLLADA_(public) //UNADVERTISED METHODS
 		return daeProcessShare::_default(_getPShare());
 	}
 
-	/**
-	 * Used by @c daeElement::getElementTags() to do a compile-time-check. 
-	 */
-	enum{ _sizeof__DAEP__Object__tags=daeSizeOf(DAEP::Object,__DAEP__Object__tags) };
-
 	/**CIRCULAR-DEPENDENCY
 	 * @warning A @c daeDOM is never stored in a database.
 	 * @return Returns the @c daeDatabase storing the object, or
@@ -485,11 +495,11 @@ COLLADA_(public) //UNADVERTISED METHODS
 	//	return _isData()?&getDOM()->getDatabase():nullptr; 
 	//}
 
-	typedef int __isX_assume[8==CHAR_BIT];
 	/**
 	 * @return Returns @c true if this object belongs to a database. 
 	 */
-	inline bool _isData()const{ return 0x1000000==(__DAEP__Object__tags&0x1000000); }	
+	inline bool _isData()const{ return 0x1000000==(__DAEP__Object__tags&0x1000000); }
+
 	/**
 	 * @return Returns @c true if this object is a @c daeDOM object. 
 	 * @note This is faster than accessing __DAEP__Model__genus, and is
@@ -498,6 +508,7 @@ COLLADA_(public) //UNADVERTISED METHODS
 	 * "process share", that belongs to the library, and uses 2 to identify DOMs.
 	 */
 	inline bool _isDOM()const{ return 0x0000200==(__DAEP__Object__tags&0xFF00FF00); }
+
 	/**
 	 * @return Returns @c true if this object is a @c daeDoc object;
 	 * -note that @c daeDOM is a @c daeDoc, and that @c getObjectType()
@@ -507,22 +518,18 @@ COLLADA_(public) //UNADVERTISED METHODS
 	 * possible because Doc objects are managed by the library exclusively.
 	 * @remarks Here a @c daeDocument is data, but currently other @c daeDoc
 	 * are not data. All @c daeDoc belong to the 0th "process share', which is
-	 * the library's share. The value 1 is used to identity Docs. Docs can be any
+	 * the library's share. The value 0 is used to identity Docs. Docs can be any
 	 * of @c daeDocument or @c daeArchive. Hard/Symbolic links are a future feature.
 	 * (that may or may never be.)
+	 *
+	 * @remark 0 is chosen because @c domAny cannot have its QName prefix less than 1.
 	 */
-	inline bool _isDoc()const{ return 0x0000100==(__DAEP__Object__tags&0xFE00FF00); }	
-	/**
-	 * This got complicated when it was determined that @c domAny ill also
-	 * process-share 0, and so have tags similar to @c _isDOM() & @c _isDoc().
-	 * @remarks Later this will have some issues with @c daeElementTags::nameTag.
-	 */
-	inline bool _isAny()const{ return 0x1008000==(__DAEP__Object__tags&0xFF008000); }
+	inline bool _isDoc()const{ return 0x0000000==(__DAEP__Object__tags&0xFE00FF00); }		
+
 	/**
 	 * @return Returns @c _isDoc()||_isDOM(). Or if a non-element element container.
-	 * @remarks This is the primary motivation for @c _isAny(). @c domAny is in the way.
 	 */
-	inline bool _isDoc_or_DOM()const{ return 0x1008000>(__DAEP__Object__tags&0xFF00FFFF); }
+	inline bool _isDoc_or_DOM()const{ return 0x1000100>(__DAEP__Object__tags&0xFF00FFFF); }
 
 	/**
 	 * This makes @c a<daeElement>() easier read in keeping with @c isDOM() & @c isDoc().
@@ -563,11 +570,11 @@ COLLADA_(protected) //PROTECTED CONSTRUCTORS
 	 */
 	daeObject(){ /*NOP*/ }
 	/**
-	 * Prototype Non-Constructor
+	 * Prototype/Non-Constructor
 	 * 
 	 * It does install the "vptr" even though it's not necessary.
 	 */
-	explicit daeObject(const DAEP::Proto<> &pt):Object(pt){ /*NOP*/ }
+	explicit daeObject(enum dae_clear):Object(dae_clear){ /*NOP*/ }
 	/**
 	 * Constructor
 	 *
@@ -626,6 +633,7 @@ COLLADA_(public) //PUBLIC METHODS
 	 */
 	inline const daeObject &getParentObject()const
 	{
+		COLLADA_ASSUME(!_this__nullptr(__DAEP__Object__parent))
 		return *dae(__DAEP__Object__parent);
 	}
 
@@ -660,8 +668,6 @@ COLLADA_(public) //PUBLIC METHODS
 	{
 		const DAEP::Object *p,*q = __DAEP__Object__parent;
 		while(q!=(p=q->__DAEP__Object__parent)) q = p;
-		//GCC/C++ cry "specialization after instantiation."
-		//return dae(p)->a<daeDOM>();
 		return dae(p)->_isDOM()?(daeDOM*)p:nullptr;
 	}
 
@@ -690,73 +696,7 @@ COLLADA_(public) //PUBLIC METHODS
 		o = q = this; p = __DAEP__Object__parent;
 		while(q!=p){ o = q; q = p; p = p->__DAEP__Object__parent; }
 		return ((daeObject*)o)->_isDoc()?(daeDoc*)o:nullptr;
-	}
-	
-COLLADA_(public) //daeArray AU allocators
-
-	#define _(f,T) \
-	void(*f)(const daeObject*,daeAlloc<T>&,daeAlloc<T>&)
-	template<class T> 
-	/**
-	 * @c reAlloc is called indirectly by @c daeArray.
-	 * It could just as easily be a member of @c daeArray, 
-	 * -however conceptually the authority is invested in the 
-	 * object.
-	 *
-	 * @remarks @c this CAN be @nullptr. For purposes of 
-	 * managing allocation-units, @c nullptr is a pseudo object.
-	 */	
-	inline void reAlloc(daeAlloc<T>* &au, size_t newT, _(fn,T)=nullptr)
-	{
-		_reAlloc<0,0>((daeAlloc<>*&)au,newT,(_(,))fn); //"loses qualifiers" 
 	}	
-	template<class T>
-	/**WARNING
-	 * ...In case loaders want to avoid redundant allocation overhead
-	 * by tallying space-characters in parsing XML Schema style lists:
-	 *
-	 * @warning This is safe only if the AU is empty (a thunk) or if
-	 * the the type is "raw-copyable" "plain-old-data" that can be moved.
-	 * If non-empty it should not be attempted for non @c daeAtomicType types.
-	 * @see @c daeAtomicType::unserialize().
-	 */
-	inline void reAlloc(daeDatabase &db, daeAlloc<T>* &au, size_t newT, _(fn,T)=nullptr)
-	{
-		return _reAlloc<1,0>((daeAlloc<>*&)au,newT,(_(,))fn,&db); //"loses qualifiers" 
-	}
-	template<bool DB, bool AO> //INTERNAL
-	COLLADA_NOINLINE	
-	/** Implements reAlloc(). */
-	inline void _reAlloc(daeAlloc<>* &au, size_t newT, _(fn,)=nullptr, daeDatabase *db=nullptr)
-	{	
-		assert(newT>au->getCapacity()); //This is one-way.
-		daeAlloc<> &recycling = *au;
-		bool wasFree = AO?false:daeAlloc<>::isFreeAU(au);
-		if(!DB) db = this==nullptr?nullptr:_getDBase();	
-		au = !DB&&db==nullptr?&au->newThis(newT):&db->_new(newT,*au,*this);
-		assert(au!=&recycling);
-		recycling.moveThunk(au,newT);
-		//Copy/move the old memory over to the new memory?
-		if(fn!=nullptr) fn(this,*au,recycling); 
-		if(!AO&&wasFree)
-		if(!DB&&db==nullptr) 
-		recycling.deleteThis();
-		else db->_delete(recycling,*this);						
-	}
-	template<class T> 
-	/** @see daeObject::reAlloc(). */
-	inline void deAlloc(daeAlloc<T>* &au)
-	{
-		return _deAlloc((daeAlloc<>*&)au); //"loses qualifiers"
-	}	
-	/** Implements deAlloc(). */
-	COLLADA_NOINLINE inline void _deAlloc(daeAlloc<>* &au)
-	{
-		if(!daeAlloc<>::isFreeAU(au)) return;
-		daeDatabase *db = this==nullptr?nullptr:_getDBase();
-		return db!=nullptr?db->_delete(*au,*this):au->deleteThis();
-	}
-	#undef _
 
 COLLADA_(public) //LEGACY SUPPORT
 	
@@ -811,13 +751,40 @@ COLLADA_(public) //LEGACY SUPPORT
 
 COLLADA_(public) //daeSafeCast() SHORTHANDS (Continued after class.)
 	/**
+	 * There seems to be a lot of confusion with a GCC option that is
+	 * inadequately documented called "fno-delete-null-pointer-checks".
+	 * The general portrayal of it is that @c this==nullptr is a no-op.
+	 * But the documentation just says if @c this is dererenced then it
+	 * is a no-op. But it doesn't say what "dereference" means and so it
+	 * is unclear (to me) if calling a method is a dererence or not. C++
+	 * does not dereference fully with the "*" operator. 
+	 *
+	 * In light of this, I'm adding @c daeNullable, and consolidating code
+	 * that does this test here, in case it becomes an issue, with the goal
+	 * of not needing this flag in the future. For all of C++'s type safety
+	 * what it's not safe from is hostile, overzealous compiler crews.
+	 */
+	static bool _this__nullptr(const void *this_ptr)
+	{
+		//dae_Array_base::__inoperable_ptr was implementing this like so:
+		//return (char*)this-(char*)nullptr<65536&&(Name<0||Name>1);
+		//It however needs to handle data members that are offsetted from 
+		//the containg object that is null.
+		//The following does the same, assuming ponters are straightforward
+		//and nullptr is 0-based. 
+		//I think this is a single instruction, more or less equivalent to
+		//comparing to 0.
+		return 0==(daeOffset(this_ptr)&~daeOffset(0xFFFF));
+	}
+
+	/**
 	 * Follows style of daeElement::a().
 	 */
 	template<class T> inline T *a()
 	{
 		//Only the pass-through form below is required.
 		//This is a start. Elements can be added later.
-		if(this==nullptr||!_isDoc()) 		
+		if(_this__nullptr(this)||!_isDoc()) 		
 		return nullptr;
 		return ((COLLADA_INCOMPLETE(T)daeDoc*)this)->template a<T>();
 	}
@@ -830,23 +797,131 @@ COLLADA_(public) //daeSafeCast() SHORTHANDS (Continued after class.)
 	}
 	/***GCC/C++ WANT THE FOLLOWING SPECIALIZATION IN THE NAMESPACE****/
 }; 
-/** Follows style of daeElement::a(). */
+/**
+ * Follows style of daeElement::a(). 
+ */
 template<> inline daeDOM *daeObject::a<daeDOM>()
 {
-	return this!=nullptr&&_isDOM()?(daeDOM*)this:nullptr;
+	return _this__nullptr(this)||!_isDOM()?nullptr:(daeDOM*)this;
 }
-/** Follows style of daeElement::a(). */
+/**
+ * Follows style of daeElement::a(). 
+ */
 template<> inline daeDoc *daeObject::a<daeDoc>()
 {
-	return this!=nullptr&&_isDoc()?(daeDoc*)this:nullptr;
+	return _this__nullptr(this)||!_isDoc()?nullptr:(daeDoc*)this;
 }
-/** Follows style of daeElement::a(). */
+/** 
+ * Pass-Through; Follows style of daeElement::a(). 
+ */
+template<> inline daeObject *daeObject::a<daeObject>(){ return this; }
+/**
+ * Follows style of daeElement::a(). 
+ */
 template<> inline daeElement *daeObject::a<daeElement>()
 {
-	return this!=nullptr&&_isElement()?(daeElement*)this:nullptr;
+	return _this__nullptr(this)||!_isElement()?nullptr:(daeElement*)this;
 }
-/** Pass-Through; Follows style of daeElement::a(). */
-template<> inline daeObject *daeObject::a<daeObject>(){ return this; }
+
+template<>
+/**AGGREGATE
+ * This class exists primarily to comply with modern expectations that 
+ * @c this!=nullptr. There may be noncompliant code elsewhere. The "a"
+ * methods cannot be implimented any other way. @c dae_Array code does
+ * a range check that includes 0 that is probably immune to the defect.
+ * PERSONALLY I think that it would be more prudent for C++ to disable
+ * or enable this extra degree of optimization on a case-by-case basis.
+ */
+struct daeNullable<>
+{
+	const daeObject *_ptr;
+
+COLLADA_(public) //OPERATORS
+
+	inline operator const daeObject*&(){ return _ptr; }
+
+	inline const daeObject *operator->()const{ return _ptr; }
+
+COLLADA_(private) //daeObject/daeSmartRef implementation
+				
+	friend class daeSmartRef_base;
+
+	inline void _ref()const{ if(_ptr!=nullptr) _ptr->_ref(); }
+
+	inline void _release()const{ if(_ptr!=nullptr) _ptr->_release(); }	
+
+COLLADA_(public) //daeObject/daeArray implementation
+
+	//NOTE: It's kind of annoying to have to wrap objects
+	//in daeNullable to use these, but that's just how it
+	//is now. They're meant to be accessed with getObject.
+
+	#define _(f,T) \
+	void(*f)(const daeObject*,daeAlloc<T>&,daeAlloc<T>&)
+	template<class T> 
+	/**
+	 * @c reAlloc is called indirectly by @c daeArray.
+	 * It could just as easily be a member of @c daeArray, 
+	 * -however conceptually the authority is invested in the 
+	 * object.
+	 *
+	 * @remarks @c this CAN be @nullptr. For purposes of 
+	 * managing allocation-units, @c nullptr is a pseudo object.
+	 */	
+	inline void reAlloc(daeAlloc<T>* &au, size_t newT, _(fn,T)=nullptr)const
+	{
+		_reAlloc<0,0>((daeAlloc<>*&)au,newT,(_(,))fn); //"loses qualifiers" 
+	}	
+	template<class T>
+	/**WARNING
+	 * ...In case loaders want to avoid redundant allocation overhead
+	 * by tallying space-characters in parsing XML Schema style lists:
+	 *
+	 * @warning This is safe only if the AU is empty (a thunk) or if
+	 * the the type is "raw-copyable" "plain-old-data" that can be moved.
+	 * If non-empty it should not be attempted for non @c daeAtomicType types.
+	 * @see @c daeArrayWriter_support::unserialize().
+	 */
+	inline void reAlloc(daeDatabase &db, daeAlloc<T>* &au, size_t newT, _(fn,T)=nullptr)const
+	{
+		return _reAlloc<1,0>((daeAlloc<>*&)au,newT,(_(,))fn,&db); //"loses qualifiers" 
+	}
+	template<bool DB, bool AO> //INTERNAL
+	COLLADA_NOINLINE	
+	/** Implements reAlloc(). */
+	inline void _reAlloc(daeAlloc<>* &au, size_t newT, _(fn,)=nullptr, daeDatabase *db=nullptr)const
+	{	
+		assert(newT>au->getCapacity()); //This is one-way.
+		daeAlloc<> &recycling = *au;
+		bool wasFree = AO?false:daeAlloc<>::isFreeAU(au);
+		if(!DB) db = _ptr==nullptr?nullptr:_ptr->_getDBase();	
+		au = !DB&&db==nullptr?&au->newThis(newT):&db->_new(newT,*au,*_ptr);
+		assert(au!=&recycling);
+		recycling.moveThunk(au,newT);
+		//Copy/move the old memory over to the new memory?
+		if(fn!=nullptr) fn(_ptr,*au,recycling); 
+		if(!AO&&wasFree)
+		if(!DB&&db==nullptr) 
+		recycling.deleteThis();
+		else db->_delete(recycling,*_ptr);						
+	}
+	template<class T> 
+	/** @see daeObject::reAlloc(). */
+	inline void deAlloc(daeAlloc<T>* &au)const
+	{
+		return _deAlloc((daeAlloc<>*&)au); //"loses qualifiers"
+	}	
+	/** Implements deAlloc(). */
+	COLLADA_NOINLINE inline void _deAlloc(daeAlloc<>* &au)const
+	{
+		//NOTE: This uses isEmbeddedAU, which may not be needed.
+		//Using COLLADA_ASSUME may help here.
+		if(!daeAlloc<>::isFreeAU(au)) return;
+		daeDatabase *db = _ptr==nullptr?nullptr:_ptr->_getDBase();
+		return db!=nullptr?db->_delete(*au,*_ptr):au->deleteThis();
+	}
+	#undef _
+};
 
 //---.
 }//<-'

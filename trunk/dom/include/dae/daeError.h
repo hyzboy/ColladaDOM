@@ -92,7 +92,6 @@ COLLADA_(namespace)
 	#endif
 	#endif
 
-		//TODO: const form may be required.
 		/**WARNING, LEGACY-MIGRATION-SUPPORT
 		 * #define COLLADA_NOLEGACY to enable @c bool conversions. 
 		 * @warning	DO NOT DO THIS IF ANY LEGACY CODE IS

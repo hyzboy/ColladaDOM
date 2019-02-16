@@ -9,154 +9,11 @@
 #ifndef __COLLADA_DOM__DAE_META_ATTRIBUTE_H__
 #define __COLLADA_DOM__DAE_META_ATTRIBUTE_H__
 
-#include "DAEP.h"
-#include "daeAtomicType.h"
+#include "daeAnySimpleType.h"
 
 COLLADA_(namespace)
 {//-.
 //<-'
-				
-/**NEW/ROUGH
- * This is @c xs::anySimpleType from daeDomTypes.h.
- * It is used (internally) by attributes that come
- * without an XML Schema.
- */
-class daeAST::TypedUnion
-{	
-	friend class daeData;
-	friend class daeMetaElement;
-	friend class daeAnySimpleTypewriter;
-	friend class daeAnySimpleType::Data;	
-
-COLLADA_(public) //daeArray traits
-
-	typedef void __COLLADA__atomize;
-
-COLLADA_(private) //DATA
-	/**
-	 * This is the same offset as @c daeDefault.
-	 * It would belong to @c daeData except for 
-	 * 32-bit alignment issues, since @c _union
-	 * requires 64-bit alignment.
-	 */
-	daeOffset _offset;
-
-	/**
-	 * A @c daeAnySimpleTypewriter typewriter.
-	 */
-	daeAnySimpleTypewriter *_type;
-
-	/**8B-ALIGNMENT
-	 * Only these types are allowed. They are
-	 * being set by @c daeAnySimpleTypewriter
-	 * but it'd be better if a TypedUnion API
-	 * did so.
-	 */
-	union Union
-	{
-		daeString string;
-		int _int;		
-		//Large values may be assigned
-		//to hexBinary.
-		long long int _long; 
-		//float _float;
-		double _double;
-		//0 and 1 become int or double.
-		bool boolean;		
-		//NOTE: Short binary sequences 
-		//are assigned to string.
-		struct Binary
-		{
-			int header[2];
-			daeAlloc<char,64> *AU;  
-		}hexBinary;	
-		//Note: Data uses this, however
-		//it cannot be an element of an
-		//xs:list from xs:anySimpleType
-		daeAlloc<> *list; 
-
-	}_union;
-
-	/** Implements operator=(). */
-	COLLADA_DOM_LINKAGE void _copy(const TypedUnion&);
-
-	/** Prototype constructs arrays. */
-	COLLADA_DOM_LINKAGE void _prototype_construct();
-
-COLLADA_(public)
-	/**
-	 * @c daeArray Constructor and Destructor
-	 */
-	COLLADA_DOM_LINKAGE TypedUnion(),~TypedUnion();
-	 	
-	template<class Type> //DAEP::Value<...>
-	/**
-	 * Prototype Constructor
-	 *
-	 * This constructor transfers the schema's default strings
-	 * to the database string-ref pool. The empty-string cases
-	 * go along an @c inline pathway. Default-strings go along
-	 * a @c COLLADA_DOM_LINKAGE path.
-	 */
-	explicit TypedUnion(const DAEP::Proto<Type> &pt)
-	{	
-		//REMINDER: Even if you believe xsAnySimpleType
-		//with default is uncommon or not worth support
-		//domAny still requires its string to be set to
-		//the owner DOM's empty string.
-		const COLLADA_INCOMPLETE(Type)
-		daeDOM *DOM = dae(pt.object()).getDOM();		
-		if(pt.has_default||pt.is_fixed)
-		{
-			//Reminder: This is compiled only if schema
-			//have a default.
-			switch(_type->getAtomicType())
-			{		  
-			case daeAtomicType::BINARY: //xs:hexBinary 
-				
-				//daeDefault::_setDefaultString is going
-				//to some length to convert hexBinary to
-				//STRING.
-				assert(0);
-				break;
-				
-			case daeAtomicType::EXTENSION: //xs:list
-			
-				//If the default is an array, it will have
-				//a space in its default string, otherwise
-				//the compiler can elide this.
-				if(pt.has_default>1||pt.is_fixed>1)
-				_prototype_construct();
-				break;
-				
-			case daeAtomicType::STRING: //xs:string
-			
-				((daeStringRef*)&_union.string)->_ref(*DOM);
-				break;
-			}
-		}
-		else _union.string = DOM->getEmptyURI().data(); 
-	}
-
-COLLADA_(public) //OPERATORS
-	/**
-	 * Copy Assignment operator
-	 */
-	inline TypedUnion &operator=(const TypedUnion &cp)
-	{
-		_copy(cp); return *this;
-	}
-
-COLLADA_(public) //ACCESSORS
-	/**
-	 * Database access (similar to @c daeArray.)
-	 */
-	inline daeObject *getObject()
-	{
-		if(0==_offset) return nullptr;
-		return reinterpret_cast<daeObject*>((char*)&_union-_offset);
-	}
-};
 
 /**NEVER-CONST (const is for some derived types)
  * @c daeData is a base class of @c daeValue and 
@@ -173,7 +30,7 @@ class daeData
 {
 	friend class daeElement;
 	friend class daeAnyAttribute;
-
+		   
 COLLADA_(protected) //XML Schema values
 
 	//__vizDefault needs this, but it's
@@ -181,7 +38,7 @@ COLLADA_(protected) //XML Schema values
 	COLLADA_ALIGN(8)  
 	#ifdef _DEBUG
 	/**NATVIS
-	 * Previously "_default."
+	 * Formerly "_default."
 	 */
 	daeString __vizDefault;
 	#endif
@@ -192,20 +49,47 @@ COLLADA_(protected) //XML Schema values
 	 */
 	daeClientString _attribute_name_string;
 
-  ////TODO?//////////////////////////////////
-  //
-  // These are 0 for daeAST::Data. They could
-  // be moved to daeDefault, and isStatic can
-  // test (daeOffset)_attribute_name_string&1
-  // to determine if the name is a string-ref
-  // Making these objects smaller can tighten
-  // up the daeAnyAttribute allocation margin
+	/**INTERNAL Comes from @c daeAnyAttribute. */
+	void _set_attribute_name_length_etc(const daeName &q)
+	{
+		//0xFF& is in case of narrowing warnings :(
+		assert(q.extent!=0&&q.extent<256);
+		//Not implementing truncation... assuming not.
+		//size_t len = std::min<size_t>(255,q.extent);		
+		size_t len = 0xFF&q.extent;		
+		_attribute_name_length = 0xFF&len; 
+		while(len-->0) if(':'==q[len])
+		{
+			_qualified_name_offset = 0xFF&(len+1);			
+			//REMOVE ME
+			//q.extent = len; //xmlns
+		}/*Doing this & id in _reset_type upon assignment.
+		//TODO? Would delay this until assingnment, since
+		//the odds are very slim. But it's not so easy as
+		//it seems, since an anySimpleType is initially a
+		//string type. (Maybe if it started out as a fake
+		//string type?
+		if("xmlns"==q) setIsXMLNS();*/
+	}
 
-	/**BITFIELD
+	/**BITFIELD (ALL FULL: int IS 32-BITS)
 	 * @c _attribute_name_string may be a @c daeStringRef.
 	 * Assuming attribute names are short.
 	 */
 	unsigned int _attribute_name_length:8;
+	/**BITFIELD-CONTINUED
+	 * @c _qualified_name_offset includes the : character
+	 * in a QName.
+	 *
+	 * @todo ONE WAY TO IMPLEMENT form="qualified" IS FOR
+	 * THE NAME TO BEGIN WITH ':' SO THAT THE PREFIX MUST
+	 * BE FILLED IN. THE BITS ARE ALL USED UP, AND IT MAY
+	 * EVEN BE A BETTER WAY TO DO IT THAN TO HAVE A CHECK.
+	 * NOTE IT DEFAULTS TO THE attributeFormDefault VALUE.	 
+	 * COLLADA is "unqualified". A feature can wait until 
+	 * a schema requires it.
+	 */
+	unsigned int _qualified_name_offset:8;
 	/**BITFIELD-CONTINUED
 	 * @c getNextID() uses this flag.
 	 * @remarks 8 was going to be 1, but it had relied on
@@ -217,7 +101,7 @@ COLLADA_(protected) //XML Schema values
 	/**BITFIELD-CONTINUED
 	 * Both <xs:attribute> & <xs:element> can be fixed.
 	 * In which case @c _default becomes the fixed string.
-	 * This should not effect @c getDefaultString().
+	 * This should not affect @c getDefaultString().
 	 */
 	unsigned int _fixed_default:2;
 	/**BITFIELD-CONTINUED
@@ -226,13 +110,20 @@ COLLADA_(protected) //XML Schema values
 	unsigned int _attribute_use:2;
 	/**BITFIELD-CONTINUED
 	 * Tells if @c this is a @c daeValue or @c daeAttribute.
+	 *
+	 * @note Don't know if this needs 2 bits, but it's also
+	 * used by @c isValue(), in which case it does. Static
+	 * can also be implemented by @c _attribute_name_string
+	 * by checking its first bit, as long as client strings
+	 * are all word aligned pointers. It had been "_static"
+	 * but has fewer instructions inverted in @c isMasked().
 	 */
-	unsigned int _static:1,_static_anySimpleType:1;
-	/**BITFIELD-CONTINUED
-	 * Tells if this is not an attribute in order to handle
-	 * the unnamed nonstatic attribute case.
+	unsigned int _anySimpleType:2;
+	/**FINAL BITFIELD ENTRY
+	 * Tells if the attribute has an "xmlns" qualified name.
+	 * Static attributes must also be STRING formatted type.
 	 */
-	unsigned int _is_not_attribute:1;
+	unsigned int _is_xmlns_attribute:1;
 
 COLLADA_(public) //daeArray traits
 
@@ -253,12 +144,70 @@ COLLADA_(public) //OPERATORS
 	inline daeData *operator->()const{ return const_cast<daeData*>(this); }
 
 COLLADA_(public) //LIMITED SCHEMA-LEVEL ACCESSORS
-	/**LEGACY
-	 * @return Returns the name of this attribute.
+	/**
+	 * @return Returns QName of @c this attribute.
 	 */
 	inline daeName getName()const	
 	{
 		return daeName(_attribute_name_string,_attribute_name_length); 
+	}
+
+	/**0-TERMINATED (as long as not truncated)
+	 * @return Returns the part of the QName after a prefix/separator.
+	 */
+	inline daeName getNCName()const	
+	{
+		daeName o = getName();
+		o.string+=_qualified_name_offset; 
+		o.extent-=_qualified_name_offset; return o;
+	}
+
+	typedef unsigned char CP;
+	/**
+	 * @return Returns the offset to the beginning of the NCName part
+	 * of the attribute's full QName. 
+	 */
+	inline CP getNCNameCP()const{ return _qualified_name_offset; }
+	 
+	//TODO: I think form="qualified" may have to start names with ':'
+	//or else there is not room in the BITFIELD, and it might be best
+	//to do it that way regardless.
+	/**WARNING
+	 * @return Returns @c true if the name includes a colon/separator.
+	 * @warning This includes a QName that begins with a ':', whether
+	 * this is valid or not. This library does not perform validation.
+	 * (Note, thinking of doing it as a form="unqualified" strategy.)
+	 */
+	inline bool hasQName()const{ return 0!=_qualified_name_offset; }
+	
+	/**UNTERMINATED (':' or '\0' TERMINATED)
+	 * @return Returns the part of the QName before a colon/separator.
+	 * @warning A non-empty string is ':' terminated; not included in
+	 * in the returned size. In theory "" prefixes are ':' terminated.
+	 */
+	inline daeName getQNamePrefix()const	
+	{
+		daeName o(_attribute_name_string,_qualified_name_offset); 
+		if(!o.empty()) o.extent--; return o;
+	}
+
+	/**	 
+	 * @return Returns @c true if this attribute's name is "xmlns" or
+	 * the non-NCName part of the name is so.
+	 * @remark This method checks a flag, rather than comparing names.
+	 */
+	inline bool getIsXmlns()const{ return 1==_is_xmlns_attribute; }
+
+	/**INTERNAL */
+	inline void _setIsXmlns(const daeElement *prototype)
+	{
+		_is_xmlns_attribute = 1; _setIsXml(1,prototype);
+	}
+	/**INTERNAL */
+	static void _setIsXml(int b, const daeElement *prototype)
+	{
+		(*(DAEP::Element*)prototype) //FRIENDS/CYCLICAL
+		.__DAEP__Element__data.xml_qualified_attribute_masks|=0xf&b;
 	}
 
 	/**WARNING, HINT
@@ -267,56 +216,59 @@ COLLADA_(public) //LIMITED SCHEMA-LEVEL ACCESSORS
 	 * with @c setIsID() since this is only a hint to eliminate the 
 	 * need to test against a battery of possible attribute names.)
 	 * @note An "ID" is not an "id" and neither is it an xs:ID type.
-	 * (It should be a @c daeString value, but it's not possible to
-	 * guarantee that it is.)
+	 * @see @c XS::Attribute::getThisID()
+	 * @see @c daeMetaElement::getFirstID()
 	 *
 	 * @warning This is probably @c true for an "id" attribute, but
 	 * it isn't necessarily one. See @c XS::Schema::getIDs(). SINCE
 	 * THE ADVENT of @c daeAnyAttribute @c true==getIsID() whenever
 	 * an attribute is not fully described by a @c XS::Schema or is
 	 * a @c domAny attribute. Either case is either rare or already
-	 * unideal by definition. (NOTE: ideally these are only so when
-	 * the underlying @c daeAtomicType are non-empty @c daeString.)
-	 * @see @c setIsID()
-	 * @see @c XS::Attribute::getThisID()
-	 * @see @c daeMetaElement::getFirstID()
+	 * unideal by definition. 
+	 * @see @c setIsID() for details.
 	 */
 	inline bool getIsID()const{ return 1==_this_attribute_is_ID; }
 
-	/**SEMI-MUTABLE
+	/**WARNING, MUTABLE
 	 * This is intended to be accessed via @c daeData which is a NEVER-CONST
 	 * base class. For non-schema based attributes it's hard to determine if
 	 * they are are ID-like or not. So to be safe they may be initially made
 	 * to appear as so... since @c getIsID() is merely a hint. With this API
 	 * any attribute can be flagged (or unflagged) by applications according
-	 * to their need.
+	 * to their need...
+	 *
+	 * @warning Nonstatic xs:anySimpleType values set this automatically for
+	 * @c daeAtomicType::STRING values when first assigned. This is not good
+	 * if the ID is a numeric string, and it is not set until after a change
+	 * notice is processed, and so a change-notice handler must do this only
+	 * after applying the change, if it relies on this setting. If set prior
+	 * to assignment it is not unset. It is only a speculative hint, however
+	 * if mistakenly set it will have to be manually unset, after assignment.
+	 * This may not apply when assignment bypasses @c daeAnySimpleTypewriter.
 	 */
-	inline void setIsID(bool y=true){ _this_attribute_is_ID = y?1:0; }
+	inline void setIsID(bool y=true)
+	{
+		assert(!isValue()); _this_attribute_is_ID = y?1:0;
+	}
+
+	/**
+	 * Tells if the schema specifies a default value.
+	*/
+	inline bool hasDefault()const{ return 1==_fixed_default; }
 
 	/**WARNING
-	 * Finds the schema's default value.
+	 * Gets the schema's default value, or @c nullptr.	 
 	 * @return Returns @c nullptr if @c daeValue::getDefaultString() is
 	 * an empty string. 	 
-	 *
-	 * @note This was so to not have to do @c static_cast<daeValue&> to
-	 * gain access to @c daeValue::compareIsDefaultWRT(), as the plugin
-	 * code otherwise no longer makes use of the @c daeMeta descriptors.
-	 * 
-	 * @remarks This doubles as a test to determine if there is default
-	 * information for this element, because there is no scenario where
-	 * the value is not required in addition to the knowledge it exists.
 	 *
 	 * @warning There are still default values when not expressly given
 	 * owing to C++'s constructors; however this API is only concerning
 	 * I/O operations, in which case, those are not actually meaningful.
+	 * @see @c isMasked().
 	 */
-	inline daeValue *findDefault()const
+	inline daeValue *getDefault()const
 	{
-		if(0==(1&_fixed_default)) return nullptr;
-		//TODO: If schema-based attributes are located outside of the
-		//element (e.g. because they are uncommon/great in number) it
-		//will be necessary to locate the corresponding metadata here.
-		assert(1==_static); return (daeValue*)this;
+		return hasDefault()?&getKnownValue():nullptr;
 	}
 
 	/**UNUSED
@@ -326,7 +278,7 @@ COLLADA_(public) //LIMITED SCHEMA-LEVEL ACCESSORS
 	 * Both <xs:attribute> & <xs:element> can be fixed.
 	 * In which case @c _default becomes the fixed string.
 	 */
-	inline bool getIsFixed()const{ return 0!=(2&_fixed_default); }	
+	inline bool getIsFixed()const{ return 2==_fixed_default; }	
 
 	/**LEGACY
 	 * @note This corresponds to <xs:attribute use="required">.
@@ -347,13 +299,11 @@ COLLADA_(public) //LIMITED SCHEMA-LEVEL ACCESSORS
 	/**EXPERIMENTAL
 	 * This is a roundabout way to determine if the value is an <xs:attribute>.
 	 * @note "isAttribute" reads somewhat funny amidst XS::Attribute's members.
+	 *
+	 * @return Returns 0 if @c this is a @c daeValue or if it is the @c VOID 
+	 * pseudo-attribute. If necessary @c isValue() distinguishes between them.
 	 */
-	inline daeXS getXS()const
-	{
-		//This way can fail if "" is passed to getAttribute().
-		//return 0==_attribute_name_length?(daeXS)0:XS::ATTRIBUTE; 
-		return 1==_is_not_attribute?(daeXS)0:XS::ATTRIBUTE;
-	}
+	inline daeXS getXS()const{ return 0==_attribute_name_length?(daeXS)0:XS::ATTRIBUTE; }
 
 COLLADA_(public) //TYPE-SYSTEM ACCESSORS
 	/**LEGACY
@@ -363,7 +313,7 @@ COLLADA_(public) //TYPE-SYSTEM ACCESSORS
 	 */
 	inline daeOffset getOffset()const
 	{
-		return ((daeAST::TypedUnion*)(this+1))->_offset; //return _offset; 
+		return ((daeAST::TypedUnion*)(this+1))->_offset; //return _offset;
 	}
 
 	/**LEGACY-ISH, NEVER-NULLPTR
@@ -377,19 +327,98 @@ COLLADA_(public) //TYPE-SYSTEM ACCESSORS
 	 */
 	inline daeTypewriter2 *getType()const
 	{
-		//return ((daeAST::TypedUnion*)(this+1))->_type; //return _type; 
 		return (daeTypewriter2*)&getDefaultType();
 	}	
 
 	/**
-	 * Tells if @c this is a @c daeValue. This is nonessential but users may find
-	 * it helpful.
+	 * Tells if @c this is a @c daeValue. If so it means @c this value
+	 * is part of the schema. If not, its type is @c daeTypedUnion and
+	 * it is part of @c daeAnySimpleType::Data. Note that it can still
+	 * be xs:anySimpleType if a schema uses this type, though uncommon.
 	 */
-	inline bool isStatic()const
+	inline bool isValue()const
 	{
-		//This would also work, should _static be removed.
+		//This should also work, although isMasked would 
+		//have to test more than one word of memory then.
 		//return 0==((daeOffset)_attribute_name_string&1);
-		return 1==_static; 
+		return 0==(1&_anySimpleType); 
+	}	
+
+	/**
+	 * Gets @c this data as a @c daeValue if it is static. 
+	 * @return Returns @c nullptr if @c false==isValue().
+	 * @see @c isValue() Doxygentation.
+	 */
+	inline daeValue *getValue()const{ return isValue()?(daeValue*)this:nullptr; }
+
+	/**CAST
+	 * Gets @c *(daeValue*)this with @c assert(isValue()) check.
+	 * @see @c isValue() Doxygentation.
+	 */
+	inline daeValue &getKnownValue()const{ assert(isValue()); return *(daeValue*)this; }	
+	
+	/**
+	 * Tells if the data is @c daeAST::TypedUnion. Note that this does
+	 * not say if the value is nonstatic, because xs:anySimpleType can
+	 * be a schema-based value. @c isAnyExtra() or @c !isValue() means
+	 * data is nonstatic.
+	 */
+	inline bool isUnion()const{ return 0!=_anySimpleType; }	
+
+	/**
+	 * Tells if the data is nonstatic. That is it isn't described by a
+	 * a schema, and so is part of @c this object.
+	 */
+	inline bool isAnyExtra()const{ return !isValue(); }	
+
+	/**
+	 * Gets @c this as @c daeAST::Data object's @c daeAST::TypedUnion.
+	 */
+	inline const daeAST::TypedUnion &getKnownAnyExtra()const
+	{
+		assert(isAnyExtra()); return *(daeAST::TypedUnion*)(this+1); 
+	}	
+	/**
+	 * Gets @c this as @c daeAST::Data object's @c daeAST::TypedUnion.
+	 */
+	inline daeAST::TypedUnion &getKnownAnyExtra(DAEP::Object *e)const
+	{
+		daeAST::TypedUnion &o = *(daeAST::TypedUnion*)(this+1);
+		assert((daeOffset)e+getOffset()==(daeOffset)&o._union);
+		assert(isAnyExtra()); return o; 
+	}		
+	/**
+	 * Gets @c this as @c daeAST::Data object's @c daeAST::TypedUnion.
+	 */
+	inline const daeAST::TypedUnion &getKnownAnyExtra(const DAEP::Object *e)const
+	{
+		return getKnownAnyExtra(const_cast<DAEP::Object*>(e));
+	}	
+
+	/**
+	 * Tells if @c this attribute has use for its mask bit considering
+	 * that if it has a fixed or default value or is nonstatic then it
+	 * for purposes of reading/writing XML documents the mask is of no
+	 * practical use. For example, an integer defaults to 0, and so if
+	 * the mask is not set, it's ambiguous if a document contains that
+	 * attribute if it doesn't have a nonzero default value.
+	 *
+	 * @return Returns @c false if not optional or if the attribute is
+	 * fixed, or has a default value, or is nonstatic. May also return
+	 * @c false if masking is disabled, or the data's type is a string.
+	 *
+	 * @note It is also no use if the underlying type is a string, but
+	 * this is not checked by the current implementation. There is not
+	 * a bit dedicated to tracking this status presently.
+	 *
+	 * To set/unset the mask use @c daeElement::getAttributeMask(), or
+	 * lower-level, use @c daeAnyAttribute::mask().
+	 */
+	inline bool isMasked()const
+	{
+		//Also including _attribute_use (required/prohibited) since it
+		//should just get factored into a test instruction's bits mask.
+		return isValue()&&0==_fixed_default&&0==_attribute_use; 
 	}
 
 COLLADA_(public) //SUPPLEMENTAL
@@ -402,6 +431,7 @@ COLLADA_(public) //SUPPLEMENTAL
 	 */
 	inline daeTypewriter &getDefaultType()const
 	{
+		//REMINDER: Don't put "assert(isValue())" here.
 		return *((daeAST::TypedUnion*)(this+1))->_type;
 	}
 
@@ -413,7 +443,7 @@ COLLADA_(public) //SUPPLEMENTAL
 	 * @see daeDefault::getDefaulValue().
 	 */
 	inline daeSize getDefaultSize()const{ return getDefaultType().getSize(); }
-		
+			
 	#ifndef COLLADA_NODEPRECATED
 	COLLADA_DEPRECATED("getTypeWRT or getDefaultSize")
 	void getSize()const;//{ return getType()->getSize(); }
@@ -429,23 +459,23 @@ COLLADA_(public) //"WRT" APIs. (With Respect To.)
 	inline daeTypewriter &getTypeWRT(const daeElement *e)const
 	{
 		daeTypewriter &tw = getDefaultType();
-		if(0!=_static_anySimpleType) 
-		return *((daeAnySimpleTypewriter*)&tw)->_type(getWRT(e));
+		if(2==_anySimpleType) 
+		return *((daeAST::AnyWriter*)&tw)->_type(getWRT(e));
 		return tw; 
 	}
 
 	template<class T> //daeElement
-	/**LEGACY, NOT-RECOMMENDED
+	/**LEGACY-SUPPORT
 	 * Gets the value's memory pointer from containing element @a e.
 	 * @param e Element from which to get the value.
 	 * @return Returns the memory pointer corresponding to this value out of parent element @a e.
 	 */
 	inline typename daeConstOf<T,daeOpaque>::type getWRT(T &e)const
 	{	
-		const daeElement &upcast = dae(*e); return daeOpaque(e)[getOffset()]; (void)upcast;
+		const daeElement &uc = dae(*e); return daeOpaque(e)[getOffset()]; (void)uc;
 	}
 	template<class This> //daeElement
-	/**LEGACY, NOT-RECOMMENDED
+	/**LEGACY-SUPPORT
 	 * Gets the value's memory pointer from containing element @a e.
 	 * This overload is just to receive @c this pointers/conceivably other rvalues.
 	 * @param e Element from which to get the value.
@@ -453,7 +483,7 @@ COLLADA_(public) //"WRT" APIs. (With Respect To.)
 	 */
 	inline typename daeConstOf<This,daeOpaque>::type getWRT(This *e)const
 	{
-		const daeElement &upcast = dae(*e); return daeOpaque(e)[getOffset()]; (void)upcast;
+		const daeElement &uc = dae(*e); return daeOpaque(e)[getOffset()]; (void)uc;
 	}
 	
 	template<class Change> //DAEP::Change
@@ -469,42 +499,32 @@ COLLADA_(public) //"WRT" APIs. (With Respect To.)
 		daeNoteChange(note,const_cast<daeData*>(this)); return note;
 	}
 
-	/**WARNING, LEGACY
-	 * @warning Implicit in using this API is @c this applies equally
-	 * to both inputs. That means both elements are the same type and
-	 * that underlying @c this is a @c daeValue.
-	 *
-	 * Copies the value of this value from fromElement into toElement.
-	 * @param toElement Pointer to a @c daeElement to copy this value to.
-	 * @param fromElement Pointer to a @c daeElement to copy this value from.
+	/**WARNING, EXPERIMENTAL
+	 * @warning Possibly harebrained.
+	 * Compares this value to binary 0. Maybe helpful with @c isMasked() depending
+	 * on how it's being used.
+	 * @remark Won't work for arrays. (Nor strings, though they're plainly empty.)
+	 */
+	inline bool compareIsZeroedWRT(const daeElement *e)const
+	{
+		const char *cmp = &getWRT(e);		
+		//return '\0'==*cmp&&0==memcmp(cmp,cmp+1,getDefaultSize()-1);
+		for(size_t i=0,iN=getDefaultSize();i<iN;i++) if(cmp[i]!=0x00) 
+		return false; return true;
+	}
+		
+	template<class T> //const daeStringCP* or int
+	/**LEGACY, OVERLOAD
+	 * Converts a string to a memory value in the specified element.
+	 * @see daeTypewriter::stringToMemory().
 	 * CHANGE-NOTICES
-	 * Do "getType()->copy(getWRT(from),getWRT(to));" to bypass @c noteChangeWRT().
+	 * Do "getType()->stringToMemory("xyz",getWRT(e));" to bypass @c noteChangeWRT().
 	 */
-	inline void copyWRT(daeElement *toElement, const daeElement *fromElement)const
+	inline daeOK stringToMemoryWRT(daeElement *e, daeString src, T len_or_end)const
 	{
-		//Todo: How to make this compile?
-		assert(1==_static/*&&toElement->getMeta()==fromElement->getMeta()*/);
-		_op_assign op(toElement,this,getWRT(fromElement)); return !noteChangeWRT(op);
+		_op_unserialize<T,daeOpaque> op(e,this,src,len_or_end,getWRT(e)); return noteChangeWRT(op);
 	}
-
-	/**WARNING, LEGACY
-	 * @warning Implicit in using this API is @c this applies equally
-	 * to both inputs. That means both elements are the same type and
-	 * that underlying @c this is a @c daeValue.
-	 *
-	 * Compares the value of this value in the given elements.
-	 * @param elt1 The first element whose value value should be compared.
-	 * @param elt2 The second element whose value value should be compared.
-	 * @return Returns a positive integer if value1 > value2, a negative integer if 
-	 * value1 < value2, and 0 if value1 == value2.
-	 */
-	inline int compareWRT(const daeElement *elt1, const daeElement *elt2)const
-	{
-		//Todo: How to make this compile?
-		assert(1==_static/*&&toElement->getMeta()==fromElement->getMeta()*/);
-		return getType()->compare(getWRT(elt1),getWRT(elt2));
-	}
-	
+	template<class T>
 	/**LEGACY
 	 * Converts a string to a memory value in the specified element.
 	 * @param src Source string, shorter than 128 characters.
@@ -513,28 +533,17 @@ COLLADA_(public) //"WRT" APIs. (With Respect To.)
 	 * CHANGE-NOTICES
 	 * Do "getType()->stringToMemory("xyz",getWRT(e));" to bypass @c noteChangeWRT().
 	 */
-	inline daeOK stringToMemoryWRT(daeElement *e, daeString src)const
+	inline daeOK stringToMemoryWRT(daeElement *e, const T &src)const
+	{
+		return _stringToMemoryWRT(e,typename daeBoundaryString2<T>::type(src));
+	}
+	/**Facilitates @c daeCharData and @c std::string. */
+	inline daeOK _stringToMemoryWRT(daeElement *e, daeString src)const
 	{
 		_op_unserialize<daeOpaque> op(e,this,src,getWRT(e)); return noteChangeWRT(op);
 	}
-	template<class T> //const daeStringCP* or int
-	/**LEGACY, OVERLOAD
-	 * Converts a string to a memory value in the specified element.
-	 * @see daeTypewriter::stringToMemory().
-	 * CHANGE-NOTICES
-	 * Do "getType()->stringToMemory("xyz",getWRT(e));" to bypass @c noteChangeWRT().
-	 */
-	inline daeOK stringToMemoryWRT(daeElement *e, const daeStringCP *src, T len_or_end)const
-	{
-		_op_unserialize<T,daeOpaque> op(e,this,src,len_or_end,getWRT(e)); return noteChangeWRT(op);
-	}
-	/**OVERLOAD, NEW/MAY HAVE ISSUES, LEGACY-SUPPORT
-	 * Converts a string to a memory value in the specified element.
-	 * @see daeTypewriter::stringToMemory().
-	 * CHANGE-NOTICES
-	 * Do "getType()->stringToMemory("xyz",getWRT(e));" to bypass @c noteChangeWRT().
-	 */
-	inline daeOK stringToMemoryWRT(daeElement *e, const daeHashString &src)const
+	/**Facilitates @c daeCharData and @c std::string. */
+	inline daeOK _stringToMemoryWRT(daeElement *e, const daeHashString &src)const
 	{
 		_op_unserialize<daeString,daeOpaque> op(e,this,src,src+src.extent,getWRT(e)); return noteChangeWRT(op);
 	}
@@ -542,7 +551,7 @@ COLLADA_(public) //"WRT" APIs. (With Respect To.)
 	/**LEGACY
 	 * Converts an element's attribute value to a string.
 	 */
-	inline daeOK memoryToStringWRT(const daeElement *e, daeArray<daeStringCP> &dst)const
+	inline daeOK memoryToStringWRT(const daeElement *e, daeArray<> &dst)const
 	{
 		return getType()->memoryToString(getWRT(e),dst);
 	}
@@ -601,16 +610,16 @@ COLLADA_(public) //daeArray traits
 
 COLLADA_(public) //internal/mutual friendship
 		
-	Data(daeElement*,daeString);
+	Data(daeElement*);
 
 	inline const daeElement &getElement()
 	{
 		return *(daeElement*)(daeOffset(&_union)-_offset);
-	}
+	}	
 }; 
 
 /**
- * Previously "daeValue."
+ * Formerly "daeValue."
  * The @c daeDefault class describes a C++ COLLADA-DOM element's value.
  * @c XS::Attribute is based on @c daeDefault.
  * @see @c XS::Attribute a.k.a. @c daeAttribute.
@@ -646,19 +655,10 @@ COLLADA_(protected) //XML Schema relationships
 	 * "destruct" solution.
 	 */
 	void (*_destructor)(const void*);
-
-COLLADA_(protected) //XML Schema values	
-	/**COURTESY
-	 * Not used internally. (I think maybe it is used somewhere, once?)
-	 * Equivalent to @c getMeta().getSchema().findType(getType().alias).
-	 * It'd be right to let this go if it's the only value remaining at
-	 * the end of the day.
-	 */
-	const XS::SimpleType *_simpletype;
 				   
 COLLADA_(public) //HOW-TO? 
 	/**THEORETICAL
-	 * Previously "getContainer()." 
+	 * Formerly "getContainer()." 
 	 * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[C++]
 	 * daeMeta &getMeta()const
 	 * {
@@ -696,10 +696,11 @@ COLLADA_(public) //ACCESSORS
 	/**COURTESY
 	 * Gets the @c XS::SimpleType used by this value.
 	 * The library doesn't use this. It's provided if user/client code does.
-	 * 
-	 * @TODO There are ways to compute this. 
 	 */
-	inline const XS::SimpleType &getSimpleType()const{ return *_simpletype; }
+	inline const XS::SimpleType &getSimpleType()const
+	{
+		return *_type.datatype; 
+	}
 
 	#ifndef COLLADA_NODEPRECATED	
 	COLLADA_DEPRECATED("Post-2.5: END-OF-SUPPORT\n\
@@ -727,10 +728,10 @@ COLLADA_(public) //ACCESSORS
 	const daeOpaque getDefaultValue()const{ return getType().value; }
 
 	/**WARNING, LEGACY-SUPPORT
-	 * Previously "getDefaultString."
+	 * Formerly "getDefaultString."
 	 * Gets the "default" for this value as a string.
 	 * @warning This API doesn't check to see if the schema specifies a default or
-	 * not. @c nullptr!=findDefault() indicates that the schema provides a default.
+	 * not. @c nullptr!=getDefault() indicates that the schema specifies a default.
 	 * (If not, the string matches the result of one or other default-constructor.)
 	 *
 	 * Converts an element's default value to a string.
@@ -740,39 +741,80 @@ COLLADA_(public) //ACCESSORS
 	 * the conversion, for example "1.0" becomes "1" and "false" becomes 0, and so
 	 * on. An additional API could doctor these strings, and client code can do so.
 	 */
-	inline daeOK defaultToString(daeArray<daeStringCP> &dst)const
+	inline daeOK defaultToString(daeArray<> &dst)const
 	{
 		return _type.writer->memoryToString(_type.value,dst);
 	}
 
 COLLADA_(public) //"WRT" APIs. (With Respect To.)
+	
 	/**WARNING, LEGACY
+	 * @warning Implicit in using this API is @c this applies equally
+	 * to both inputs. That means both elements are the same type and
+	 * that underlying @c this is a @c daeValue.
+	 *
+	 * Copies the value of this value from fromElement into toElement.
+	 * @param toElement Pointer to a @c daeElement to copy this value to.
+	 * @param fromElement Pointer to a @c daeElement to copy this value from.
+	 * CHANGE-NOTICES
+	 * Do "getType()->copy(getWRT(from),getWRT(to));" to bypass @c noteChangeWRT().
+	 */
+	inline void copyWRT(daeElement *toElement, const daeElement *fromElement)const
+	{
+		assert(DAEP::Element::__DAEP__Element__meta(toElement,fromElement));
+		assert(isValue());
+		_op_assign op(toElement,this,getWRT(fromElement)); return !noteChangeWRT(op);
+	}
+
+	/**WARNING, LEGACY
+	 * @warning Implicit in using this API is @c this applies equally
+	 * to both inputs. That means both elements are the same type and
+	 * that underlying @c this is a @c daeValue.
+	 *
+	 * Compares the value of this value in the given elements.
+	 * @param elt1 The first element whose value value should be compared.
+	 * @param elt2 The second element whose value value should be compared.
+	 * @return Returns a positive integer if value1 > value2, a negative integer if 
+	 * value1 < value2, and 0 if value1 == value2.
+	 */
+	inline int compareWRT(const daeElement *elt1, const daeElement *elt2)const
+	{			
+		assert(DAEP::Element::__DAEP__Element__meta(elt1,elt2));
+		assert(isValue());
+		return getType()->compare(getWRT(elt1),getWRT(elt2));
+	}	
+
+	/**WARNING, LEGACY-SUPPORT
+	 * @param cp Can be @c *this but is mandated for @c daeData::getDefault().
+	 * 
 	 * Copies the default value of this value to the element.
 	 * @warning This API doesn't check to see if the schema specifies a default or
-	 * not. @c nullptr!=findDefault() indicates that the schema provides a default.
+	 * not. @c nullptr!=getDefault() indicates that the schema specifies a default.
 	 * (If not, the string matches the result of one or other default-constructor.)
 	 *
 	 * @param toElement Pointer to a @c daeElement to copy the default value to.
 	 * CHANGE-NOTICES
 	 * Do "getType()->copy(getType().value,getWRT(element));" to bypass @c noteChangeWRT().
 	 */
-	inline void copyDefaultWRT(daeElement *toElement)const
+	inline void copyDefaultWRT(daeData &cp, daeElement *toElement)const
 	{
-		_op_assign op(toElement,this,_type.value); return !noteChangeWRT(op);
+		_op_assign op(toElement,&cp,_type.value); return !cp.noteChangeWRT(op);
 	}
 
 	/**WARNING, LEGACY
+	 * @param cmp Can be @c *this but is mandated for @c daeData::getDefault().
+	 *
 	 * Compares the value of this value from the given element to the default value
 	 * of this value.
 	 * @warning This API doesn't check to see if the schema specifies a default or
-	 * not. @c nullptr!=findDefault() indicates that the schema provides a default.
+	 * not. @c nullptr!=getDefault() indicates that the schema specifies a default.
 	 * (If not, the string matches the result of one or other default-constructor.)
 	 *
 	 * @param e The element whose value should be compared to the default value.
 	 * @return Returns a positive integer if value > default, a negative integer if 
 	 * value < default, and 0 if value == default.
 	 */
-	inline bool compareIsDefaultWRT(const daeElement *e)const
+	inline bool compareIsDefaultWRT(daeData &cmp, const daeElement *e)const
 	{
 		//Note: This API was "compareToDefault" but it seems like testing for 0 is
 		//not as user-friendly as a bool result. When is cmp<0, cmp>0 ever useful?
@@ -785,7 +827,7 @@ COLLADA_(public) //GENERATOR-SIDE APIs
 	 * Adding for completion sake. COLLADA doesn't have 
 	 * fixed values, but in order to support XML Schema.
 	 */
-	inline void setIsFixed(){ _fixed_default|=2; }
+	inline void setIsFixed(){ _fixed_default = 2; }
 
 	template<int N>
 	/**GENERATOR-SIDE API, LEGACY
@@ -805,21 +847,10 @@ COLLADA_(public) //GENERATOR-SIDE APIs
 	COLLADA_DOM_LINKAGE void _setDefaultString(daeHashString);
 };
 
-/**TODO, NEVER-CONST, NEW/ROUGH
- *
- * @todo Instead of @c daeData* a @c union with @c daeAST::Data* can
- * help with debugging. It might also be useful (in theory) to place
- * in each subscript an 8-bit size and a @c daeStringCP for matching
- * the first letter in the attribute's name. In theory this can make
- * lookups more cache-friendly, but it also can help with @c _grow().
- * ALSO it can help in case the @c daeData flag/size fields are ever
- * moved into @c daeDefault. (They are always 0 with @c daeAST::Data
- * and the size in their case can be extracted from the string-ref.)
- *
+/**NEVER-CONST, VARIABLE-LENGTH
  * @c daeAnyAttribute is a new lightweight attributes container that
- * is able to implement <xs:anyAttribute> semantics but is important
- * also to effciently implementing @c domAny elements. Its name is a
- * slight misnomer since it tracks all attributes. 
+ * implements <xs:anyAttribute> semantics but is primarily concerned
+ * with @c domAny.
  * @see @c daeElement::getAttributes().
  *
  * @ramark The value and attribute records maintain the same address.
@@ -840,13 +871,11 @@ COLLADA_(public) //daeArray traits
 
 COLLADA_(public) //daeArray-LIKE ACESSORS
 
-	using _base::size;
+	using _base::size; //getCount;
 	using _base::empty;
-	using _base::begin;
-	using _base::end;
-	using _base::capacity;
-	using _base::getCapacity;
-	using _base::getCount;
+	using _base::cbegin; //begin
+	using _base::cend; //end
+	using _base::capacity; //getCapacity;
 	using _base::find;
 
 	/**
@@ -898,11 +927,21 @@ COLLADA_(public) //xs:anyAttribute ACCESSORS
 	 */
 	inline const daePartition &getAnyExtraPart()
 	{
-		daeAllocThunk *t = (daeAllocThunk*)this;
+		daeAllocThunk *t = (daeAllocThunk*)_au;
 		assert((void*)&t->_counter==&t->_offset+1);
 		return *(daePartition*)&t->_offset;
 	}		 	
 
+COLLADA_(public) //DAEP::Value
+
+	/**CONST-ONLY (POINTER)
+	 * Don't confused this with @c __COLLADA__atomize.
+	 * Here. "Atom" is stemming from @c daeAtomicType.
+	 */
+	typedef daeData*const __COLLADA__Atom,*const Atom;
+	/**STL-like*/
+	typedef Atom value_type,*pointer,*iterator,&reference;
+	
 COLLADA_(public) //daeArray-LIKE OPERATORS
 
 	template<class I>
@@ -917,7 +956,7 @@ COLLADA_(public) //daeArray-LIKE OPERATORS
 	 * @c daeAtomicType::VOID value that will @c assert() if overwritten
 	 * and has a blanked name.
 	 */
-	daeData*const &operator[](const I &i_or_Name)
+	Atom &operator[](const I &i_or_Name)
 	{
 		return _get<0>((typename daeBoundaryString2<I>::type*)0,i_or_Name);
 	}
@@ -928,23 +967,24 @@ COLLADA_(public) //daeArray-LIKE OPERATORS
 	 * addressed by name, and is not found to exist. Integer indexes 
 	 * are forwarded to make adaptation straightforward.
 	 */
-	daeData &_maybe_get(const I &i_or_Name)
+	Atom &_maybe_get(const I &i_or_Name)
 	{
-		return *_get<1>((typename daeBoundaryString2<I>::type*)0,i_or_Name);
+		return _get<1>((typename daeBoundaryString2<I>::type*)0,i_or_Name);
 	}
 	template<int, class I>
 	/**Implements @c operator[](). */
-	daeData*const &_get(daeString*, I Index)
+	Atom &_get(daeString*, I Index)
 	{
 		//daeElement::getAttributeIndex() is returning a VOID
 		//index equal to size() instead of -1 and so it helps
 		//if users can access this index like any other index.
 		//return _base::operator[i];
-		assert(Index<=getCount()); return _au->_varray[Index];
+		//Adding (I) so 0 won't raise signed/unsigned warning.
+		assert(Index<=(I)getCount()); return _au->_varray[Index];
 	}
 	template<int Maybe, class C_string>
 	/**Implements @c operator[](). */
-	daeData*const &_get(daeString*, C_string *Name)
+	Atom &_get(daeString*, C_string *Name)
 	{
 		return _get<Maybe>((daeName*)0,daeName(Name));
 	}	
@@ -954,7 +994,7 @@ COLLADA_(public) //daeArray-LIKE OPERATORS
 	 * @return Returns @c daeAtomicType::VOID type @c daeData
 	 * if @c 1==Maybe or @c true==Name.empty().
 	 */
-	daeData*const &_get(daeName*, T &Name)
+	Atom &_get(daeName*, T &Name)
 	{
 		//This may aid compilers around goto i; 
 		daeData**va = _au->_varray;
@@ -1005,12 +1045,12 @@ COLLADA_(public) //daeArray-LIKE OPERATORS
 		{	
 			daeData *cmp = _au->_varray[i];
 			if(clone||cmp==cp[i]) 				
-			cmp->copyWRT(dst,src);
+			cmp->getKnownValue().copyWRT(dst,src);
 			else break;
 		}
 		if(i==cpN) return;
 		//If not, the best that can be done is to set to defaults.
-		//(Reminder: Planning to rectify this shortly.)
+		//(Reminder: Planning to rectify this shortly. HOW?)
 		size_t jN = 0;
 		if(!clone&&!empty) 
 		jN = _extern_clear(size(),i);
@@ -1018,7 +1058,7 @@ COLLADA_(public) //daeArray-LIKE OPERATORS
 		if(!clone) for(size_t j=i;j<jN;j++)
 		{		
 			daeData *clr = _au->_varray[j];
-			((daeDefault*)clr)->copyDefaultWRT(dst);
+			clr->getKnownValue().copyDefaultWRT(*clr,dst);
 		}
 		//Just trying to emulate daeElement APIs without including
 		//daeElement.h for right now.
@@ -1043,31 +1083,21 @@ COLLADA_(public) //daeArray-LIKE OPERATORS
 		}
 	}
 
-COLLADA_(public) //VARIOUS
+COLLADA_(protected) //daeAA_Value implementation
 	/**
-	 * Disabled Constructor
+	 * Prototype Constructor
 	 */
-	daeAnyAttribute();
-
-	template<class Type> //DAEP::Value<...>
+	daeAnyAttribute():_base(*_au){ /*NOP*/ } 
 	/**
-	 * Prototype Constructor (No-op)
-	 */
-	explicit daeAnyAttribute(const DAEP::Proto<Type>&)
-	:_base(*_au){} //NOP
-
-	/**TODO
 	 * Destructor
 	 * @todo C++11 Might want to delete this destructor.
 	 */
 	~daeAnyAttribute()
-	{
-		if(hasAnyExtra()) _extern_free2();
-
-		//HACK: Foil ~daeArray().
-		static daeAllocThunk retain_static_attribs;
-		*(daeAllocThunk**)this = &retain_static_attribs;
-	}
+	{ 
+		//daeElement::__0 is emptying/plugging assuming
+		//the database has no need to access attributes.
+		COLLADA_ASSUME(0==capacity()&&0==size())
+	}	
 
 COLLADA_(private) //INTERNAL	
 	/**USEFUL?
@@ -1081,7 +1111,7 @@ COLLADA_(private) //INTERNAL
 		//attributes "VOID" via some xs:anySimplyType 
 		//framework. Attributes aren't ref-counted so
 		//for now they just retain their older values.
-		while(_au->_varray[hint]->isStatic()) hint++;
+		while(_au->_varray[hint]->isValue()) hint++;
 		std::swap(_au->_varray[i],_au->_varray[hint]);
 		_au->setInternalCounter(hint); return hint;
 	}
@@ -1101,45 +1131,161 @@ COLLADA_(private) //INTERNAL
 	template<class T>
 	/**Implements @c _extern_push_back(), etc. */
 	inline void _blind_push_back(size_t i, const T &Name)
-	{
-		//Note the main cost of having a VOID data-type on
-		//the end is swapping these pointers. Probably the
-		//pattern is lost on compilers or may be too messy.
+	{	
 		_au->setInternalCounter(i);
-		std::swap(_au->_varray[i-1],_au->_varray[i]);		
-		//Note: Name can be a daeStringRef at this stage.
-		*(daeStringRef*)&back()->_attribute_name_string = Name;
-		//Note: Name can be a string-literal at this stage.
-		size_t len = daeHashString(Name).size(); 
-		assert(len!=0&&len<256);
-		back()->_attribute_name_length = 0xFF&len;
+		//Note the main cost of having a VOID data-type on
+		//the end is swapping these pointers. Possibly the
+		//pattern is lost on compilers or may be too messy.
+		//std::swap(_au->_varray[i-1],_au->_varray[i]);
+		daeData**pi = _au->_varray+i;
+		daeData *p = *pi; *pi = pi[-1]; pi[-1] = p;		
+		//Note: Name can be a daeStringRef at this stage.		
+		*(daeStringRef*)&p->_attribute_name_string = Name;
+		//Note: Name can be a string-literal at this stage.		
+		p->_set_attribute_name_length_etc(Name);		
 	}
 
-COLLADA_(private)
+COLLADA_(private) //INTERNAL MEMORY FUNCTIONS
 
 	//REMINDER: The primary motivation for these is so the
 	//daeData attributes, once created, do not move around
 	//in memory; Neither data nor metadata.
-	friend daeElement;
+	friend class daeElement;
 	inline daeAlloc<> *_head_AU();
 	inline daeAlloc<> *_next_AU(daeAlloc<>*);
 	inline void _llist_AU(daeAlloc<>*,void*);		
 	inline void _extern_free(const void *AU);
-	COLLADA_DOM_LINKAGE void _extern_free2();
+				   
+COLLADA_(public) //Formerly "daeElement::isAttributeSet."	
+
+	/**NEVER-CONST, VARIABLE-LENGTH
+	 * Packs/unpacks bit array behind the @c daeAnyAttribute
+	 * pointer.
+	 * @see @c daeAnyAttribute::mask() below.
+	 * @see @c daeAA_Value 
+	 * @see @c DAEP::Value<0,daeAnyAttribute> specialization.
+	 */
+	class Mask : public daeBit_bits<>
+	{	
+	COLLADA_(public)
+		/**
+		 * Gets the bit belonging to a static attribute that
+		 * is at @a ID in the attribute array.
+		 */
+		inline const daeBit operator[](daeSize i)
+		{
+			daeBit o = daeBit_bits::operator[](i);
+			if(i>=size()) o.clear(); return o;
+		}
+
+		/**
+		 * Gets a bit with only an @c assert(i<size()) check.
+		 */
+		inline const daeBit bit(daeSize i)
+		{
+			assert(i<size());
+			return daeBit_bits::operator[](i);
+		}
+
+		/**
+		 * Tells if any static attributes exist and therefor
+		 * if a variable-length bitfield exists.
+		 */
+		inline bool empty(){ return 0!=size(); }
+
+		/**
+		 * Gets the number of static attributes belonging to 
+		 * the owning @c daeAnyAttribute container.
+		 */
+		inline daeSize size()
+		{
+			return ((daeAnyAttribute*)this-1)->_au->getOffset();
+		}
+	};	
+
+	/**NON-PORTABLE (DAEP)
+	 * Gets the attribute write-mask.
+	 * @see @c daeAnyAttribute::Mask
+	 */
+	inline Mask &mask(){ return *(Mask*)(this+1); }	
 };
 
-//-------------------.
-	namespace XS //<-'
+template<>
+/**TEMPLATE-SPECIALIZATION
+ * @c DAEP::Value version of @c daeAnyAttribute not needing a mask.
+ */
+class daeAA_Value<> : public daeAA
+{	
+COLLADA_(protected)
+
+	template<int,class,class CC,typename CC::_,class>
+	friend class DAEP::InnerValue;
+
+	template<class T>
+	/**INTERNAL
+	 * @c DAEP::Value Prototype Constructor
+	 */
+	daeAA_Value(const T&){ /*NOP*/ }
+
+COLLADA_(public) //DAEP::Value implementation?
+
+	//UNFINISHED? This class and daeTypedUnion require development.
+	//Momentarily only their low-level feature-set are implemented.
+};
+template<int words>
+/**VARIABLE-LENGTH
+ * @c DAEP::Value version of @c daeAnyAttribute including the mask.
+ * @tparam words is not "bits" because compilers struggle with all
+ * of the templates.
+ */
+class daeAA_Value : public daeAA_Value<>
+{	
+COLLADA_(protected)
+
+	daeOffset _write_mask_bits[words];
+
+	template<int,class,class CC,typename CC::_,class>
+	friend class DAEP::InnerValue;
+
+	template<class T>
+	/**INTERNAL
+	 * @c DAEP::Value Prototype Constructor
+	 */
+	daeAA_Value(const T &pt):daeAA_Value<>(pt){ /*NOP*/ }
+};
+
+//DEFINING THIS HERE TO AVOID #including "daeDomTypes.h" PREMATURELY.
+//---------------------.
+	namespace DAEP //<-'
 	{//-.
-//<-----'
+//<-----'	  
+template<class CC, typename CC::_ PtoM>
+/**PARTIAL-TEMPLATE-SPECIALIZATION
+ * Adds a bitfield behind the attributes array. The bitfield is used
+ * to mark attributes for inclusion/exclusion in outputted documents.
+ * @note Each bit is a hint. The interpretation is subject to rather
+ * convoluted criteria.
+ */
+class Value<0,daeAnyAttribute,CC,PtoM> 
+:
+public DAEP::InnerValue<0,daeAA,CC,PtoM,typename CC::COLLADA_DOM_0>
+{
+	COLLADA_DOM_INNER_OPERATORS //C2679
+
+	//UNFINISHED: This class and daeTypedUnion require development.
+	//Momentarily only their low-level feature-set are implemented.
+};
+//-------.
+	}//<-'//.	
+//<---------'
 
 /**
  * @c XS::Attribute describes C++ COLLADA-DOM elements' attributes.
  * @note The common name of this class is @c daeAttribute. This is
- * so that it is not necessary to write @c const before its name.
+ * so that it is not necessary to write @c const ahead of its name.
  * @see daeValue.
  */
-class Attribute : public daeDefault
+class XS::Attribute : public daeDefault
 {
 #ifdef BUILDING_COLLADA_DOM
 
@@ -1184,7 +1330,7 @@ COLLADA_(public) //ACCESSORS
 	}
 
 COLLADA_(public) //GENERATOR-SIDE APIs
-
+				 
 	/**GENERATOR-SIDE API, LEGACY
 	 * Unsets @c setIsProhibited().
 	 * This corresponds to <xs::attribute use="required">.
@@ -1208,9 +1354,8 @@ COLLADA_(public) //GENERATOR-SIDE APIs
 	inline void setIsOptional(){ _attribute_use = 0; }
 };
 
-//-------.
-	}//<-'
-}
+//---.
+}//<-'
 
 #endif //__COLLADA_DOM__DAE_META_ATTRIBUTE_H__
 /*C1071*/

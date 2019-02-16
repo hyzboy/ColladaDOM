@@ -131,14 +131,14 @@ void HTTP_agent::resume_connect(int bytes)
 	addrinfo *ai = nullptr;	
 
 	//HACK: 0-TERMINATING
-	daeRefView host = urlencode.getURI_host();
+	daeName host = urlencode.getURI_host();
 	const daeStringCP host_d = *host.end();
 	const daeStringCP *script = host_d=='\0'?"":host.end()+1;		
 	*(daeStringCP*)host.end() = '\0';
 	{
-		getaddrinfo(host.view,"http",nullptr,&ai);
+		getaddrinfo(host.string,"http",nullptr,&ai);
 		snprintf(head,sizeof(head),"GET /%s HTTP/1.1\r\nHost: %s\r\n%s"
-		"User-Agent: " HTTP_AGENT "\r\n"/**/"\r\n",script,host.view,headers);
+		"User-Agent: " HTTP_AGENT "\r\n"/**/"\r\n",script,host.string,headers);
 	}	
 	//REPAIRING 0-TERMINATION
 	*(daeStringCP*)host.end() = host_d;

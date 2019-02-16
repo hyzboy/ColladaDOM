@@ -15,26 +15,31 @@ COLLADA_(namespace)
 {//-.
 //<-'
 
+//Many legacy APIs take it upon themself to clear (or not clear) arrays.
+//Rather than double the number of APIs, this enum is used as a default.
+enum dae_clear{ dae_default=0,dae_append=0,dae_clear };
+
 /**RTTI-SUPPORT
  * Pre-2.5 this class was "daeChar*" and possibly "daeMemoryRef" before
  * that. It evolved through phases. At first the idea was to mark it as
  * a @c void* like type, so it was called "daeOpaque." It needed to act
  * like a @c char* so it could be used to compute offsets without casts.
+ *
  * But it wasn't a "char*" so the idea was to "typedef char* daeOpaque;"
  * That fused the type and "*" together, so it couldn't have const-like
  * semantics any longer. So it became a very simple wrapper class. That
  * lasted for a long time, until it became evident that a C++ reference
  * cast does not behave strictly like a C pointer cast! What happens if
- * you do (T&)x is if x::x(T) exists, it tries to construct an x from T!
+ * you do (x&)T is if x::x(T) exists, it tries to construct an x from T!
  * IOW, it invokes a constructor. That's a minefield, but if there is a
- * template based constructor, then all Ts invoke a constructor. That'd
+ * template based constructor, then all Ts invoke the constructor. That
  * especially became a problem because all of the casting code had been
- * rewritten to use (X&)* instead of *(X*) because it seems more direct.
- * (And because it keeps the symbols clustered together.) 
- * At that point it was clear that a simple wrapper would not do. To do
+ * rewritten to use (x&) instead of *(x*) because it seemed more simple. 
+ *
+ * At that point it was clear that a trivial wrapper wouldn't do. To do
  * this kind of "opaque" magic with C++ is actually a minefield. And it
  * is unavoidable with this kind of library. So the new thinking became
- * how to make this as safe and simple as can be? The (T&) problem made
+ * how to make this as safe and simple as can be? The (x&) problem made
  * clear that it needed a conversion to reference operator, that used C
  * pointer casting internally. That is actually pretty cool, and a good
  * way to write deceptively easy to follow code, because the casting is
@@ -92,36 +97,25 @@ COLLADA_(public) //operator==()
 };
 
 //SCHEDULED FOR REMOVAL
-/**SKETCHY
- * This attaches some information to a @c daeAllocThunk.
- * It's not generally helpful, but it's hard to dismiss.
- * @see @c daeAllocThunk::_prototype Doxygentation note.
+/**
+ * This used to be a 2.4 feature that I didn't get to the
+ * bottom of until having completed work on the RT and FX
+ * components. It turned out to be nothing, but right now
+ * @c daeDefault is still made up by most of it. It might 
+ * be worth combining with @c daeFeature::_localthunk and 
+ * to mark its presence there with a flag.
+ *
+ * @c daeArray can find such a feature through its offset.
+ * But I can't think of a reason why it should provide an
+ * API to do that, since non-array data cannot do that. I
+ * mean that I can't think of a reason arrays are special.
+ * Another possibility is to locate the thunk so that the
+ * AU can be freed. But it's hard to say why owned arrays
+ * should be able to do that, but not unowned/object-less
+ * arrays.
  */
 struct daePrototype 
 {
-COLLADA_(public)
-	/**FIRST-MEMBER
-	 * This provides RTTI and opaque operators.
-	 */
-	daeTypewriter *writer;
-	/**
-	 * This is typically the simpleType's name.
-	 */
-	daeClientString alias;
-	/**
-	 * This is typically the generated class's
-	 * prototype's member field. It holds what
-	 * should be a suitable default value.
-	 */
-	daeOpaque value; 
-
-	/**SCHEDULED FOR REMOVAL?
-	 * @remark Since the generator uses @c size_on_stack
-	 * for fixed-length <xs:list> based arrays these are
-	 * playing only a neglible to non-existent part.
-	 */
-	unsigned int maxLength, minLength;	
-
 COLLADA_(public) //OPERATORS (legacy compatibility layer)
 
 	//REMINDER: These should match daeData::getType() and
@@ -137,28 +131,49 @@ COLLADA_(public) //OPERATORS (legacy compatibility layer)
 	{
 		return (daeTypewriter2*)writer; 
 	}		
+
+COLLADA_(public)
+
+	//REMINDER: daeData needs writer to lineup
+	//with daeDefault and daeAST::TypedUnion's.
+						   	
+	/**FIRST-MEMBER
+	 * This provides RTTI and opaque operators.
+	 *
+	 * @note @c daeFeature::_typewriter may be
+	 * redundant; or this may be redundant one.
+	 */
+	daeTypewriter *writer;
+
+	/**
+	 * This is typically the generated class's prototype
+	 * member field.
+	 */
+	daeOpaque value; 
+
+	/**
+	 * This provides the old "alias" and "min/maxLength"
+	 * fields.
+	 * If the library were to support schemas other than
+	 * XML Schema this would need to be an abstract base
+	 * class of @c XS::SimpleType.
+	 */
+	const XS::SimpleType *datatype;
 };
 
-/**
+/**256-BIT ALIGNMENT
  * @daeAllocThunk, alone, is a 0-sized-placeholder for arrays.
  * However, it is also the non-0-sized base-class of @c daeAlloc.
  *
  * @note It does not have getX, or setX members, as conceptually a
  * thunk is always 0, and non-operable, and so that is meaningless.
  * This is despite being a base-class for non-thunk allocation-units.
- *
- * @todo At some much later date, decide if it's worth putting a
- * fully custom-made function pointer table inside of @c _prototype.
- * The virtual-methods are not high frequency, and they cause this
- * thunk to not be strictly 16-byte aligned, which would be a nice
- * feature. The custom solution might offer other benefits if given
- * lots of thought.
  */
 class daeAllocThunk
 {	
 COLLADA_(public)
 	/**
-	 * Non-Virtual Non-Destructor 
+	 * Non-virtual Non-Destructor 
 	 */
 	~daeAllocThunk(){}
 
@@ -229,73 +244,14 @@ COLLADA_(public) //DATA-MEMBERS
 	 */
 	const size_t _capacity;	
 	
-	/**SKETCHY
-	 * This may be a @c daePrototype if it's in the object's meta-data.
-	 *
-	 * @note This was part of version 2.4 that I believe wasn't really
-	 * used for anything, but was implemented anyway until its purpose
-	 * became evident, and it was made plain to see that nothing would
-	 * require it for that purpose...
-	 * 
-	 * RIGHT NOW it's a way for @c daeFeature to access default values.
-	 * The features have array thunks even if they are not arrays, and
-	 * so it can be used to make compatible data without building into
-	 * the @c daeTypewriter objects C++ constructor/destructor methods.
-	 *
-	 * If this pointer is removed the "vptr" and other values could be
-	 * 128-bit aligned. A way is to combine them into one pointer, but
-	 * this would lose @c typeid facilities, so @c daeTypeWriter would
-	 * have to have its own typeid framework (which might not be a bad
-	 * thing.)
-	 */
-	const daePrototype *_prototype;
-
-//I think that daeAlloc::operator* is picking up on this, and it's not
-//needed or used any longer
-	/**OPERATOR
-	 * This is to complement @c daeFeature::getAllocThunk().
-	 *
-	 * @see DAEP::InnerValue::prototype()
-	 */
-//	inline const daePrototype *operator->()const
-//	{
-//		assert(_prototype!=nullptr);
-//		return static_cast<const daePrototype*>(_prototype); 
-//	}
-
 	/**
 	 * Default Constructor
-	 *
-	 * The memory layout for daeAlloc and thunks should not change.
-	 * Any future information will be facilitated by @c _prototype.
 	 */
-	daeAllocThunk(size_t c=0):_offset(),_counter(),_capacity(c),_prototype(){}
-
-COLLADA_(public) //Non-advertised inline methods (There was more.)
-
-  /////////////////////////////////////////////////////////////
-  //NOW THAT THE GENERATOR IS USING EMBEDDED ARRAYS FOR FIXED//
-  //LENGTH LIST ATTRIBUTES, THIS IS NO LONGER OF ANY REAL USE//
-  /////////////////////////////////////////////////////////////
-
-	/**SKETCHY
-	 * Just optimizing the allocation capacity for now. 
-	 * What this does is take something like a matrix, and
-	 * See that it isn't reallocated more than once/necessary.
-	 *
-	 * NOW THAT THE GENERATOR IS USING EMBEDDED ARRAYS FOR FIXED
-	 * LENGTH LIST ATTRIBUTES, THIS IS NO LONGER OF ANY REAL USE.
-	 */
-	inline size_t _getminmax(size_t inlength, size_t floor)
+	daeAllocThunk(size_t c=0):_offset(),_counter(),_capacity(c)
 	{
-		if(_prototype!=nullptr)
-		{
-			size_t len = _prototype->minLength;			
-			if(len>inlength) return len; 
-			len = _prototype->maxLength; assert(floor<=len||len==0);
-			if(inlength>len&&len>=floor) return len;
-		}
-		return inlength;
+		//Want this to hold so that daeAlloc::_varray doesn't move
+		//around based on alignment.
+		daeCTC<4*sizeof(void*)==sizeof(*this)>();
 	}
 };
 
@@ -368,13 +324,15 @@ COLLADA_(protected) //VIRTUAL METHOD TABLE
 	 *
 	 * @note This could be fudged without a virtual method, but-
 	 * for the virtual-table causing the thunk members to not be
-	 * 16-byte aligned; so the alignment is anyone's guess.
-	 *
-	 * THE ONLY SOLUTION would be to store a custom-made function
-	 * pointer table inside of @c daeAllocThunk::_prototype. This
-	 * seems extreme--although at some point it can be considered.
+	 * 16-byte aligned; so the alignment is anyone's guess. NOTE
+	 * @c daeAllocThunk is now 256-bit, unless ABIs require more
+	 * than one pointer to implement @c virtual methods...
+	 * 
+	 * However this virtual method still has value since it it's
+	 * used to resize the AU, and it implements getElementSize().
+	 * 
 	 */
-	virtual daeOpaque __Alloc__v1__getRaw(size_t index=0) = 0;
+	virtual daeOpaque __Alloc__v1__getRaw(size_t index) = 0;
 	
 COLLADA_(public) //non-database AU memory management APIs.
 	/**
@@ -433,7 +391,7 @@ COLLADA_(public) //ACCESSORS ONLY -- No Mutators for <void>
 	 * @warning DON'T USE THIS IN A LOOP. HAVE index BE 0 UNLESS
 	 * YOU'RE GETTING JUST ONE, OR BEGINNING A LOOP AT AN OFFSET.
 	 */
-	inline daeOpaque getRaw(size_t index=0)
+	inline daeOpaque getRaw(size_t index)
 	{
 		return __Alloc__v1__getRaw(index); 
 	}
@@ -444,19 +402,33 @@ COLLADA_(public) //ACCESSORS ONLY -- No Mutators for <void>
 	 * @warning DON'T USE THIS IN A LOOP. HAVE index BE 0 UNLESS
 	 * YOU'RE GETTING JUST ONE, OR BEGINNING A LOOP AT AN OFFSET.
 	 */
-	inline const daeOpaque getRaw(size_t index=0)const
+	inline const daeOpaque getRaw(size_t index)const
 	{
-		return const_cast<daeAlloc*>(this)->getRaw(index);
+		return const_cast<daeAlloc*>(this)->getRaw(index); 
 	} 
+	/**LEGACY
+	 * Finds first index assuming location of the array not that
+	 * it's fixed for all AUs.
+	 */
+	inline daeOpaque getRaw()
+	{
+		return daeOpaque(this)[sizeof(daeAllocThunk)];
+	}
+	
+	/**LEGACY
+	 * Finds first index assuming location of the array not that
+	 * it's fixed for all AUs.
+	 */
+	inline const daeOpaque getRaw()const
+	{
+		return daeOpaque(this)[sizeof(daeAllocThunk)];
+	}
 
 	/**LEGACY
 	 * Gets the size of an element in this array.
 	 * @return Returns the size of an element in this array.
 	 */
-	inline size_t getElementSize()const
-	{
-		return __Alloc__v1__getRaw(1)-__Alloc__v1__getRaw(0); 
-	}
+	inline size_t getElementSize()const{ return &getRaw(1)-&getRaw(); }
 
 COLLADA_(public) //STATIC METHODS	
 
@@ -483,9 +455,6 @@ COLLADA_(public) //STATIC METHODS
 	 */
 	inline static bool isEmbeddedAU(daeAlloc<T>* &au)
 	{
-		#ifdef NDEBUG //GCC apostrophes.
-		#error "Don't use T* but first make sure daeArray<void*> is feasible."
-		#endif
 		//T* is for compilers that want template parameters or for the type
 		//to be "complete." These rules just make for very round-about code.
 		typedef daeArray</*char*/T*,!0> commaless;
@@ -516,47 +485,29 @@ COLLADA_(public) //UTILITIES
 	}
 };   
 
-template<class T, int size_of_array>
-/**
+template<class T>
+/**PARTIAL-TEMPLATE-SPECIALIZATION
  * Allocation Unit, or, AU
  * @tparam size_of_array must be 0 when constructing an object of this type.
- * It must be 1 or more to access the array. Construction is done to set the
- * virtual-table pointer up; and, to initialize daeAllocThunk's data members.
+ * This specialization avoids calling the constructor of the array elements
+ * housed by @c daeArray<T>::_varray. 
  */
-class daeAlloc : public daeAlloc<> 
+class daeAlloc<T,0> : public daeAlloc<> 
 {	
 COLLADA_(public)
 	/**
 	 * Default Constructor
 	 */	
-	daeAlloc(size_t c=0):daeAlloc<>(c)
-	{
-		//1 is allowed for 0 terminated thunks.
-		assert(size_of_array/*==0*/<=1); 
-	} 	
+	daeAlloc(size_t c=0):daeAlloc<>(c){}
 
-	COLLADA_SUPPRESS_C(4624)
-	/**
-	 * Non-Destructor (AUs are not C++ objects.)
-	 */	
-	~daeAlloc()
-	{
-		//1 is allowed for 0 terminated thunks.
-		daeCTC<(size_of_array/*==0*/<=1)>(); 
-	}
-
-COLLADA_(public) //DATA MEMBER
-	/**
-	 * C++ forbids 0-sized arrays in structures (and on the stack.)
-	 */		
-	typename daeTypic<size_of_array==0,enum dae_clear,T[size_of_array]>::type _varray;
+COLLADA_(public)
 	
 	/**LOCAL-SINGLETON FACTORY
 	 * @return Returns a per translation-unit shared-thunk.
 	 * @remark This could be a virtual method, to save space. It doesn't
 	 * matter in terms of correctness. Static method might help inlining.
 	 */
-	static inline const daeAlloc &localThunk()
+	static inline const daeAlloc<T> &localThunk()
 	{
 		//T ensures size_of_array is invariant for _localThunk2(), which
 		//has a local-static variable (the local thunk.)		
@@ -569,13 +520,13 @@ COLLADA_(public) //DATA MEMBER
 	 * be one way to support types that are pre-registered, either by a user
 	 * or by an @c XS::Schema.
 	 */
-	static inline const daeAlloc &_localThunk2()
+	static inline const daeAlloc<T> &_localThunk2()
 	{
 		//I don't know if const can be a clue to handle it as .rdata or not.
 		//0 prevents construction of _varray when localThunk() is never used.
 		static const daeAlloc<T,0> t; 
-		COLLADA_ASSUME(t._capacity==0&&t._counter==0); 
-		return (const daeAlloc&)t; 
+		COLLADA_ASSUME(t._capacity==0&&t._counter==0)
+		return (const daeAlloc<T>&)t; 
 	}
 
 COLLADA_(private) //daeAllocThunk methods	
@@ -604,8 +555,11 @@ COLLADA_(protected) //daeAlloc<> methods
 	 * Gets a pointer to the raw memory of a particular element.
 	 * @return Returns a pointer to the memory for the raw data.
 	 */
-	virtual daeOpaque __Alloc__v1__getRaw(size_t index=0)
+	virtual daeOpaque __Alloc__v1__getRaw(size_t index)
 	{
+		//Checking this for non-virtual getRaw() method.
+		assert(sizeof(daeAllocThunk)==daeOffsetOf(daeAlloc<T>,_varray));
+
 		//newThis() calls getRaw() to size the new array.
 		//assert(index<_counter);
 		return ((daeAlloc<T>*)this)->_varray+index; 
@@ -617,13 +571,12 @@ COLLADA_(public) //UTILITIES
 	 * Sometimes this is a function pointer. It's no big deal
 	 * that it does this courtesy return whenever cold-called.
 	 */
-	inline static daeAlloc &locateThunk(daeAllocThunk &thunk)
+	inline static daeAlloc<T> &locateThunk(daeAllocThunk &thunk)
 	{ 
 		assert(thunk._capacity==0);
-		daeOffset o = thunk._offset;
-		const daePrototype *p = thunk._prototype;
+		daeOffset o = thunk._offset;		
 		new((void*)&thunk) daeAlloc<T,0>; 
-		thunk._offset = o; thunk._prototype = p; return (daeAlloc&)thunk;
+		thunk._offset = o; return (daeAlloc<T>&)thunk;
 	}
 
 	/** @see @c _empty_arrays_are_forbidden. */
@@ -641,6 +594,44 @@ COLLADA_(public) //UTILITIES
 	inline daeAlloc<T> *unit(){ return (daeAlloc<T>*)this; }
 };
 
+template<class T, int size_of_array>
+/**
+ * Allocation Unit, or, AU
+ * @tparam size_of_array is typically 4*4 since that is an arbitrary default
+ * for displaying allocation units in debuggers... to display a matrix value.
+ * Sometimes it's 1 or maybe 2 for special thunks. In theory it can be other
+ * sizes, however in practice allocation units are not used like that beyond
+ * stack-based array objects.
+ */
+class daeAlloc : public daeAlloc<T,0> 
+{	
+COLLADA_(public)
+	/**
+	 * Default Constructor
+	 */	
+	daeAlloc(size_t c=0):daeAlloc<T,0>(c)
+	{
+		//1 is allowed for 0 terminated thunks.
+		assert(size_of_array/*==0*/<=1); 
+	} 	
+
+	COLLADA_SUPPRESS_C(4624)
+	/**
+	 * Non-Destructor (AUs are not C++ objects.)
+	 */	
+	~daeAlloc()
+	{
+		//1 is allowed for 0 terminated thunks.
+		daeCTC<(size_of_array/*==0*/<=1)>(); 
+	}
+
+COLLADA_(public) //DATA MEMBER
+	/**
+	 * C++ forbids 0-sized arrays in structures (and on the stack.)
+	 */		
+	T _varray[size_of_array];
+};
+
 /**
  * COLLADA class that implements array move-semantics, and object-based initialization.
  *
@@ -649,7 +640,7 @@ COLLADA_(public) //UTILITIES
  */
 template<class T, class U=T> class daeArrayAware
 {
-	typedef char Yes; typedef long No;		
+	typedef char Yes, (&No)[2];
 	/** Indicates @c S::S() requires a pointer to its @c DAEP::Object. */
 	template<typename S> static Yes Aware(typename S::__COLLADA__Object*);
 	template<typename S> static No Aware(...);
@@ -733,7 +724,7 @@ public: static const bool value = is_aware;
 	/** C++03 object-aware placement-new based copy-construction. */
 	static void place(daeArray<T> *a, T *placement_new_this, const U &cp)
 	{
-		place(a->getAU(),a->getObject(),placement_new_this,cp);
+		place(a->getAU(),a->_getObject(),placement_new_this,cp);
 	}
 	static void place(daeAlloc<T> *AU, const DAEP::Object *obj, T *placement_new_this, const U &cp)
 	{
@@ -762,15 +753,6 @@ COLLADA_(public)
  */
 template<class T> class daeArray<T>
 {		
-COLLADA_(public) //DAEP::Value
-	/** 
-	 * Don't confused this with @c __COLLADA__atomize.
-	 * Here. "Atom" is stemming from @c daeAtomicType.
-	 */
-	typedef T __COLLADA__Atom, Atom, value_type; 
-
-	typedef T *iterator; typedef const T *const_iterator;
-
 COLLADA_(protected) //DATA MEMBER
 
 	template<class,class> friend class daeArrayAware;
@@ -778,7 +760,18 @@ COLLADA_(protected) //DATA MEMBER
 	 * Allocation Unit
 	 */
 	union{ daeAlloc<T> *_au; const daeAlloc<T> *_thunk_au; };
-	  
+	
+COLLADA_(public) //DAEP::Value
+	/** 
+	 * Don't confused this with @c __COLLADA__atomize.
+	 * Here. "Atom" is stemming from @c daeAtomicType.
+	 */
+	typedef T __COLLADA__Atom,Atom;	
+	/**STL-like */
+	typedef T value_type,*iterator,*pointer,&reference;		
+	/**STL-like */
+	typedef const T*const_iterator,*const_pointer,&const_reference;
+
 COLLADA_(public)
 
 	template<class Type> //DAEP::Value<...>
@@ -809,6 +802,15 @@ COLLADA_(public)
 			*this = (daeArray&)swap;
 		}
 	}
+	template<class S>
+	/**
+	 * TypedUnion Constructor
+	 */
+	explicit daeArray(const S &cp, typename S::__COLLADA__Value*v=nullptr)
+	:_thunk_au(&daeAlloc<T>::localThunk())
+	{
+		_assign(cp,v);
+	}
 	/**LEGACY-SUPPORT
 	 * Explicit Copy Constructor
 	 * This constructor assumes the AU is @c daeAlloc::localThunk().
@@ -826,56 +828,49 @@ COLLADA_(public)
 	/**
 	 * Default Constructor
 	 */
-	daeArray(const daeAlloc<T> &AU=daeAlloc<T>::localThunk()):_thunk_au(&AU){}
+	daeArray(const daeAlloc<T> &AU=daeAlloc<T>::localThunk()):_thunk_au(&AU){}	
 	/**
 	 * Destructor
 	 * @remark @c clear() is not used to avoid @c _clear2<daeContent>().
 	 * @see @c XS::Choice::_solve() definition.
 	 */
-	~daeArray(){ _clear2(/*void*/); getObject()->deAlloc(_au); }
+	~daeArray(){ _clear2(/*void*/); getObject().deAlloc(_au); }
 
-	/**
+	/**NEVER-NULLPTR
 	 * This is exposed for the RTTI subsystem.
 	 * This is a dangerous API. Use with care.
 	 */
-	daeAlloc<T>* &getAU(){ return _au; }
-	/**CONST-FORM
+	inline daeAlloc<T>* &getAU(){ return _au; }
+	/**CONST-FORM, NEVER-NULLPTR
 	 * This is exposed for the RTTI subsystem. 
 	 * This is a dangerous API. Use with care.
 	 */
-	const daeAlloc<T> *getAU()const{ return _au; }
+	inline const daeAlloc<T> *getAU()const{ return _au; }
 
 	/**WARNING
 	 * @warning Freestanding arrays return @c nullptr
 	 * Get the allocation unit's containing object--or @c nullptr.
 	 */
-	inline daeObject *getObject()
+	inline COLLADA_INCOMPLETE(T) daeNullable getObject()const
+	{
+		daeNullable<> o = {_getObject()}; return o;
+	}
+	inline daeObject *_getObject()const
 	{
 		daeOffset os = _au->getOffset();
 		return 0==os?nullptr:reinterpret_cast<daeObject*>((char*)this-os);
-	}
-	/**WARNING, CONST-FORM
-	 * @warning Freestanding arrays return @c nullptr
-	 * Get the allocation unit's containing object--or @c nullptr.
-	 */
-	inline const daeObject *getObject()const
-	{
-		return const_cast<daeArray*>(this)->getObject();
 	}
 
 COLLADA_(public) //Standard Library compatibility layer
 	/**
 	 * Pre-2.5 @c clear freed the memory.
 	 * Since 2.5 the capacity does not change.
-	 * Maintainers note: to completely free the memory, a pointer to the 
-	 * original thunk must be added to _prototype.
 	 * Freestanding arrays can re-construct themself with placement-new.
 	 * HOWEVER. This should not be done with clear.
 	 */
 	inline void clear(){ _clear2((T*)nullptr); }
 
-	//SCHEDULED FOR REMOVAL?
-	/**
+	/**SCHEDULED-FOR-REMOVAL
 	 * Implements @c clear(). 
 	 * @param ... is because strict C++ won't let methods be explicitly
 	 * specialized in any capacity.
@@ -891,11 +886,10 @@ COLLADA_(public) //Standard Library compatibility layer
 	 */
 	inline void _clear2(...)
 	{
-		size_t iN = _au->getCount(); //hack: use safe count (min(count,capacity))
+		size_t iN = _au->getCount(); //HACK: Use safe count (min(count,capacity)).
 		for(size_t i=0;i<iN;i++) _au->_varray[i].~T(); _au->setInternalCounter(0);		
 	}
-	//SCHEDULED FOR REMOVAL?
-	/**KISS, CIRCULAR-DEPENDENCY
+	/**CIRCULAR-DEPENDENCY, SCHEDULED-FOR-REMOVAL
 	 * Implements @c daeArray<daeContent>::clear(). 
 	 * @see ColladaDOM_3.inl header's implementation.
 	 */
@@ -1044,11 +1038,11 @@ COLLADA_(public) //Standard Library compatibility layer
 	 */
 	inline daeArray &append(const S &other)
 	{
-		return append(other.data(),other.size()); 
+		return append(other.data(),other.size()); //C++11 for std::vector 
 	}
 	template<class S>
 	/**GENIUS!
-	 * This is for symmetry with the above API, and it can chain @c daeRefView.
+	 * This is for symmetry with the above API.
 	 * @see the C-array version of @c append_and_0_terminate(). 
 	 */
 	inline daeArray &append_and_0_terminate(const S &other)
@@ -1253,9 +1247,8 @@ COLLADA_(public) //LEGACY ACCESSORS & MUTATORS
 		//static metadata arrays; EVEN THOUGH daeArray
 		//IS OVERKILL IN THEIR CASE, IT'S EASY FOR NOW.
 		//while(newCap<minCapacity) newCap*=2; 
-		newCap = std::max(newCap*2,minCapacity);
-		newCap = _au->_getminmax(newCap,minCapacity); //!
-		getObject()->reAlloc(_au,newCap,_grower);
+		newCap = std::max(newCap*2,minCapacity);		
+		getObject().reAlloc(_au,newCap,_grower);
 	}			
 	//TODO? _sizer() "illustrates" growing AND shrinking.
 	static void _sizer(const daeObject *obj, daeAlloc<T> &dst, daeAlloc<T> &src)
@@ -1308,7 +1301,7 @@ COLLADA_(public) //daeArray<daeArray> (etc.) move/grow implementation
 				if(au._capacity>0) au._offset = os;
 			}
 		}
-		else assert(i==0||rv[0].getObject()==nullptr);
+		else assert(i==0||0==rv[0]._au->_offset); //getObject()==nullptr
 	}  
 
 COLLADA_(public) //daeArray<daeArray> (etc.) placement-new implementation
@@ -1350,6 +1343,16 @@ COLLADA_(public) //OPERATOR OVERLOADS
 	 */
 	inline daeArray<T> &operator=(const S &cp)
 	{
+		_assign(cp,nullptr); return *this;
+	}
+	template<class S>
+	inline void _assign(const S &cp,typename S::__COLLADA__Value*)
+	{
+		S::__COLLADA__Value::copy(cp,*this);
+	}
+	template<class S>	
+	inline void _assign(const S &cp,...)
+	{
 		if((void*)this!=(void*)&cp) //LEGACY
 		{
 			size_t iN = cp.size();
@@ -1361,7 +1364,6 @@ COLLADA_(public) //OPERATOR OVERLOADS
 			}
 			_au->setInternalCounter(iN);
 		}
-		return *this;
 	}
 	/**
 	 * Non-Default Assignment Operator
@@ -1780,6 +1782,9 @@ COLLADA_(public) //INEFFICIENT LEGACY METHODS
 	}
 };	
 
+//8B ALIGNMENT REQUIREMENT
+//T cannot require special alignment.
+//I'm not sure how to test alignment.
 template<class T, int size_on_stack>
 /**
  * COLLADA C++ array that initially lives on the stack, until it outgrows it. 
@@ -1799,7 +1804,7 @@ class daeArray : public daeArray<T,0>
 COLLADA_(public) 
 
 	using daeArray<T,0>::_au;
-	//using daeArray<T,0>::operator=; //MSVC says no.
+	//using daeArray<T,0>::operator=; //MSVC disagrees.
 	/**
 	 * Non-Default Assignment Operator
 	 * C++ requires this, to not generate a default @c operator=.
@@ -1865,9 +1870,10 @@ COLLADA_(private) //DATA-MEMBER
 
 	struct //stack/embedded AU data
 	{
-		#ifdef NDEBUG
-		#error WASTE ON 32-BIT FOR 32-BIT & LESS TYPES.
-		#endif
+		//REMINDER: isEmbeddedAU is assuming this is
+		//aligned on an 8B boundary. Supporting more
+		//alignments is impractical.
+
 		//MSVC: Putting after struct doesn't work???
 		COLLADA_ALIGN(8)
 		char _[sizeof(daeAlloc<T,size_on_stack>)];

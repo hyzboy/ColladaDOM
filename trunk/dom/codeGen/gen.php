@@ -211,7 +211,7 @@ function flattenInheritanceModel(&$meta)
 		//Merge $meta['content_model']. NOTE: ADDING sequenceCMopening IS NOT ALWAYS REQUIRED
 		$tempArray = array();
 		//adding to CM - need to add a starting sequence
-		$tempArray[] = array('name'=>ElementMeta::sequenceCMopening,'minOccurs'=>1,'maxOccurs'=>1);
+		$tempArray[] = array('name'=>ElementMeta::sequenceCMopening,'minOccurs'=>1,'maxOccurs'=>1,'total'=>1);
 		$tempArray = array_merge($tempArray,$cm2,$cm);
 		//adding to CM - need to add an ending sequence
 		$tempArray[] = array('name'=>ElementMeta::CMclosure,'minOccurs'=>0,'maxOccurs'=>0);	
@@ -342,29 +342,45 @@ foreach($synthetics as $k =>& $ea)
 //assuming singular root candidate
 //is $pop guaranteed to be a root?
 global $root_xmlns, $root_version;
-$root_xmlns = $pop->getAttribute('xmlns');
+//this this should be targetNamespace
+//$root_xmlns = $pop->getAttribute('xmlns');
+$root_xmlns = $pop->getAttribute('targetNamespace');
 $root_version = $pop->getAttribute('version');
-//LEGACY: COLLADA specific business
-//grab the master collada version/namespace
-global $COLLADA; if(isset($classmeta['COLLADA']))
-$COLLADA =& $classmeta['COLLADA']; if(!empty($COLLADA))
+global $root_xmlns2; //NEW
+$root_xmlns2 = array_merge(array($pop->getAttribute('xmlns')),$pop->getAttribute('xmlns:')); 
+
+//HACK: There was code here for forcing <COLLADA xmlns version> to
+//have default values, and to be required in the case of xmlns. To
+//help with this, this makes it so the schema's version will use 0.
+//As for xmlns, hopefully it will be generated according to a rule.
+function defaultEnum($name,$key)
 {
-	//LEGACY: COLLADA specific business
-	//Inject the master COLLADA version/namespace.
-	//Note, this is overriding the schema, and being both required, and having a
-	//default value, is not a valid XSD schema. This should be optional, however
-	//COLLADA-DOM is not concerned with the schema.
-	//Also note that this had been done in a static \"create\" method, without the
-	//schema overrides. But that was a hack, and \"create\" is no longer an option.
-	$xmlns =& $COLLADA['attributes']['xmlns'];
-	$xmlns['use'] = 'required';$xmlns['default'] = $root_xmlns; 
-	$COLLADA['attributes']['version']['default'] = $root_version;
-//	$_globals['constStrings']['COLLADA_VERSION'] = "\"$root_version\";\n";
-//	$_globals['constStrings']['COLLADA_NAMESPACE'] = "\"$root_xmlns\";\n\n";
+	global $typemeta;
+	if(isset($typemeta[$name]))
+	{
+		$meta =& $typemeta[$name];
+		if(isset($meta['enum'][$key]))
+		{
+			$enum =& $meta['enum'];
+			if(!isset($enum[$key]['value']))
+			{
+				$enum[$key]['value'] = 0;			
+				$i = 1;
+				foreach($enum as $k =>& $ea) if($key!=$k)				
+				$ea['value'] = $i++; 
+			}
+		}
+	}	
 }
+defaultEnum('VersionType',$root_version); //COLLADA 1.4.x
+	
 global $COLLADA_DOM_GENERATION;
-$_globals['target_namespace'] =
-identifyC(empty($root_xmlns)?$XSD_file:$root_xmlns);
+$ns = identifyC(empty($root_xmlns)?$XSD_file:$root_xmlns);
+$_globals['target_namespace'] = $ns;
+//NEW: this is to not have to manaully/automatically delete files
+if(inline_CM) $_fsystem['include'] = $_fsystem['rootdir'].$ns.'/';
+if(inline_CM) makeGenDir($_fsystem['include']);
+
 $_globals['include_guard'] = 
 $_globals['target_namespace'].'__ColladaDOM_g'.$COLLADA_DOM_GENERATION.'__';
 

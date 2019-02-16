@@ -17,7 +17,7 @@ COLLADA_(namespace)
 	{	
 		#define YY 5 //MSVC2015 wants RT::??
 		namespace ColladaYY = RT::Collada05;
-		namespace ColladaYY_XSD = Collada05_XSD;	
+		namespace ColladaYY_xsd = Collada05_xsd;	
 		#define _if_YY(x,y) x
 	}
 }
@@ -105,7 +105,7 @@ struct AccessorYY<float> : RT::AccessorYY<ColladaYY::const_float_array>
 };
 	
 template<class T>
-inline void RT::Frame_Asset::_OverrideWith(const daeElement *e)
+inline void RT::Frame_Asset::_OverrideWith(const xs::element_type *e)
 {
 	typename DAEP::Generic<T>::schema yy;
 
@@ -129,7 +129,7 @@ inline void RT::Frame_Asset::_OverrideWith(const daeElement *e)
 	_operator_YY(e->getParent(),yy);
 } 
 void RT::Frame_Asset::_operator_YY
-(const daeElement *e, _if_YY(Collada05_XSD,Collada08_XSD)::__NB__ yy)
+(const xs::element_type *e, _if_YY(_schema05,_schema08) yy)
 {
 	if(e==nullptr)
 	{
@@ -182,9 +182,9 @@ struct RT::DBase::LoadTargetable_of
 	LoadTargetable_of(S &in, RT::Matrix &v)
 	{
 		//This is tortured to avoid loading an identity matrix.
-		typename S::const_pointer e;
+		const typename S::element_type *e;
 		if(b=!in.empty()) e = in;
-		else e = 0; //-Wmaybe-uninitialized
+		else e = nullptr; //-Wmaybe-uninitialized
 		if(!b||e->value->size()<16) RT::MatrixLoadIdentity(v); 
 		if(b) e->value->get4at(0,v[M00],v[M10],v[M20],v[M30]);
 		if(b) e->value->get4at(4,v[M01],v[M11],v[M21],v[M31]);
@@ -557,9 +557,9 @@ CrtSceneRead_spline<ColladaYY::const_sampler>
 	daeSIDREF SIDREF;	
 	void Load(ColladaYY::const_channel in)
 	{	
-		daeRefRequest req;
+		daeRefRequest req; 
 		SIDREF = in->target;
-		if(!SIDREF.get(req)||!req.hasAtomicType())
+		if(!SIDREF.get(req)||!req.hasValue())
 		{
 			#ifdef NDEBUG //GCC can't stand apostrophes.
 			#error "If there is an element but no data, then use the value's capacity."
@@ -572,10 +572,8 @@ CrtSceneRead_spline<ColladaYY::const_sampler>
 		//This check is needed, because if a selection is not applied, the returned
 		//length is the length of the string itself, which will treat each codepoint
 		//as a keyframe parameter.
-		switch(req.getAtomicType())
+		if(req.getValueType().hasStringType())
 		{
-		case daeAtomicType::STRING: case daeAtomicType::TOKEN:
-
 			daeEH::Error<<"Animation target is an untyped string "<<in->target<<"\n"<<
 			"(Is the target an extensions?)";
 			return;
@@ -772,7 +770,7 @@ struct RT::DBase::LoadEffect_profile_COMMON
 		Load_float_or_param(constant.transparency,out->Transparency);			
 		Load_float_or_param(constant.index_of_refraction,out->RefractiveIndex);
 	}
-	void Load_float_or_param(const ColladaYY_XSD::
+	void Load_float_or_param(const ColladaYY_xsd::
 	_if_YY(common_float_or_param_type,fx_common_float_or_param_type) *in, float &o)
 	{
 		if(in!=nullptr&&!LoadTargetable_of(in->float__alias,o)&&!in->param.empty())
@@ -786,7 +784,7 @@ struct RT::DBase::LoadEffect_profile_COMMON
 	{	
 		if(child.empty()) return; 
 		
-		typename T::const_reference in = *child;				
+		const typename T::element_type &in = *child;				
 		if(LoadTargetable_of(in.color,o)) return;
 	
 		typedef ColladaYY::const_profile_COMMON::newparam Lnewparam;
@@ -1054,14 +1052,14 @@ struct RT::DBase::LoadGeometry_technique_common
 				set->source.Dimension = dimens;
 			}
 		}
-		Input *_SetOffset(const ColladaYY_XSD::
+		Input *_SetOffset(const ColladaYY_xsd::
 		_if_YY(InputLocal,input_local_type) &in_i)
 		{
 			if("POSITION"==in_i.semantic) return &position;			
 			if("NORMAL"==in_i.semantic) return &normal;			
 			return "TEXCOORD"==in_i.semantic?&texture0:nullptr;
 		}
-		Input *_SetOffset(const ColladaYY_XSD::
+		Input *_SetOffset(const ColladaYY_xsd::
 		_if_YY(InputLocalOffset,input_local_offset_type) &in_i)
 		{
 			int os = (int)in_i.offset;
@@ -1142,7 +1140,7 @@ struct RT::DBase::LoadGeometry_technique_common
 	{
 		for(size_t i=0;i<in.size();i++)
 		{
-			typename T::const_reference in_i = *in[i];	
+			const typename T::element_type &in_i = *in[i];	
 			if(in_i.p.empty()) continue;
 
 			inputs = in_i.input;
@@ -1175,7 +1173,7 @@ struct RT::DBase::LoadGeometry_technique_common
 			Triangulate<M>(p,p->value->size()/inputs.max_offset);
 		}
 	}	
-	template<int M> void Load_p_N(const ColladaYY_XSD::_if_YY(polylist,polylist_type) &in_i)
+	template<int M> void Load_p_N(const ColladaYY_xsd::_if_YY(polylist,polylist_type) &in_i)
 	{	
 		//GCC/C++ make explicit-specialization impractical to impossible.
 		daeCTC<M==0>();
@@ -1294,7 +1292,13 @@ RT::Image *RT::DBase::LoadImage(ColladaYY::const_image &in, bool sRGB)
 	daeEH::Verbose<<"Adding new image "<<in->id;
 
 	out = COLLADA_RT_new(RT::Image);
-	out->Id = in->id; out->DocURI = RT::DocURI(in);
+	out->Id = in->id;
+
+	//HACK: Storing xml:base aware URI in Sid for now.
+	//out->DocURI = RT::DocURI(in);
+	const daeDoc *doc = dae(in)->getDoc();
+	out->DocURI = doc->getDocURI().data();
+	out->XMLBase = xml::base(*doc,in);
 
 	//crate_2d is required to specify sRGB color space.
 	//Unfortunately DevIL lacks an sRGB information API.
@@ -1469,7 +1473,7 @@ struct RT::DBase::LoadController_skin
 		if(0==inputs_max_offset||JOINT_offset<0||WEIGHT_offset<0||WEIGHT_array==nullptr)
 		return;
 		inputs_max_offset+=1; 
-	  //template<> void Load_p_N<0>(const ColladaYY_XSD::polylist &in_i)
+	  //template<> void Load_p_N<0>(const ColladaYY_xsd::polylist &in_i)
 	  //{	
 			GLuint restart = 0;
 			ColladaYY::const_v v = vertex_weights->v;	
@@ -2095,21 +2099,21 @@ struct RT::DBase::LoadInstances_of
 			S *ii = Load_i(*in[i]); if(ii!=nullptr) iv.push_back(ii);
 		}
 	}
-	RT::Light *Load_i(const ColladaYY_XSD::
+	RT::Light *Load_i(const ColladaYY_xsd::
 	_if_YY(instance_light,instance_light_type) &in)
 	{
 		ColladaYY::const_light yy = 
 		xs::anyURI(in.url)->get<ColladaYY::light>();
 		return dbase->LoadLight(yy);
 	}
-	RT::Camera *Load_i(const ColladaYY_XSD::
+	RT::Camera *Load_i(const ColladaYY_xsd::
 	_if_YY(instance_camera,instance_camera_type) &in)
 	{
 		ColladaYY::const_camera yy = 
 		xs::anyURI(in.url)->get<ColladaYY::camera>();
 		return dbase->LoadCamera(yy);
 	}	
-	RT::Geometry_Instance *Load_i(const ColladaYY_XSD::
+	RT::Geometry_Instance *Load_i(const ColladaYY_xsd::
 	_if_YY(instance_geometry,instance_geometry_type) &in)
 	{
 		ColladaYY::const_geometry yy = 
@@ -2129,7 +2133,7 @@ struct RT::DBase::LoadInstances_of
 
 		return ig;
 	}
-	RT::Controller_Instance *Load_i(const ColladaYY_XSD::
+	RT::Controller_Instance *Load_i(const ColladaYY_xsd::
 	_if_YY(instance_controller,instance_controller_type) &in)
 	{
 		xs::anyURI URI = in.url;
@@ -2323,7 +2327,8 @@ RT::Node *RT::DBase::LoadNode(ColladaYY::const_node &in, int i, RT::Node *node)
 	out->Name = in->name;
 	out->Id = in->id;
 	out->DocURI = RT::DocURI(in); 
-	out->Sid = in->sid;	
+	//Seems to be unused.
+	//out->Sid = in->sid;	
 	//SCHEDULED FOR REMOVAL
 	out->Fragment = in;
 	LoadTransforms_of(this,out,in);

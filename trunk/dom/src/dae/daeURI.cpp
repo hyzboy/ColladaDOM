@@ -6,8 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
-
-#include "../../include/dae/daeRAII.hpp"
+#include <ColladaDOM.g++> //GCH
 
 COLLADA_(namespace)
 {//-.
@@ -36,7 +35,7 @@ daeOK daeURI_base::resolve(const daeArchive *DOM_or_ZAE)const
 
 daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 {
-	if(URI==nullptr) URI = ""; bool slashed;
+	if(URI==nullptr) URI = empty_daeString1; bool slashed;
 
 	//Will need this anyway, so lock the parent.
 	const_daeObjectRef lock = &getParentObject();
@@ -49,6 +48,12 @@ daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 	daeDoc *doc = (daeDoc*&)lock;
 	if(doc->_isDoc()&&this==&doc->getDocURI()) //is doc URI?
 	{
+		size_t prefix = 0; if(getIsDirectoryLike()) 
+		{
+			prefix = getURI_uptoCP<'?'>();
+			if(isDirectoryURI()) prefix--;
+		}
+
 		//_setURI_op is protecting against recursive calls and
 		//returns DAE_NOT_NOW if it's called on another thread.
 		const_daeDOMRef DOM = doc->getDOM();
@@ -60,12 +65,7 @@ daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 		//_doOperation agrees to use DAE_ERR_NOT_IMPLEMENTED in this
 		//case to signal success.
 		case DAE_ERR_NOT_IMPLEMENTED: //Finishing up.
-
-			#ifdef NDEBUG
-			#error Recursively correct nested URIs (avoiding moving.)
-			#endif
-			assert(!doc->isArchive()||0==((daeArchive*)doc)->getDocCount());
-
+									 
 			//Force document URIs to be absolute URIs.
 			if(0!=_rel_half!=0||0!=_rel_backtracks)
 			{			
@@ -74,10 +74,24 @@ daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 				_rel_half = _rel_backtracks = 0;
 			}
 			if(doc!=&DOM->_closedDocs) //Hack? This is a special archive.
-			{	
+			{				
+				//Recursively correct nested URIs (avoiding moving.)
+				if(getIsDirectoryLike()&&doc->isArchive()) 
+				{
+					daeCharData_size<COLLADA_MAX_PATH> base = getURI();					
+					if(isDirectoryURI()) base.pop_back(); 
+					_setURI_rebaseNest(prefix,base);
+				}
+				else //_setURI_rebaseNest does this for nested documents.
+				{
+					if(doc->isDocument())
+					doc->a<daeDocument>()->_xmlBase.clear();
+				}
+
 				//"Front-door" into docLookup() doing re-insertion logic.
 				_docHookup<0>(const_cast<daeDOM&>(*DOM),(daeDocRef&)lock);
 			}
+
 			return DAE_OK;
 
 		case DAE_OK: break; //recursive
@@ -87,7 +101,11 @@ daeOK daeURI_base::_setURI(daeString URI, const daeURI *baseURL)
 
 	 //Base-Suitability Prologue:
 	//Bases must have both a scheme and an authority part.
-	if(baseURL!=nullptr&&3>=baseURL->getURI_authorityCP())
+	if(baseURL!=nullptr) if(baseURL==this)
+	{
+		return DAE_ERR_NOT_IMPLEMENTED;		
+	}
+	else if(3>=baseURL->getURI_authorityCP())
 	{
 		//This is a courtesy so "" can be passed as a base.
 		if(baseURL->empty())
@@ -243,7 +261,7 @@ nonquery:			if(p[0]=='?'&&'/'==toslash(p[1])) p++;
 		if(doc!=nullptr&&_fragment+1!=_size) 
 		{
 			_size = _fragment+1; assert('#'==URI[_size-2]);
-			_this()._refString.setString(*this,URI,_size,'\0');
+			_refString().setString(*this,URI,_size,'\0');
 
 			//Retain the fragment. This feature was added for ZAE
 			//but here it is only a courtesy on the user's behalf.
@@ -252,7 +270,7 @@ nonquery:			if(p[0]=='?'&&'/'==toslash(p[1])) p++;
 			if(doc->isDocument())			
 			doc->_getDocument()->getFragment() = URI+_size;
 		}
-		else _this()._refString.setString(*this,URI,_size);
+		else _refString().setString(*this,URI,_size);
 	}
 
 	return DAE_OK;
@@ -330,7 +348,44 @@ void daeURI_base::_setURI_concat(const daeURI &base, size_t trim, daeString rel)
 	//Note: _rel_backtracks is not set by this subroutine.
 	_rel_half = (short)i;
 	memcpy(buf.data()+i,rel,(size-i)*sizeof(buf[0]));
-	_this()._refString.setString(*this,buf.data(),size);
+	_refString().setString(*this,buf.data(),size);
+}
+void daeURI_base::_setURI_rebaseNest(size_t prefix, daeArray<> &base)
+{
+	daeArchive &a = (daeArchive&)getParentObject();	
+	size_t i,iN = !a.isArchive()?0:a.getDocCount();
+	if(iN==0) return; 
+
+	size_t baseN = base.size();
+	daeAlloc<> *au = base.getAU();
+	daeOffset difference = daeOffset(baseN-prefix);
+	for(i=0;i<iN;i++)
+	{	
+		daeDocRef doc = a.getDoc(i);
+		if(doc->isDocument())
+		doc->a<daeDocument>()->_xmlBase.clear();
+		daeURI &URI = doc->getDocURI();
+		daeName r = URI.getURI();
+		if(r.extent>prefix&&'/'==toslash(r[prefix]))
+		{				
+			au->setInternalCounter(baseN);
+			if(URI.getIsDirectoryLike())
+			URI._setURI_rebaseNest(prefix,base);
+			base.append(r.value_range(prefix,0));
+			URI._refString.setString(URI,base);
+			URI._authority = _authority;
+			URI._authority_password = _authority_password;
+			URI._authority_host = _authority_host;
+			URI._authority_port = _authority_port;			
+			short *p = &URI._path,*d = &URI._size;
+			while(*p<(short)prefix) p++;
+			while(p<d) *p+++=difference;			
+			assert(*d+difference==(daeOffset)base.size()+1);
+			*d = base.size()+1;
+		}
+		else assert(0);
+	}
+	au->setInternalCounter(baseN);
 }
 
 //THIS PRE-2.5 CODE COULD USE A REVIEW.
@@ -555,7 +610,7 @@ daeOK daeURI_base::resolve_RFC3986(const daeArchive &DOM_or_ZAE, int ops)
 	{
 		buf_str = getURI_baseless(buf).data();		
 	}
-	else if(_this()._refString.isView()) //OPTIMIZING
+	else if(_refString().isView()) //OPTIMIZING
 	{
 		buf_str = buf.assign_and_0_terminate(data(),size()).data();
 	}
@@ -612,14 +667,16 @@ const_daeURIRef &daeURI_base::baseLookup(const daeArchive &DOM_or_ZAE, const_dae
 	//base = &(doc==nullptr?DOM.getDefaultBaseURI():doc->getDocURI());
 	if(doc!=nullptr)
 	{
-		base = &doc->getDocURI();
+		//NEW: Trying to include xml:base in this.
+		//base = &doc->getDocURI();
+		base = doc->getBaseURI(&getParentObject());
 	}
 	else if(!DOM_or_ZAE.isArchive())
 	{	
 		assert(&DOM==&DOM_or_ZAE);
 		base = &DOM.getDefaultBaseURI();
 	}
-	else base = &DOM_or_ZAE.getBaseURI();
+	else base = &DOM_or_ZAE.getDocURI();
 	if(this==base) //Recursive?
 	{
 		base = &(doc!=nullptr?DOM.getDefaultBaseURI():DOM.getEmptyURI());
@@ -637,6 +694,14 @@ typedef struct //C++98/03 (C2918)
 static const daeDocRef *daeURI_reverse_lb
 (const daeDocRef *b, const daeDocRef *e, daeString URI)
 {
+	//I'm slightly concerned daeDoc::daeDoc is putting
+	//"" on the back, which isn't in binary-sort order.
+	//I thought for a while about using "\xFF" for the
+	//new docs... but then noticed _closedDocs was the
+	//initial archive. So maybe I already thought this
+	//through.
+	assert(e-b<2||!e[-1]->getDocURI().empty());
+
 	//Could dp upper_bound-1 here, but it's a little 
 	//less clear and requires 2 comparator overloads.
 	typedef std::reverse_iterator<const daeDocRef*> r;
@@ -691,12 +756,12 @@ void daeURI_base::_docLookup(const daeArchive &a, daeDocRef &result)const
 	_docHookup<1>(const_cast<daeArchive&>(a),result);
 }
 
-static daeRefView daeURI_neighbors(const daeURI *a, const daeURI *URI)
+static daeName daeURI_neighbors(const daeURI *a, const daeURI *URI)
 {
-	daeRefView o; 
+	daeName o; 
 	if(a==nullptr||a->getURI_authority()!=URI->getURI_authority()) 
 	{
-		o.view = nullptr; o.extent = 0;
+		o.string = nullptr; o.extent = 0;
 	}
 	else o = a->getURI_path(); return o;
 }
@@ -733,8 +798,8 @@ void daeIORequest::narrow()
 
 	//TODO? narrow() could not bother narrowURI if b/c show
 	//localURI can't possibly be inside an unopened archive.
-	daeRefView bp = daeURI_neighbors(b==nullptr?nullptr:&(*b)->getDocURI(),localURI);
-	daeRefView cp = daeURI_neighbors(c==nullptr?nullptr:&(*c)->getDocURI(),localURI);		
+	daeName bp = daeURI_neighbors(b==nullptr?nullptr:&(*b)->getDocURI(),localURI);
+	daeName cp = daeURI_neighbors(c==nullptr?nullptr:&(*c)->getDocURI(),localURI);		
 	if(bp==localURI->getURI_path())
 	{
 		//Even were this possible (Rewrite module?) it stands
@@ -766,8 +831,8 @@ void daePlatform::_narrowURI_open_ZAE(daeIORequest &a)
 	const daeURI &URI = *a.localURI;
 
 	bool zae = false;
-	daeString pp = URI.getURI_path().view;
-	daeString d = URI.getURI_filename().view;
+	daeString pp = URI.getURI_path().string;
+	daeString d = URI.getURI_filename().string;
 	for(daeString p=pp;p<d;p++) if(p[0]=='.'&&(p[1]=='z'||p[1]=='Z'))
 	if(tolower(p[2])=='a'&&tolower(p[3])=='e'&&p[4]=='/'
 	 ||tolower(p[2])=='i'&&tolower(p[3])=='p'&&p[4]=='/'&&zae)
@@ -865,10 +930,10 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 				return DAE_ERR_INVALID_CALL;
 			}*/
 			  
-			daeRefView fragment;
+			daeName fragment;
 			uri.getURI_fragment(fragment); daeStringCP *end;
-			size_t byteOffset = strtoul(fragment.view,&end,10); 
-			if(end-fragment.view!=(daeOffset)fragment.extent)
+			size_t byteOffset = strtoul(fragment.string,&end,10); 
+			if(end-fragment.string!=(daeOffset)fragment.extent)
 			{
 				daeEH::Error<<
 				"daeRawResolver - URI does not have a numeric fragment.\n"
@@ -913,19 +978,19 @@ daeOK daeRawResolver::_resolve_exported(const daeElementRef &hit, const daeURI &
 			//REMINDER: This shouldn't be a switch statement
 			//so that it will compile if the types are equal.
 			//switch(atomic_type)
-			if(atomic_type==daeAtomicType::UINT) //UINT
+			if(atomic_type==daeAtom::UINT) //UINT
 			{
 				oob = daeURI_read_RAW_file_data<int,daeUInt>(args); 
 			}
-			else if(atomic_type==daeAtomicType::ULONG) //ULONG
+			else if(atomic_type==daeAtom::ULONG) //ULONG
 			{
 				oob = daeURI_read_RAW_file_data<int,daeULong>(args); 
 			}
-			else if(atomic_type==daeAtomicType::FLOAT) //FLOAT
+			else if(atomic_type==daeAtom::FLOAT) //FLOAT
 			{
 				oob = daeURI_read_RAW_file_data<float,daeFloat>(args); 
 			}
-			else if(atomic_type==daeAtomicType::DOUBLE) //DOUBLE
+			else if(atomic_type==daeAtom::DOUBLE) //DOUBLE
 			{
 				oob = daeURI_read_RAW_file_data<float,daeDouble>(args); 
 			}

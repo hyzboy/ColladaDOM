@@ -23,8 +23,8 @@ COLLADA_(namespace)
     COLLADA_(http_www_collada_org_2008_03_COLLADASchema,namespace)
     {//-.
 //<-----'
-COLLADA_DOM_NOTE(6532,COLLADA::xmlns,enum{ has_default=1 };)
-COLLADA_DOM_NOTE(6533,COLLADA::version,enum{ has_default=1 };)
+COLLADA_DOM_NOTE(6532,COLLADA::xmlns)
+COLLADA_DOM_NOTE(6533,COLLADA::version)
 COLLADA_DOM_NOTE(6534,COLLADA::xml_base)
 COLLADA_DOM_NOTE(6535,COLLADA::library_animations)
 COLLADA_DOM_NOTE(6536,COLLADA::library_animation_clips)
@@ -73,38 +73,39 @@ public: //NESTED ELEMENTS
 public: //Parameters
 
 	typedef struct:Elemental
-	{   DAEP::Value<0,xs::anyAttribute>
-	_0; DAEP::Value<1,xs::anyURI>
-	_1; DAEP::Value<2,version_enum>
-	_2; DAEP::Value<3,xml::base>
+	{   COLLADA_DOM_0
+	_0; DAEP::Value<sizeof(1),xs::anyURI>
+	_1; DAEP::Value<sizeof(2),version_enum>
+	_2; DAEP::Value<sizeof(3),xml::base>
 	_3; COLLADA_WORD_ALIGN
-		DAEP::Child<24,library_animations_type>
-	_4; DAEP::Child<23,library_animation_clips_type>
-	_5; DAEP::Child<22,library_cameras_type>
-	_6; DAEP::Child<21,library_controllers_type>
-	_7; DAEP::Child<20,library_geometries_type>
-	_8; DAEP::Child<19,library_effects_type>
-	_9; DAEP::Child<18,library_force_fields_type>
-	_10; DAEP::Child<17,library_images_type>
-	_11; DAEP::Child<16,library_lights_type>
-	_12; DAEP::Child<15,library_materials_type>
-	_13; DAEP::Child<14,library_nodes_type>
-	_14; DAEP::Child<13,library_physics_materials_type>
-	_15; DAEP::Child<12,library_physics_models_type>
-	_16; DAEP::Child<11,library_physics_scenes_type>
-	_17; DAEP::Child<10,library_visual_scenes_type>
-	_18; DAEP::Child<9,library_joints_type>
-	_19; DAEP::Child<8,library_kinematics_models_type>
-	_20; DAEP::Child<7,library_articulated_systems_type>
-	_21; DAEP::Child<6,library_kinematics_scenes_type>
-	_22; DAEP::Child<5,library_formulas_type>
-	_23; DAEP::Child<4,extra_type>
+		DAEP::Child<sizeof(24)> //library_animations_type
+	_4; DAEP::Child<sizeof(23)> //library_animation_clips_type
+	_5; DAEP::Child<sizeof(22)> //library_cameras_type
+	_6; DAEP::Child<sizeof(21)> //library_controllers_type
+	_7; DAEP::Child<sizeof(20)> //library_geometries_type
+	_8; DAEP::Child<sizeof(19)> //library_effects_type
+	_9; DAEP::Child<sizeof(18)> //library_force_fields_type
+	_10; DAEP::Child<sizeof(17)> //library_images_type
+	_11; DAEP::Child<sizeof(16)> //library_lights_type
+	_12; DAEP::Child<sizeof(15)> //library_materials_type
+	_13; DAEP::Child<sizeof(14)> //library_nodes_type
+	_14; DAEP::Child<sizeof(13)> //library_physics_materials_type
+	_15; DAEP::Child<sizeof(12)> //library_physics_models_type
+	_16; DAEP::Child<sizeof(11)> //library_physics_scenes_type
+	_17; DAEP::Child<sizeof(10)> //library_visual_scenes_type
+	_18; DAEP::Child<sizeof(9)> //library_joints_type
+	_19; DAEP::Child<sizeof(8)> //library_kinematics_models_type
+	_20; DAEP::Child<sizeof(7)> //library_articulated_systems_type
+	_21; DAEP::Child<sizeof(6)> //library_kinematics_scenes_type
+	_22; DAEP::Child<sizeof(5)> //library_formulas_type
+	_23; DAEP::Child<sizeof(4)> //extra_type
 	_24; COLLADA_DOM_Z(1,2)
-	DAEP::Value<27,dae_Array<>> _Z; enum{ _No=27 };
-	DAEP::Value<31,daeContents> content; typedef __NS__<6531> notestart;
+	DAEP::Value<sizeof(27),dae_Array<>> _Z; enum{ _No=27 };
+	DAEP::Value<sizeof(31),daeContents> content; typedef __NS__<6531> notestart;
 	}_;
 
 public: //Attributes
+
 	/**NO-NAMES
 	 * These attributes are invalid according to the schema. They may be user- 
 	 * defined additions and substitutes.
@@ -260,7 +261,8 @@ public: //Elements
 	DAEP::Child<-2,local__scene,_,(_::_)&_::_Z> scene;
 	};
 
-public: //Content
+public: //Complex Content Model
+
 	/**
 	 * Children, mixed-text, comments & processing-instructions.
 	 */
@@ -285,17 +287,18 @@ public DAEP::Elemental<__COLLADA__scene__,0x030d000000000006ULL>
 public: //Parameters
 
 	typedef struct:Elemental
-	{   DAEP::Value<0,xs::anyAttribute>
+	{   COLLADA_DOM_0
 	_0; COLLADA_WORD_ALIGN
-		DAEP::Child<6,instance_with_extra_type>
-	_1; DAEP::Child<5,instance_kinematics_scene_type>
-	_2; DAEP::Child<4,extra_type>
+		DAEP::Child<sizeof(6)> //instance_with_extra_type
+	_1; DAEP::Child<sizeof(5)> //instance_kinematics_scene_type
+	_2; DAEP::Child<sizeof(4)> //extra_type
 	_3; COLLADA_DOM_Z(1,2)
-	DAEP::Value<6,dae_Array<>> _Z; enum{ _No=6 };
-	DAEP::Value<9,daeContents> content; typedef __NS__<6563> notestart;
+	DAEP::Value<sizeof(6),dae_Array<>> _Z; enum{ _No=6 };
+	DAEP::Value<sizeof(9),daeContents> content; typedef __NS__<6563> notestart;
 	}_;
 
 public: //Attributes
+
 	/**NO-NAMES
 	 * These attributes are invalid according to the schema. They may be user- 
 	 * defined additions and substitutes.
@@ -339,7 +342,8 @@ public: //Elements
 	DAEP::Child<-1,instance_with_extra_type,_,(_::_)&_::_Z> instance_visual_scene;
 	};
 
-public: //Content
+public: //Complex Content Model
+
 	/**
 	 * Children, mixed-text, comments & processing-instructions.
 	 */
@@ -349,6 +353,7 @@ public: //Content
     }//<-'
 }
 
+#ifndef COLLADA_DOM_FLAT
 #include "asset_type.h"
 #include "library_animations_type.h"
 #include "library_animation_clips_type.h"
@@ -373,38 +378,34 @@ public: //Content
 #include "instance_with_extra_type.h"
 #include "instance_kinematics_scene_type.h"
 #include "extra_type.h"
-#define COLLADA_target_namespace \
-COLLADA::http_www_collada_org_2008_03_COLLADASchema
+#ifndef COLLADA_DOM_LITE
 COLLADA_(namespace)
 {
 	namespace DAEP //GCC
 	{//-.
 //<-----'
-#ifndef COLLADA_DOM_LITE
 template<>
-COLLADA_(inline) DAEP::Model& DAEP::Elemental
-<::COLLADA_target_namespace:: COLLADA
->::__DAEP__Object__v1__model()const
+COLLADA_(inline) Model &Elemental
+<xmlns::http_www_collada_org_2008_03_COLLADASchema::COLLADA>
+::__DAEP__Object__v1__model()const
 {
-	static DAEP::Model *om = nullptr; if(om!=nullptr) return *om;
-
-	Elemental::TOC toc; daeMetaElement &el = 
-	::COLLADA_target_namespace::__XS__().addElement(toc,"COLLADA");
+	static Model *om = nullptr; if(om!=nullptr) return *om;
+	
+	__COLLADA__Element * toc=0;
+	daeMetaElement &el = xmlns::http_www_collada_org_2008_03_COLLADASchema
+	::__XS__Schema__().addElement(toc,"COLLADA");
 
 	XS::Attribute *a;
 	a = el.addAttribute(toc->xmlns,"xs:anyURI","xmlns");
-	a->setDefaultString("http://www.collada.org/2008/03/COLLADASchema");
-	a->setIsRequired();
 	a = el.addAttribute(toc->version,"version_enum","version");
-	a->setDefaultString("1.5.0");
 	a->setIsRequired();
 	a = el.addAttribute(toc->xml_base,"xml:base","xml:base");
 		
 	om = &el.getModel();
 	daeCM *cm = nullptr;
-	el.addCM<XS::Sequence>(cm,0,1,1);
+	el.addCM<XS::Sequence>(cm,0,1,1,4);
 	el.addCM<XS::Element>(cm,0,1,1).setChild(toc->asset,"asset");
-	el.addCM<XS::Choice>(cm,1,0,-1);
+	el.addCM<XS::Choice>(cm,1,0,-1,20);
 		el.addCM<XS::Element>(cm,0,1,1).setChild(toc->library_animations,"library_animations");
 		el.addCM<XS::Element>(cm,1,1,1).setChild(toc->library_animation_clips,"library_animation_clips");
 		el.addCM<XS::Element>(cm,2,1,1).setChild(toc->library_cameras,"library_cameras");
@@ -431,29 +432,37 @@ COLLADA_(inline) DAEP::Model& DAEP::Elemental
 	el.addContentModel<60003,1>(cm,toc); return *om;
 }
 template<>
-COLLADA_(inline) DAEP::Model& DAEP::Elemental
-<::COLLADA_target_namespace:: COLLADA::local__scene
->::__DAEP__Object__v1__model()const
+COLLADA_(inline) Model &Elemental
+<xmlns::http_www_collada_org_2008_03_COLLADASchema::COLLADA::local__scene>
+::__DAEP__Object__v1__model()const
 {
-	static DAEP::Model *om = nullptr; if(om!=nullptr) return *om;
-
-	Elemental::TOC toc; daeMetaElement &el = 
-	::COLLADA_target_namespace::__XS__().addElement(toc,"scene");
+	static Model *om = nullptr; if(om!=nullptr) return *om;
+	
+	__COLLADA__Element * toc=0;
+	daeMetaElement &el = xmlns::http_www_collada_org_2008_03_COLLADASchema
+	::__XS__Schema__().addElement(toc,"scene");
 		
 	om = &el.getModel();
 	daeCM *cm = nullptr;
-	el.addCM<XS::Sequence>(cm,0,1,1);
+	el.addCM<XS::Sequence>(cm,0,1,1,4);
 	el.addCM<XS::Element>(cm,0,0,-1).setChild(toc->instance_physics_scene,"instance_physics_scene");
 	el.addCM<XS::Element>(cm,1,0,1).setChild(toc->instance_visual_scene,"instance_visual_scene");
 	el.addCM<XS::Element>(cm,2,0,-1).setChild(toc->instance_kinematics_scene,"instance_kinematics_scene");
 	el.addCM<XS::Element>(cm,3,0,-1).setChild(toc->extra,"extra");
 	el.addContentModel<4,1>(cm,toc); return *om;
 }
+//-------.
+    }//<-'
+}
 #endif //!COLLADA_DOM_LITE
-//----------.
-		//<-'			
-        COLLADA_(http_www_collada_org_2008_03_COLLADASchema,namespace)
-        {//-.
+#endif //!COLLADA_DOM_FLAT
+ 
+COLLADA_(namespace)
+{
+	namespace DAEP
+	{
+		COLLADA_(http_www_collada_org_2008_03_COLLADASchema,namespace)
+		{//-.
 //<---------'
 /**WYSIWYG
  * The COLLADA element declares the root of the document that comprises some
@@ -462,7 +471,7 @@ COLLADA_(inline) DAEP::Model& DAEP::Elemental
  */
 struct COLLADA
 :
-daeSmartRef<::COLLADA_target_namespace::COLLADA>
+daeSmartRef<__::COLLADA>
 {
 	COLLADA_DOM_3(COLLADA,struct,daeSmartRef)
 	/**
@@ -475,7 +484,7 @@ daeSmartRef<::COLLADA_target_namespace::COLLADA>
 	 * document conforms. Required Attribute.
 	 * @see XSD @c version_enum
 	 */
-	typedef ::COLLADA_target_namespace::version_enum version_enum;
+	typedef __::version_enum version_enum;
 	/**
 	 * The xml:base attribute allows you to define the base URI for this COLLADA
 	 * document. See http://www.w3.org/TR/xmlbase/ for more information.
@@ -609,7 +618,7 @@ daeSmartRef<::COLLADA_target_namespace::COLLADA>
  */
 struct const_COLLADA
 :
-daeSmartRef<const ::COLLADA_target_namespace::COLLADA>
+daeSmartRef<const __::COLLADA>
 {
 	COLLADA_DOM_3(const_COLLADA,struct,daeSmartRef)
 	/**CONST-FORM
@@ -622,7 +631,7 @@ daeSmartRef<const ::COLLADA_target_namespace::COLLADA>
 	 * document conforms. Required Attribute.
 	 * @see XSD @c version_enum
 	 */
-	typedef const ::COLLADA_target_namespace::version_enum version_enum;
+	typedef const __::version_enum version_enum;
 	/**CONST-FORM
 	 * The xml:base attribute allows you to define the base URI for this COLLADA
 	 * document. See http://www.w3.org/TR/xmlbase/ for more information.
@@ -759,7 +768,7 @@ daeSmartRef<const ::COLLADA_target_namespace::COLLADA>
  */
 struct scene
 :
-daeSmartRef<::COLLADA_target_namespace::COLLADA::local__scene>
+daeSmartRef<__::COLLADA::local__scene>
 {
 	COLLADA_DOM_3(scene,struct,daeSmartRef)
 	/**
@@ -797,7 +806,7 @@ daeSmartRef<::COLLADA_target_namespace::COLLADA::local__scene>
  */
 struct const_scene
 :
-daeSmartRef<const ::COLLADA_target_namespace::COLLADA::local__scene>
+daeSmartRef<const __::COLLADA::local__scene>
 {
 	COLLADA_DOM_3(const_scene,struct,daeSmartRef)
 	/**CONST-FORM
@@ -827,8 +836,8 @@ daeSmartRef<const ::COLLADA_target_namespace::COLLADA::local__scene>
 };
 //-----------.
         }//<-'
-    }
+    }	
 }
-#undef COLLADA_target_namespace
+	
 #endif //__COLLADA_h__http_www_collada_org_2008_03_COLLADASchema__ColladaDOM_g1__
 /*C1071*/

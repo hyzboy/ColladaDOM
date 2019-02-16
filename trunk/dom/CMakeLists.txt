@@ -82,7 +82,7 @@ install(FILES
 include/dae.h 
 include/DAEP.h 
 include/LINKAGE.HPP
-include/WARNING.HPP
+include/ColladaDOM.g++
 include/ColladaDOM.inl
 include/modules/daeSTLDatabase.h DESTINATION include/${PROJECT_NAME} COMPONENT Devel)
 

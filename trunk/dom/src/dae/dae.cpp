@@ -6,10 +6,8 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
-#include "../../include/dae/daeRAII.hpp"
-#include "../../include/modules/daeSTLDatabase.h"
- 
 COLLADA_(namespace)
 {//-.
 //<-'
@@ -53,11 +51,6 @@ void DAEP::Object::__DAEP__Object__0()const
 		return; //UNCONDITIONAL
 	}
 
-	#ifdef NDEBUG //GCC and apostrophes.
-	#error TODO? Elements are the bulk of objects. If they have
-	#error their own __DAEP__Object__0 they could use getMeta().
-	#error "This one should still handle them, in case it's used."
-	#endif
 	const daeModel &model = __DAEP__Object__v1__model();
 
 	int type = model.getObjectType();	
@@ -65,7 +58,7 @@ void DAEP::Object::__DAEP__Object__0()const
 	if(type>=daeObjectType::ANY) //Element?
 	{
 		daeElement &el = (daeElement&)*this;
-		el.__atomize2(el.getMeta());		
+		el.__0();
 		return el.getDatabase()._delete(el); 	
 	}
 	else if(model->hasObjectsEmbedded())
@@ -110,6 +103,10 @@ void DAEP::Object::__DAEP__Object__0()const
 daeOK daeObject::_reparent(const daeObject &c)	
 {	
 	#ifdef NDEBUG
+	#error Return error if cyclic/not isUnparentedObject.
+	#endif
+
+	#ifdef NDEBUG
 	if(&c==nullptr) return DAE_ERR_INVALID_CALL; //paranoia
 	#endif
 	assert(&c!=nullptr);
@@ -126,6 +123,8 @@ daeOK daeObject::_reparent(const daeObject &c)
 extern const daeStringCP _daePseudoElement_[];
 daeOK daeObject::_reparent_element_to_element(const daeObject &cIn)	
 {	
+	//REMINDER Databases MUST IMPLEMENT CYCLE CHECKS
+
 	assert(this->_isElement());
 	daeElement *c = (daeElement*)&cIn;
 	assert(c!=nullptr&&c->_isData());
@@ -134,18 +133,17 @@ daeOK daeObject::_reparent_element_to_element(const daeObject &cIn)
 		const daeDOM *DOM = c->getDOM(); assert(DOM!=nullptr);
 		if(c==this||DOM!=getDOM()) return DAE_ERR_INVALID_CALL;
 
-		//Using the string address here because it's much more 
-		//bits, and is unlikely to be accidentally set somehow.
-		//The further check is because the name can be set via
-		//getNCName(); in which case, the user shoots themself.
-		unsigned pseudo = _daePseudoElement_==c->getNCName().string;
-		assert(pseudo==c->__DAEP__Element__data.is_document_daePseudoElement);
-		if(1==pseudo)
+		#ifdef NDEBUG
+		#error Try to factor into introduceToDocument() somehow.
+		#endif
+		//HACK: Is there any way to avoid this?
+		//NOTE: daeMetaElement::_construct_new does this logic also.
+		if(1==c->__DAEP__Element__data.is_document_daePseudoElement)
 		{			
 			c = (daeElement*)&c->getParentObject();
 			assert((void*)c==c->getDoc()&&(void*)c==((daeDoc*)c)->_getDocument());
 		}
-		else assert(c->_isElement());
+		else assert(c->_isElement()&&_daePseudoElement_!=c->getNCName().string);
 	}	
 	/*if(&c!=this)*/ c->_ref();
 	const daeObject *swap = dae(__DAEP__Object__parent);
@@ -166,25 +164,29 @@ daeOK daePShare::grant(size_t size)
 	//TODO? Keep a record of the heighest granted share number?
 	enum{ extent = sizeof(dae_PShares)/sizeof(dae_PShares[0]) };	
 
-	if(size!=sizeof(daePShare))
-	{
+	size_t i; if(size!=sizeof(daePShare))
+	{		
+		i = tags.moduleTag; assert(i%2==0);
 		//The tag includes the data-bit.
-		size_t i = tag>>1; assert(tag%2==0);
+		i>>=1; 		
 		if(0==size&&i<extent&&dae_PShares[i].PS==this)
 		{
-			if(tag>1) //This is the removal procedure.
+			//tag was tags.moduleTag
+			//if(tag>1) 
+			if(i!=0) //This is the removal procedure.			
 			{
+				assert(tags.moduleTag>1);
+
 				delete dae_PShares[i].library_side_share;
 				dae_PShares[i].library_side_share = nullptr;
 				dae_PShares[i].PS = nullptr;				
 			}
-			tag = 0; return DAE_OK;
+			tags.moduleTag = 0; return DAE_OK;
 		}			
 		assert(size==sizeof(daePShare)); 
 		return DAE_ERR_NOT_IMPLEMENTED;
 	}
 	
-	size_t i; 
 	//i begins at 1 in order to reserve 0 for internal classes.
 	for(i=1;i<extent;i++) if(this==dae_PShares[i].PS)
 	{
@@ -194,12 +196,20 @@ daeOK daePShare::grant(size_t size)
 	{
 		dae_PShares[i].PS = this; goto OK;
 	}
+	//Assuming if dae_PShares is uninitialized it will be zero.
+	assert(this!=&DOM_process_share||i==1);
+	
 	//Must wait for an opening?
 	//TODO: Check to see if any of the modules have been unloaded?
 	//(NOTE: it could be hard to say if so/not in definite terms.)
 	return DAE_ERROR;		
 	//<<1 is making way for the _isData() bit/flag.
-OK:	tag = 0xFF&i<<1; daeCTC<(extent-1<=0xFF>>1)>();
+OK:	i = 0xFF&i<<1; daeCTC<(extent-1<=0xFF>>1)>();
+	 
+	//NEW
+	tags.interfaceTag = DAEP::Object::__DAEP__Object__system_interfaceTag__;
+	tags.moduleTag = 0xFF&i;
+
 	return DAE_OK; 
 }
 daeProcessShare &daeProcessShare::_default(size_t ps,
@@ -223,43 +233,68 @@ daePlatform &daeArchive::_getPlatform(const daeDOM &DOM)
 extern daeAtlas &daeStringRef_dummyAtlas;
 static struct dae_dummyPlatform : daePlatform
 {
-virtual daeOK resolveURI(daeURI&, const daeDOM&){ return DAE_ERR_CLIENT_FATAL; }
-virtual daeOK openURI(const daeIORequest&,daeIOPlugin*,daeURIRef&){ return DAE_ERR_CLIENT_FATAL; }
-virtual daeOK closeURI(const daeURI&){ return DAE_ERR_CLIENT_FATAL; }
-virtual daeIO *openIO(daeIOPlugin&, daeIOPlugin&){ return nullptr; }
-virtual daeOK closeIO(daeIO*,daeOK){ return DAE_ERR_CLIENT_FATAL; }
-virtual int getLegacyProfile(){ return 0; }
+daeOK resolveURI(daeURI&, const daeDOM&){ return DAE_ERR_CLIENT_FATAL; }
+daeOK openURI(const daeIORequest&,daeIOPlugin*,daeURIRef&){ return DAE_ERR_CLIENT_FATAL; }
+daeOK closeURI(const daeURI&){ return DAE_ERR_CLIENT_FATAL; }
+daeIO *openIO(daeIOPlugin&, daeIOPlugin&){ return nullptr; }
+daeOK closeIO(daeIO*,daeOK){ return DAE_ERR_CLIENT_FATAL; }
+void introduceToDocument(const daeDocument&,daeTags,const XS::Schema*&){}
+int getLegacyProfile(){ return 0; }
 }dae_dummyPlatform;
 
 //ORDER-OF-INITIALIZATION MATTERS 
 daeDoc::daeDoc(daeDOM *DOM, int dt):
 daeObject(DOM),_link()
 ,_archive(DOM->_closedDocs),_current_operation(_no_op::value)
-,_operation_thread_id() //STFU
+,_operation_thread_id()
 { 	
+	_uri.__DAEP__Object__embed_subobject(this);
 	_uri.setIsAttached();
 	_uri.setIsResolved();
-	_uri.__DAEP__Object__embed_subobject(this);
 	//daeURI is not a system object.
 	//This is to ensure that only system objects are 0.
 	assert(0!=_uri._getPShare());
 
-	_getClassTag() = dt; 	
-	(&_getClassTag())[1] = 1;
+	_getObjectTags().classTag = dt; 	
+	//Using 0 since domAny has nameTag set to at least 1.
+	//_getObjectTags().objectTag = 1;
 	//HACK: Assign daeDoc to the special 0 process-share.
-	(&_getClassTag())[3] = 0; assert(_isDoc()); 
+	_getObjectTags().moduleTag = 0;
+	assert(_isDoc()); 
 	//_archive(DOM->_closedDocs) assumes it is a pointer.
 	if(this==DOM) _archive = DOM;
 	if(_archive!=this) //Eg. DOM or daeDOM::_closedDocs
-	{
+	{	
+		//REMINDER: This had me worried "" will not sort
+		//correctly. But I'm not sure since the _archive 
+		//is _closedDocs. daeURI_reverse_lb does a check.
+		//_movingDoc speaks to this: "spoiling lookups".
+
 		//Archive APIs assume the doc is in an archive.
 		_archive->_whatsupDoc = _archive->_docs.size();
 		_archive->_docs.push_back(this);	
 	}	
 }
+daeDoc::daeDoc(daeArchive *a, int dt):
+daeObject(a),_link()
+,_archive(a),_current_operation(_no_op::value)
+,_operation_thread_id()
+{ 	
+	//getProvisionalDocument constructor
+	_uri.__DAEP__Object__embed_subobject(this);
+	_uri.setParentObject(&_uri);	
+	_uri.setIsAttached();
+	_uri.setIsResolved();	
+	_getObjectTags().classTag = dt; 		
+	_getObjectTags().moduleTag = 0;
+	assert(_isDoc()&&!hasOwnURI());
+	daeDOM *DOM = const_cast<daeDOM*>(a->getDOM());
+	if(a!=DOM) a->_docs.push_back(this);
+	else DOM->_provisionalDocs_etc.push_back(this);
+}
 daeArchive::daeArchive(daeDOM &DOM) 
-:daeDoc(DOM,daeDocType::ARCHIVE),_deleter()
-,_whatsupDoc() //STFU
+:daeDoc(&DOM,daeDocType::ARCHIVE),_deleter()
+,_whatsupDoc() 
 {
 	_uri.setIsDirectoryLike();
 
@@ -275,7 +310,7 @@ COLLADA_SUPPRESS_C(4355)
 	_refResolvers.__DAEP__Object__embed_subobject(this);
 
 	//Indicates a DOM. Overrides _isDoc().
-	(&_getClassTag())[1] = 2; assert(_isDOM()); 
+	_getObjectTags().objectTag = 2; assert(_isDOM()); 
 	//daeDoc::daeDoc is responsible for these arrangements
 	assert(_archive==this&&_closedDocs._archive==_closedDocs);
 
@@ -305,7 +340,7 @@ COLLADA_SUPPRESS_C(4355)
 	//
 	_databaseRejoinder = nullptr;
 	_database->_ciao(*this,_databaseRejoinder);	
-	_uri._refString.setView(_database->_ref("",0,_databaseRejoinder));
+	_uri._refString.setView(_database->_ref(empty_daeString1,0,_databaseRejoinder));
 	assert(_uri==&getEmptyURI()&&_uri.empty());
 
 	int legacy = OS->getLegacyProfile();
@@ -386,6 +421,30 @@ daeDocument *daeDOM::_addDocument()
 	new(obj) daeDocument(this);
 	obj->__DAEP__Object__unembed(1); return obj;
 }
+daeDocument *daeDOM::_addDocument(daeArchive *a)
+{
+	//Recycle any temporary documents that resulted 
+	//from getProvisionalDocument and no longer are
+	//referenced, except by this list.
+	daeDocument *obj;
+	daeDocRef *it,*itt;
+	it = _provisionalDocs_etc.begin();
+	itt = _provisionalDocs_etc.begin();
+	for(;it<itt;it++) if(1==(*it)->__DAEP__Object__refs)
+	{
+		(daeDoc*&)obj = *it;		
+		//Permit users to place a claim via naming docs.
+		if(obj->getDocURI().empty()&&obj->isDocument())
+		{
+			obj->~daeDocument(); goto obj;
+		}
+	}
+	_database->_new(sizeof(*obj),obj,_databaseRejoinder);
+	obj: new(obj) daeDocument(a); 
+	if(it!=itt) assert(obj==_provisionalDocs_etc.back());
+	if(it!=itt) _provisionalDocs_etc.getAU()->setInternalCounter(itt-it);
+	obj->__DAEP__Object__unembed(1); return obj;
+}
 daeObject *daeDOM::_addObject(size_t size)
 {
 	//The caller (_add2) placement-new constructs obj, etc.
@@ -393,12 +452,7 @@ daeObject *daeDOM::_addObject(size_t size)
 }
 daeElement *daeDOM::_addElement(daeMeta &meta)
 {
-	//_prototype is passed to the database so it can have a
-	//little bit of information with which to initialize its
-	//extended data structure.
-	daeElement *obj = meta._prototype;
-	_database->_new(meta.getSize(),obj,_databaseRejoinder);	
-	meta._construct(obj,*this,*this); return obj;
+	return meta._construct(this,this);
 }
 
 daeError daeArchive::_read2(daeDocRef &out, daeMeta *rootmeta, const daeIORequest &reqI, daeIOPlugin *I, daeIO *IO)

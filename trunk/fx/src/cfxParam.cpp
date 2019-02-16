@@ -97,6 +97,8 @@ FX::Semantic FX::NewParam::_InitSemantic_etc()
 
 		if("DIFFUSE"==base)
 		return Semantic = FX::DIFFUSE;
+		if("DOUBLE_SIDED"==base)
+		return Semantic = FX::DOUBLE_SIDED;
 		break;
 
 	case 'E':

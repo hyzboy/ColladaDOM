@@ -32,7 +32,6 @@
 #include <Winsock2.h>
 #include <Ws2tcpip.h>
 #pragma comment(lib,"Ws2_32.lib")
-//First ^ Second v (WTF!?)
 #include <windows.h> 
 #pragma comment(lib,"winmm.lib")
 //SetWindowSubclass

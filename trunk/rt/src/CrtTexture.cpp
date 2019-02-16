@@ -28,11 +28,11 @@ void RT::Image::DeleteTexture()
 COLLADA_(extern) std::vector<char> CrtTexture_buffer(0);
 
 bool RT::Image::Load()
-{		
-	daeURI absURI; absURI.setURI(DocURI,URL); 
-
+{	
+	daeURI absURI;
+	if(XMLBase==nullptr) absURI.setURI(DocURI,URL); 
+	if(XMLBase!=nullptr) absURI.setURI(XMLBase,URL);
 	daeIORequest req(&RT::Main.DOM,nullptr,&absURI,&absURI);	
-
 	return RT::Texture::Load(req);
 }
 bool RT::Texture::Load(const daeIORequest &req)
@@ -44,7 +44,7 @@ bool RT::Texture::Load(const daeIORequest &req)
 	{
 		if(!req.localURI->getURI_extensionIs("tga"))
 		return false;
-	}
+	}	
 	#endif
 
 	//This is the system for mapping URIs to memory files.	 
@@ -71,14 +71,23 @@ bool RT::Texture::Load(const daeIORequest &req)
 	{
 		return nullptr!=RT::LoadTargaFromMemory(buf,size,this);
 	}
-	#else //...
+	#else
+
+		//2019: There's a texture loading problem... in FX
+		//I think. This was to rule out DevIL, however the
+		//old CrtTargaLoader code (rewritten) had problems
+		//too. This can be removed, but maybe it's good to
+		//have visual confirmation that the TGA code works.
+		if(req.localURI->getURI_extensionIs("tga")
+		&&nullptr!=RT::LoadTargaFromMemory(buf,size,this))
+		return true;
 	
 	//Must this be 0 terminated?	
-	daeRefView ext = req.localURI->getURI_extension();
+	daeName ext = req.localURI->getURI_extension();
 	char ext0 = '\0';
-	std::swap(ext0,(char&)ext.view[ext.extent]);
-	ILenum type = ilTypeFromExt(ext.view-1); //Must have a dot.
-	std::swap(ext0,(char&)ext.view[ext.extent]);
+	std::swap(ext0,(char&)ext[ext.extent]);
+	ILenum type = ilTypeFromExt(ext.string-1); //Must have a dot.
+	std::swap(ext0,(char&)ext[ext.extent]);
 	if(type==IL_TYPE_UNKNOWN)
 	{
 		//Maybe ilLoadL(IL_TYPE_UNKNOWN,buf,size); can guess the 
@@ -198,18 +207,25 @@ bool RT::Image::Refresh(bool reload)
 		if(sRGB&&glIsEnabled(GL_FRAMEBUFFER_SRGB))
 		switch(Format)
 		{		
+		case GL_BGR:
 		case GL_RGB: iFormat = GL_SRGB; break;
+		case GL_BGRA:
 		case GL_RGBA: iFormat = GL_SRGB_ALPHA; break;
 		case GL_LUMINANCE: iFormat = GL_SLUMINANCE; break;
 		case GL_LUMINANCE_ALPHA:  iFormat = GL_SLUMINANCE_ALPHA; break;
 		default: assert(0);
 		}
-
+		else switch(Format) //CrtTargaLoader?
+		{
+		case GL_BGR: iFormat = GL_RGB; break;
+		case GL_BGRA: iFormat = GL_RGBA; break;
+		}
+		
 		//2017: Remove GLU dependency.
 		//This API calls glTexImage2D.
 		//gluBuild2DMipmaps(GL_TEXTURE_2D,Format,Width,Height,Format,GL_UNSIGNED_BYTE,Data);
 		glTexImage2D(GL_TEXTURE_2D,0,iFormat,Width,Height,0,Format,GL_UNSIGNED_BYTE,Data);
-		
+								
 		//Note: cfxSampler.cpp does this according to the min-filter.
 		//(So this--while harmless--may not be right place for this.)
 		if(mipmap==GL_LINEAR_MIPMAP_LINEAR)
@@ -221,8 +237,6 @@ bool RT::Image::Refresh(bool reload)
 			GL.GenerateMipmap(GL_TEXTURE_2D); //glGenerateMipmap
 			#endif
 		}
-		//Windows Subsystem for Linux is hitting this???
-		//assert(!glGetError());
 
 		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,mipmap);

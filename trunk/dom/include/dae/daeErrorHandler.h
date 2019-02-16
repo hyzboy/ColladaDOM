@@ -34,13 +34,13 @@ COLLADA_(public)
 	 */
 	daeErrorHandler(){} virtual ~daeErrorHandler(){}
 
-	/**ABSTRACT INTERFACE
+	/**ABSTRACT-INTERFACE
 	 * This function is called when there is an error and a string needs to be sent to the user.
 	 * You must overwrite this function in your plugin.
 	 * @param msg Error message.
 	 */
 	virtual void handleError(const daeHashString &msg, enum dae_clear=dae_clear) = 0;
-	/**ABSTRACT INTERFACE
+	/**ABSTRACT-INTERFACE
 	 * This function is called when there is a warning and a string needs to be sent to the user.
 	 * You must overwrite this function in your plugin.
 	 * @param msg Warning message.

@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 COLLADA_(namespace)
 {//-.
@@ -34,7 +35,7 @@ typedef struct //daeSIDResolver_cpp
 			#ifdef NDEBUG //GCC doesn't like apostrophes.
 			#error "Sometimes it's \"target\" instead. E.g. <instance_material>"
 			#endif
-			daeCharData_size<260> url;
+			daeCharData_size<COLLADA_MAX_PATH> url;
 			if(!scope->getAttribute("url",url).empty())
 			{
 				daeURI_parser URI(url,scope);
@@ -109,7 +110,7 @@ typedef struct //daeSIDResolver_cpp
 
 }daeSIDResolver_cpp;
 
-daeOK daeDefaultSIDREFResolver::_resolve_exported
+daeError daeDefaultSIDREFResolver::_resolve_exported
 (const daeElementRef &hit, const const_daeDocRef &doc, const daeSIDREF &ref, daeRefRequest &req)const
 {
 	daeSIDREF::Terminator t;
@@ -181,8 +182,11 @@ daeOK daeDefaultSIDREFResolver::_resolve_exported
 	else return DAE_ERR_QUERY_NO_MATCH;
 
 hit: //fill out the request object
+
 	const daeElement *e = (daeElement*)&*req.object;
+
 accessor_source:	
+
 	if(e->hasCharData()) //LOSSY!!
 	{
 		daeData &cd = e->getCharData();	
@@ -196,14 +200,11 @@ accessor_source:
 			n = AU->getCount();
 			req.typeInstance = AU->getRaw();
 		}
-		else switch(req.type->getAtomicType())
+		else if(req.type->hasStringType())
 		{
-		case daeAtomicType::TOKEN: case daeAtomicType::STRING:
-			
-			n = ((daeStringRef&)req.typeInstance).size(); break;
-
-		default: n = 1;	break;
+			n = ((daeStringRef&)req.typeInstance).size(); 
 		}
+		else n = 1;
 
 		//No type instance is returned for empty arrays
 		//nor empty selections, including empty strings.

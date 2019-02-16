@@ -15,6 +15,163 @@ COLLADA_(namespace)
 {//-.
 //<-'
 
+/**SCOPED-ENUM
+ * These values map to @c daeElement::getMigratioByte().
+ */
+struct daeMigrationByte
+{
+	enum //SCOPED-ENUM
+	{
+	CONTENT_ALLOCATION_UNIT=1,
+	HAS_STATIC_ID_ATTRIBUTE=2,
+	HAS_NONSTATIC_ATTRIBUTE=4,
+	XML_ATTRIBUTE_NIBBLE=0xf0,
+	XMLNS=16,
+	XML_BASE=32,
+	XML_LANG=64,
+	XML_ATTRIBUTE_UNCOUNTED=128,
+	};
+	
+	inline operator unsigned int&()
+	{
+		return *(unsigned int*)this;
+	}
+
+	daeMigrationByte(unsigned int i=0)
+	{
+		*(unsigned int*)this = i; 
+	}
+
+  //__DAEP__Element__Data bits //__DAEP__Element__Data bits
+
+	/**BITFIELD, FIRST-MEMBER
+	 * @see @c daeMigrationByte::CONTENT_ALLOCATION_UNIT
+	 *
+	 * This is for migration handling. Traversing a graph can
+	 * be painful. Typically elements are inserted without any
+	 * content in tow. Testing this flag can avoid digging deep
+	 * into the metadata, e.g. calling daeElement::getContents().		 
+	 *
+	 * @note THIS IS ONLY A HINT, AND DOESN'T CONTEMPLATE EMBEDDED
+	 * CONTENTS-ARRAYS. (As of now, embedding is not implemented.)
+	 */
+	unsigned int daeContents_capacity_is_nonzero:1;		
+	/**BITFIELD-CONTINUED
+	 * @see @c daeMigrationByte::HAS_STATIC_ID_ATTRIBUTE
+	 *
+	 * This means the element metadata contains an "id" like attribute.
+	 * These are registered with @c XS::Schema::getIDs().
+	 */
+	unsigned int getMeta_getFirstID_is_nonzero:1;		
+	/**BITFIELD-CONTINUED
+	 * @see @c daeMigrationByte::HAS_NONSTATIC_ATTRIBUTE
+	 *
+	 * @c daeAnyAttribute nonstatic attributes copy-on-write allocated.
+	 */
+	unsigned int daeAnyAttribute_copy_on_write:1;		
+	/**BITFIELD-CONTINUED
+	 */
+	unsigned int _reserved_migration_bit_:1;
+	/**BITFIELD-CONTINUED
+	 * @see @c daeMigrationByte::XML_ATTRIBUTE_NIBBLE
+	 *
+	 * 1: Set upon creation of xmlns qualified attributes; Never unset.
+	 * 2: xml:base
+	 * 4: xml:lang
+	 * 8: other (xml:space)
+	 */
+	unsigned int xml_qualified_attribute_masks:4;  
+
+  //daeElement methods //daeElement methods //daeElement methods
+
+	/**LOW-LEVEL
+	 * @see @c daeMigrationByte::CONTENT_ALLOCATION_UNIT
+	 * This is an optimization mainly for DAEP::ELEMENT change-notices.
+	 *
+	 * As its wording suggests, it means the element cannot have content,
+	 * -or that it cannot be a "graph." It doesn't mean that it is a graph.
+	 * By knowing that it's not a graph, code can avoid accessing a metadata
+	 * record, in order to access a contents-array, in order to determine that
+	 * the array is empty or not.
+	 *
+	 * Very often elements are inserted into the document, and then their content
+	 * is added afterward. So on the optimum route, this returns @c false. In isn't
+	 * really important in the grand scheme of things.
+	 */
+	inline bool definitely_is_childless()const
+	{
+		return 0==daeContents_capacity_is_nonzero;
+	}
+	/**LOW-LEVEL
+	 * @see @c daeMigrationByte::HAS_STATIC_ID_ATTRIBUTE
+	 * @return Returns @c true if the schema describes attributes that
+	 * are marked by @c XS::Schema::getIDs().
+	 * This is an optimization mainly for DAEP::ELEMENT change-notices.
+	 */
+	inline bool has_static_ID_attribute()const
+	{
+		return 1==getMeta_getFirstID_is_nonzero;
+	}
+	/**LOW-LEVEL
+	 * @see @c daeMigrationByte::HAS_NONSTATIC_ATTRIBUTE
+	 * @return Returns @c true if @c getAttributes().grow() is entered.
+	 * This is an optimization mainly for DAEP::ELEMENT change-notices.
+	 */
+	inline bool has_nonstatic_attribute()const
+	{
+		return 1==daeAnyAttribute_copy_on_write;
+	}
+
+	/**
+	 * @see @c daeMigrationByte::XMLNS
+	 * @return Returns @c true if xmlns attributes are present and/or
+	 * have been defined. If a user defined prefix is defined it must
+	 * be a nonstatic attribute, that may not count until it is first
+	 * assigned a value. This behavior is an optimization. 
+	 *
+	 * @remark This method checks a flag. It's provided for optimally
+	 * backtracing parents to better locate scoped namespace prefixes.
+	 */
+	inline bool hasAttribute_xmlns()const
+	{
+		return 0!=(1&xml_qualified_attribute_masks);
+	}
+	/**
+	 * @see @c daeMigrationByte::XML_BASE
+	 * @return Returns @c true if the xml:base attribute is present.
+	 */
+	inline bool hasAttribute_xml_base()const
+	{
+		return 0!=(2&xml_qualified_attribute_masks);
+	}
+	/**
+	 * @see @c daeMigrationByte::XML_LANG
+	 * @return Returns @c true if the xml:lang attribute is present.
+	 */
+	inline bool hasAttribute_xml_lang()const
+	{
+		return 0!=(4&xml_qualified_attribute_masks);
+	}
+	/**
+	 * @see @c daeMigrationByte::XML_ATTRIBUTE_UNCOUNTED
+	 * @return Returns @c true if there is an xml qualified attribute 
+	 * present that is neither xml:base nor xml:lang. xml:space maybe.
+	 */
+	inline bool hasAttribute_xml_space_et_cetera()const
+	{
+		return 0!=(8&xml_qualified_attribute_masks);
+	}
+	/**
+	 * @see @c daeMigrationByte::XML_ATTRIBUTE_NIBBLE
+	 * @return Returns the internal 4-bitfield corresponding to flags
+	 * for xml qualified attributes.
+	 */
+	inline unsigned int getMigrationNibble_xml_attribute_masks()const
+	{
+		return xml_qualified_attribute_masks;
+	}
+};
+
 template<class Change>
 /**
  * @c daeDatabase @c friend.
@@ -56,6 +213,7 @@ COLLADA_(private) //VIRTUAL METHOD TABLE
 	friend class DAEP::Object;
 	friend class daeAnyAttribute;
 	template<class> friend class daeDB;	
+	template<class T> friend struct daeNullable;
 	 									   
 	inline void **_userptrptr(const daeObject &obj)
 	{
@@ -199,7 +357,7 @@ COLLADA_(public)
 	 */
 	unsigned short refs;
 	/**
-	 * This is the @c daeStringCP length, including @c _fragment,
+	 * This is the @c daeStringCP length, including @c fragmentCP,
 	 * -excluding the 0 terminator.
 	 */
 	unsigned int fragmentN;	
@@ -213,7 +371,7 @@ COLLADA_(public)
 	 * As an optimization, at a later date, pairing logic may be
 	 * limited to "id" strings. Allocators can choose to pair in
 	 * this fashion, or choose to only pair for a valid "id." In
-	 * other words, @c _fragment is expected to be '#' for pairs.
+	 * other words @c fragmentCP is expected to be '#' for pairs.
 	 */
 	const daeStringCP fragmentCP;	
 	/**VARIABLE-LENGTH
@@ -234,8 +392,9 @@ COLLADA_(public)
 	 */
 	void *next_pointer_boundary()
 	{
-		size_t mask = sizeof(void*)-1;
-		return fragment+((fragmentN+1+mask)&~mask);
+		//size_t mask = sizeof(void*)-1;
+		//return fragment+((fragmentN+1+mask)&~mask);
+		return (char*)fragment+daeBoundaryOffset(fragmentN+1);
 	}
 
 	/**
@@ -245,8 +404,21 @@ COLLADA_(public)
 	:pool((unsigned short)_pool)
 	,refs((unsigned short)refs),fragmentN((unsigned int)len+1),fragmentCP('#')
 	{
-		assert(0==size_t(fragment)%2); assert(pool==_pool);
-		((daeStringCP*)memcpy(fragment+1,fragmentless,len))[len] = '\0';		
+		assert(0==daeOffset(fragment)%2); assert(pool==_pool);
+		memcpy(fragment+1,fragmentless,len*sizeof(daeStringCP));
+		fragment[fragmentN] = '\0';
+	}
+	/**
+	 * Append constructor
+	 */
+	daeDBaseString(const daeDBaseString &cp, daeString fragmentless, size_t len)
+	:pool(cp.pool),refs(1),fragmentN(cp.fragmentN),fragmentCP('#')
+	{
+		assert(0==daeOffset(fragment)%2);
+		memcpy(fragment,cp.fragment,fragmentN*sizeof(daeStringCP));		
+		memcpy(fragment+fragmentN,fragmentless,len*sizeof(daeStringCP));
+		fragmentN+=(unsigned int)len;
+		fragment[fragmentN] = '\0';		
 	}
 								 
 	/**

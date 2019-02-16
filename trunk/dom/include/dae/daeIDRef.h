@@ -55,9 +55,9 @@ template<class Type>
  * @see @c daeIDREF_size, where it is the base-class.
  * @note ALL OF @c daeIDREF's VIRTUAL OVERRIDES BELONG IN THIS CLASS.
  */
-class daeIDREF_base : public daeRef_support<daeIDREF_base<Type>>
+class daeIDREF_base : public daeRef_support<Type>
 {
-	typedef daeRef_support<daeIDREF_base<Type>> _support;
+	typedef daeRef_support<Type> _support;
 
 COLLADA_(public) //daeRef methods
 
@@ -101,7 +101,7 @@ COLLADA_(private) //OBJECT MEMBERS
 		#endif
 		unsigned global:1; _Flags(){ (unsigned&)*this = 0; }
 	};
-	inline _Flags &_getFlags()const{ return (_Flags&)_support::_getClassTag(); } 
+	inline _Flags &_getFlags()const{ return *(_Flags*)&_support::_getObjectTags(); } 
 
 COLLADA_(public) //OPERATORS
 
@@ -179,6 +179,13 @@ COLLADA_(public) //daeRef_support traits
 		const daeDoc *doc2 = cmp->getDoc(); 
 		if(doc2==nullptr) return true; return doc==doc2;
 	}
+	
+COLLADA_(public) //daeSafeCast() SHORTHANDS
+
+	/** Pass-Through; Follows style of daeElement::a(). */
+	template<class T> T *a(){ return (Type*)this; }
+	/**CONST-FORM Following style of daeElement::a(). */
+	template<class T> const T *a()const{ return (Type*)this; }
 
 COLLADA_(public) //ACCESSORS & MUTATORS	
 	/** 
@@ -217,7 +224,10 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	/**
 	 * Resets this @c daeIDREF; freeing all string references.
 	 */
-	inline void clear()const{ _this()._refString.setString(*this,""); }
+	inline void clear()const
+	{
+		_this()._refString.setString(*this,empty_daeString1); 
+	}
 
 	/**Standard Library support 
 	 */
@@ -340,11 +350,7 @@ COLLADA_(public) //METHODS NAMED AFTER IDREF
 	 * to. This API calls @c strlen(). Use @c data() to avoid it.
 	 * Optimization will likely eliminate the length if not used.
 	 */	
-	inline daeRefView_0 getIDREF()const
-	{
-		daeRefView_0 o; o.view = _refString.getString();
-		o.extent = strlen(o.view); return o;
-	} 		  	
+	inline daeName getIDREF()const{ return _refString.getString(); } 		  	
 
 	#ifndef COLLADA_NODEPRECATED	
 	template<class T>
@@ -408,7 +414,7 @@ COLLADA_(public)
 
 COLLADA_(protected) //daeRefResolver::_resolve
 
-	virtual daeOK _resolve(const daeRef &ref, daeRefRequest &req)const
+	virtual daeError _resolve(const daeRef &ref, daeRefRequest &req)const
 	{
 		const_daeDocRef doc;
 		const daeIDREF &idref = (daeIDREF&)ref;		

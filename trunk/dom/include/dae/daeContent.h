@@ -34,7 +34,7 @@ typedef daeContents_size<0> daeContents;
  * @remarks AT SOME POINT THERE'S GOING
  * TO HAVE TO BE A 64BIT-ORDINAL OPTION.
  */
-typedef unsigned daeOrdinal;
+typedef unsigned int daeOrdinal;
 /**INTERNAL
  * This is 0xFFFFFF, or a 24-bit maximum.
  * The remaining 8-bits are used by the text
@@ -70,7 +70,7 @@ static const daeOrdinal daeOrdinal0 = 0;
  * the same size as @c daeChildID.
  * @see @c daeChildID::daeChildID().
  */
-typedef unsigned daeCounter;
+typedef unsigned int daeCounter;
 
 /**
  * This was originally meant to be a 32-bit offset,
@@ -127,6 +127,7 @@ COLLADA_(public) //CONSTRUCTORS
 		//should be compatible with INT_MAX.
 		daeCTC<(sizeof(POD)*CHAR_BIT>=32)>();
 		daeCTC<sizeof(daeCounter)==sizeof(POD)>(); 
+		daeCTC<sizeof(DAEP::Child<sizeof(1)>)==sizeof(daeCounter)>(); 
 	}
 
 COLLADA_(public) 
@@ -381,7 +382,7 @@ COLLADA_(public) //text extraction
 	 * @param i is incremented by the number of text-nodes represented.
 	 * @see getTag_increment().
 	 */
-	daeArray<daeStringCP> &getText_increment(I &i, daeArray<daeStringCP> &io, enum dae_clear clear=dae_clear)
+	daeArray<> &getText_increment(I &i, daeArray<> &io, enum dae_clear clear=dae_clear)
 	{			
 		//Clang won't assign 0 integer contansts to pointers.		
 		#ifdef _MSC_VER
@@ -399,7 +400,7 @@ COLLADA_(public) //text extraction
 	 * Gets the text, including continued text.
 	 * @see getTag().
 	 */
-	daeArray<daeStringCP> &getText(daeArray<daeStringCP> &io, enum dae_clear clear=dae_clear)
+	daeArray<> &getText(daeArray<> &io, enum dae_clear clear=dae_clear)
 	{
 		unsigned i; return getText_increment(i,io,clear);
 	}
@@ -411,7 +412,7 @@ COLLADA_(public) //text extraction
 	 * @param i is incremented by the number ot text-nodes represented.
 	 * @see getText_increment().
 	 */
-	daeArray<daeStringCP> &getTag_increment(I &i, daeArray<daeStringCP> &io, enum dae_clear clear=dae_clear)
+	daeArray<> &getTag_increment(I &i, daeArray<> &io, enum dae_clear clear=dae_clear)
 	{
 		if(clear) io.clear(); switch(_.hole)
 		{
@@ -430,7 +431,7 @@ COLLADA_(public) //text extraction
 	 * then the text will be got.
 	 * @see getText().
 	 */
-	daeArray<daeStringCP> &getTag(daeArray<daeStringCP> &io, enum dae_clear clear=dae_clear)
+	daeArray<> &getTag(daeArray<> &io, enum dae_clear clear=dae_clear)
 	{
 		unsigned i; return getTag_increment(i,io,clear);
 	}
@@ -497,7 +498,7 @@ COLLADA_(private)
 		union
 		{
 		/**
-		* @see @c _ref().
+		* @see @c _child_ref().
 		* @note @c this may be "text"-
 		* -content, in which case @c _element
 		* is not a pointer (or an element-ref.)
@@ -568,7 +569,7 @@ COLLADA_(public) //INTERNAL NON-TEXT APIs
 	 * Gets @c _child.element as a @c daeSmartRef. ASSUMING NOT TEXT.
 	 * @remark This was "_ref" but that looks like it's adding a ref.
 	 */
-	inline const daeChildRef<> &_child_ref()const
+	inline daeChildRef<> &_child_ref()
 	{
 		assert(hasChild()); return (daeChildRef<>&)_child.ref;
 	}
@@ -577,7 +578,7 @@ COLLADA_(public) //INTERNAL NON-TEXT APIs
 	 * Gets @c _child.element as a @c daeSmartRef. ASSUMING NOT TEXT.
 	 * @remark This was "_ref" but that looks like it's adding a ref.
 	 */
-	inline const daeChildRef<T> &_child_ref()const
+	inline daeChildRef<T> &_child_ref()
 	{
 		assert(hasChild()); return (daeChildRef<T>&)_child.ref;
 	}
@@ -649,16 +650,16 @@ COLLADA_(public) //LOW-LEVEL CONTENTS-ARRAYS TRAVERSAL METHODS
 	/**CAUTION
 	 * Get the element-ref, knowingly, as a reference.
 	 */
-	inline const daeChildRef<> &getKnownChild()
+	inline daeChildRef<> &getKnownChild()
 	{
-		return (daeChildRef<>&)_child.ref;
+		return *(daeChildRef<>*)&_child.ref;
 	}	
 	/**CAUTION, CONST-PROPOGATING-FORM
 	 * Get the element-ref, knowingly, as a reference.
 	 */
-	inline const const_daeChildRef &getKnownChild()const
+	inline const daeChildRef<> &getKnownChild()const
 	{
-		return (const_daeChildRef&)_child.ref;
+		return *(daeChildRef<>*)&_child.ref;
 	}	
 
 	#ifdef NDEBUG
@@ -682,9 +683,9 @@ COLLADA_(public) //LOW-LEVEL CONTENTS-ARRAYS TRAVERSAL METHODS
 	/** These are for daeContents::for_each_child(). */
 	inline operator const daeElement&()const{ return *_child.ref; }
 	/** These are for daeContents::for_each_child(). */
-	inline operator const daeChildRef<>&(){ return getKnownChild(); }
+	inline operator daeChildRef<>&(){ return getKnownChild(); }
 	/** These are for daeContents::for_each_child(). */
-	inline operator const const_daeChildRef&()const{ return getKnownChild(); }
+	inline operator const daeChildRef<>&()const{ return getKnownChild(); }
 	/** These are for symmetry with the getKnownChild() operators. */
 	inline operator daeText&()const{ return getKnownStartOfText(); }
 	/**These are for symmetry with the getKnownChild() operators. */
@@ -784,34 +785,49 @@ template<class T>
 /**
  * This class shouldn't be copyable	nor assignable.
  * It identifies smart-refs housed in contents-arrays.
+ *
+ * @note To implement @c value_type const semantics this
+ * class is modified to change @c T depending on @c this.
  */
-class daeChildRef : public daeSmartRef<T>
-{
-COLLADA_(private) //Disable copy/construction/everything.
+class daeChildRef : public daeSmartRef<const T>
+{	
+	daeChildRef(); 
+	daeChildRef(const daeChildRef&); ~daeChildRef();
+	void operator=(const daeChildRef&), operator~();
 
-	//Should there be a public method for extracting a daeContent*?
-	~daeChildRef(); daeChildRef(); daeChildRef(const daeChildRef&);
-
-COLLADA_(public) //These APIs want daeChildRef to be C++ references.
+COLLADA_(public) //A daeChildRef is expected to be C++ reference.	
 	/**
 	 * Access the @c daeContent object containing this child-ref.
+	 *
+	 * @return Returns @c daeContents::iterator object.
 	 */
-	inline typename daeConstOf<T,daeContent>::type &content()const
+	inline daeContent *content()
 	{
 		daeOffset CTC = -daeOffsetOf(daeContent,_child.ref);
-		return (daeContent&)*((char*)this+CTC);
+		return (daeContent*)((char*)this+CTC);
 	}
+	/**CONST-FORM
+	 * Access the @c daeContent object containing this child-ref.
+	 *
+	 * @return Returns @c daeContents::const_iterator object.
+	 */
+	inline const daeContent *content()const
+	{
+		daeOffset CTC = -daeOffsetOf(daeContent,_child.ref);
+		return (daeContent*)((char*)this+CTC);
+	}
+
 	/**
 	 * Gets the child-ref's ordinal in the contents-array.
 	 * @return Returns 0 if the child-ref is "unordered."
 	 * (Unordered elements are schema-violations, or indications
 	 * that there is no schema. 0 is the last-ordinal. In the back.)
 	 */
-	inline daeOrdinal ordinal()const{ return content()._ordinal(); }
+	inline daeOrdinal ordinal()const{ return content()->_ordinal(); }
 	/**
 	 * Gets the child-ref's child-ID in the contents-array.
 	 */
-	inline daeChildID childID()const{ return content()._childID(); }
+	inline daeChildID childID()const{ return content()->_childID(); }
 	/**
 	 * Gets the child-ref's child-ID's name.
 	 * A negative name means there can only be one child of its
@@ -831,6 +847,51 @@ COLLADA_(public) //These APIs want daeChildRef to be C++ references.
 	 * is equal, the child-refs belong to the same cursor-array.
 	 */
 	inline daeChildID::POD index()const{ return childID().getIndex(); }
+
+COLLADA_(public) //daeSmartRef methods (nonconst accessors)		
+
+	using daeSmartRef<const T>::operator->;
+	using daeSmartRef<const T>::operator*;
+	using daeSmartRef<const T>::operator->*;
+	/**using daeSmartRef::operator T*;
+	 * Overloaded cast operator.
+	 * @return Returns an @a const T pointer.
+	 */
+	inline operator const T*()const{ return *(T**)this; }
+
+	/**
+	 * Overloaded member selection operator.
+	 * @return a pointer of the template class to the object.
+	 */
+	inline T *operator->()
+	{
+		//Disabling this assert so the new deferred dereferencing
+		//feature set can be used with ->.
+		//dae_Array::operator->() and (Type*) conversion operator,
+		//DAEP::InnerValue::operator->*()
+		//assert(nullptr!=_ptr); 
+		return *(T**)this;
+	}
+
+	/**
+	 * Overloaded cast operator.
+	 * @return Returns an @a T pointer.
+	 */
+	inline operator T*(){ return *(T**)this; }	
+	
+	/**
+	 * Overloaded dereference operator.
+	 * @return Returns an @a T reference.
+	 */
+	inline T &operator*(){ return **(T**)this; }		   
+		
+	/**EXPERIMENTAL
+	 * Implements DAEP QName accessor.
+	 */
+	inline const daeSmartTag &operator->*(daeString)
+	{
+		return *(daeSmartTag*)this;
+	}
 };
 
 template<class T>
@@ -1066,7 +1127,7 @@ COLLADA_(public)
 };
 
 
-/**TEMPLATE-SPECIALIZATION, AGGREGATE
+/**TEMPLATE-SPECIALIZATION, AGGREGATE, NEVER-CONST
  * @c dae_<> is @c dae_<void>.
  * @c dae_ is privately based on @c dae_<>.
  * It can have operators, but its methods must be underscored.
@@ -1080,8 +1141,8 @@ COLLADA_(public)
  * work to get that kind of system into place. This implements the
  * DAEP logic in the meantime.
  */
-template<> class dae_<>
-{
+template<> struct dae_<>
+{	
 COLLADA_(public) //AGGREGATE MEMBERS
 	/**
 	 * This has evolved mid-development. Typically @c _id is
@@ -1112,13 +1173,13 @@ COLLADA_(public) //daeContents uses this.
 	inline dae_<T> &_return(daeContents_base *c, daeContent *got)
 	{
 		const daeElement *upcast = dae((T*)nullptr); (void)upcast;
-		_content = (daeContents*)c; _it = got; return (dae_<T>&)*this;
+		_content = (daeContents*)c; _it = got; return *(dae_<T>*)this;
 	}
 
 COLLADA_(public) //These are used by _dae<T>.
 
 	template<class LAZY> //CIRCULAR-DEPENDENCY
-	inline const daeChildRef<LAZY> &_maybe_add()
+	inline daeChildRef<LAZY> &_maybe_add()
 	{
 		return _missed()?_add<LAZY>():_it->_child_ref<LAZY>();
 	}
@@ -1127,21 +1188,33 @@ COLLADA_(public) //These are used by _dae<T>.
 	/**
 	 * Performs -> and + semantics.
 	 */
-	inline const daeChildRef<LAZY> &_add()
+	inline daeChildRef<LAZY> &_add()
 	{
 		assert(_missed());
-		return (daeChildRef<LAZY>&)		
+		daeChildRef<> &o = 
 		COLLADA::INCOMPLETE<LAZY>::daeMeta::_addWID(_id,*_content,_it);
+		COLLADA_ASSUME(o!=nullptr)
+		return *(daeChildRef<LAZY>*)&o;
 	}
 
 	template<class LAZY, class U> //CIRCULAR-DEPENDENCY
 	/**
 	 * Performs assignment-operator semantics.
 	 */
-	inline const daeChildRef<LAZY> &_set(const U &seat)
+	inline daeChildRef<LAZY> &_set(const U &seat)
 	{
-		return (daeChildRef<LAZY>&)
-		COLLADA::INCOMPLETE<LAZY>::daeMeta::_setWID(_id,seat,*_content,_it);
+		return *(daeChildRef<LAZY>*)&__set_nullptr(seat,nullptr);
+	}
+	template<class U>
+	inline daeChildRef<> &__set_nullptr(const U &seat,typename U::__COLLADA__T*)
+	{
+		return COLLADA::INCOMPLETE<U>::daeMeta::_setWID(_id,seat,*_content,_it);
+	}
+	template<class U> 
+	inline daeChildRef<> &__set_nullptr(const U &seat_nullptr,...)
+	{
+		union{ const DAEP::Object *o; daeElement *seat; }; o = seat_nullptr;
+		return COLLADA::INCOMPLETE<U>::daeMeta::_setWID(_id,seat,*_content,_it);
 	}
 	template<class LAZY> //CIRCULAR-DEPENDENCY
 	/**
@@ -1156,7 +1229,7 @@ COLLADA_(public) //These are used by _dae<T>.
 	}
 };
 
-/**AGGREGATE
+/**NEVER-CONST
  * _ is pronounced "cursor." (It looks like a cursor.)
  * @tparam T is expected to be a generated class based on @c DAEP::Element.
  *
@@ -1171,25 +1244,43 @@ COLLADA_(public) //These are used by _dae<T>.
  * In addition methods should be limited to operators. Non-operator methods
  * are reserved by @c daeSmartRef.
  */
-template<class T> class dae_ : public dae_<>
+template<class T> struct dae_ : public dae_<>
 {
+COLLADA_(private) 
+
 	friend class daeContents_base;
 
 	/** Prevent operator T* as C-array. */
 	inline void operator[](int)const{}
-	/** Not-allowing, for const-propogation reasons. */
-	inline void operator=(const daeSmartRef<const T>&){}
 
 	template<class,int> friend class dae_Array;
 	/**
-	 * Disabled Constructors & Assignment Operator
+	 * Disabled Constructors
 	 *
-	 * This is intended to discourage the C++11 @c auto keyword.
+	 * This is intended to disable C++11's @c auto keyword.
 	 * @c dae_<> still works.
 	 */
-	dae_(); dae_(const dae_&cp):dae_<>(cp){} void operator=(const dae_&)const;
+	dae_(); dae_(const dae_ &cp):dae_<>(cp){}
 
 COLLADA_(public) //OPERATORS (This class is never const.)
+
+	//I'm pretty sure daeSmartRef interactions rely on this.
+	typedef T __COLLADA__T;
+
+	/**
+	 * Satisfying @c dae_Array::reference.
+	 */
+	inline operator daeChildRef<T>&(){ return _maybe_add<T>(); }
+
+	/**
+	 * Satisfying @c dae_Array::pointer.
+	 *
+	 * @note The rationale for this is just in case users
+	 * want to use pointers because C++ references cannot
+	 * be reseated so easily.
+	 */
+	inline daeChildRef<T> *operator&(){ return &_maybe_add<T>(); }
+
 	/**
 	 * @return Returns @c nullptr if no placeholder exists.
 	 * @note This is the only non return-by-reference operator.
@@ -1200,11 +1291,19 @@ COLLADA_(public) //OPERATORS (This class is never const.)
 		return _it==nullptr?nullptr:_it->_child_ref<T>();
 	}
 
+	/**EXPERIMENTAL
+	 * Implements DAEP QName accessor.
+	 */
+	inline const daeSmartTag &operator->*(daeString)
+	{
+		return *(daeSmartTag)&_maybe_add<T>();
+	}
+
 	/**
 	 * This is for interfaces that must treat const and
 	 * non-const versions of @c dae_Array consistently.
 	 */
-	inline const daeChildRef<T> &_hit()const
+	inline daeChildRef<T> &_hit()
 	{
 		assert(!_missed());	return _it->_child_ref<T>();
 	}
@@ -1221,7 +1320,7 @@ COLLADA_(public) //OPERATORS (This class is never const.)
 	/**
 	 * Adds an element when one had not previously existed.
 	 */
-	inline const daeChildRef<T> &operator+(){ return _maybe_add<T>(); }
+	inline daeChildRef<T> &operator+(){ return _maybe_add<T>(); }
 
 	/**
 	 * Adds an element when one had not previously existed.
@@ -1229,48 +1328,54 @@ COLLADA_(public) //OPERATORS (This class is never const.)
 	 * @see @c operator+ for a non-dangling @c -> alternative.
 	 */
 	inline T *operator->(){ return (T*&)_maybe_add<T>(); }
-
+			
+COLLADA_(public) //ASSIGNMENT OPERATOR
+	/**C++
+	 * Assigns non-const cursor array element to same.
+	 */
+	inline daeChildRef<T> &operator=(const dae_ &cp)
+	{
+		return _set<T>(cp); 
+	}
+	 
+	template<class S>
+	/**
+	 * Assignment of smart-refs, arrays, and pointers; also
+	 * "" string-literal.
+	 */
+	inline daeChildRef<T> &operator=(S &cp)
+	{
+		return __assign(cp); 
+	}
+	template<class S>
+	/**
+	 * Assignment of smart-refs, arrays, and pointers; also
+	 * "" string-literal.
+	 */
+	inline typename daeTypic<sizeof(S)-1,
+	daeChildRef<T>,daeString1>::type &operator=(const S &cp)
+	{
+		return __assign(cp);
+	}
+	template<class S>
+	/**
+	 * Implements @c operator=() for pointers/cursors types. 
+	 */
+	inline daeChildRef<T> &__assign(S &cp)
+	{
+		(void)daeSmartRef_base::_decay<T>(cp,nullptr); 		
+		return _set<T>(cp);
+	}
 	/**
 	 * Removes this element from the contents-array by means
 	 * of converting it to an empty text-node. This will not
 	 * disrupt the array, and so is recommended. The removed
 	 * nodes can be cleaned out en masse as a maintenance op.
 	 */
-	inline daeString1 operator=(daeString1 empty_string_literal)
+	inline daeString1 &__assign(daeString1 &empty_string_literal)
 	{
 		assert(empty_string_literal[0]=='\0'); _set<T>();
 		return empty_string_literal;
-	}
-	template<class S>
-	/**
-	 * Assigns a new element-pointer to this position in the
-	 * contents-array.
-	 */
-	inline const daeChildRef<S> &operator=(S *seat)
-	{
-		_upcast<S>((T*)nullptr); return _set<S>(seat);
-	}
-	template<class S>
-	/** Implements @c operator=() for const-pointer types. */
-	inline void operator=(const S *seat)
-	{
-		daeCTC<0>("Assigning const-pointer to non-const array.");
-	}
-	template<template<class> class R, class S>
-	/**
-	 * Assigns a new element-pointer to this position in the
-	 * contents-array.
-	 */
-	inline const daeChildRef<S> &operator=(const R<S> &seat)
-	{
-		_upcast<S>((T*)nullptr); return _set<S>(seat);
-	}
-	//daeElement not being a DAEP::Element complicates this.
-	template<class S> void _upcast(const daeElement*){}
-	template<class S> void _upcast(const DAEP::Element*){}
-	template<class S, class TT> void _upcast(const TT *upcast)
-	{
-		upcast = (const S*)nullptr;
 	}
 
 #ifdef COLLADA_NODEPRECATED
@@ -1341,7 +1446,6 @@ COLLADA_(public) //C++ annoyances
 	//Non-standard/low-level APIs.
 	_(grow)_(find)_(getAU)_(get)
 
-	COLLADA_(private)_(getObject)
 	#undef _2
 	#undef _
 
@@ -1356,7 +1460,7 @@ COLLADA_(public) //daeContents_like implementation
 	 */
 	inline daePseudoElement &getElement()
 	{
-		return (daePseudoElement&)*getObject();
+		return (daePseudoElement&)*__::_getObject();
 	}
 	/**CONST-FORM
 	 * @warning In some INTERNAL contexts this can return @c nullptr.
@@ -1368,7 +1472,7 @@ COLLADA_(public) //daeContents_like implementation
 	 */
 	inline const daePseudoElement &getElement()const
 	{
-		return (daePseudoElement&)*getObject();
+		return (daePseudoElement&)*__::_getObject();
 	}
 
 COLLADA_(private) //Disabled Copy Construct & Assignment Operator
@@ -1384,43 +1488,17 @@ COLLADA_(private) //Disabled Copy Construct & Assignment Operator
 
 COLLADA_(public) //CONSTRUCTORS
 	/**
-	 * Default Constructor
+	 * Destructor
+	 * Trying to emit less code into element destructors.
 	 */
-	daeContents_size()
+	~daeContents_size()
 	{
-		//"daeContents_in_a_box" is no more.
-		if(size_on_stack>0) _0_fill();
+		//daeElement::__0() is emptying/plugging content.
+		//daeContents_size<0> should indicate an element.		
+		assert((0==size_on_stack)==(0==_au->getOffset()));
+		//NOTE: 0 capacity is daeElement_thunk0 capacity.
+		COLLADA_ASSUME(0!=size_on_stack||0==capacity()&&0==size())
 	}
-	/** Old "daeContents_in_a_box" Constructor */
-	explicit daeContents_size(size_t real_size_on_stack)
-	:
-	daeArray<daeContent,size_on_stack>(nullptr,real_size_on_stack)
-	{
-		daeCTC<(size_on_stack>0)>(); _0_fill();
-	}
-	/**Old "daeContents_in_a_box" API */
-	inline void _0_fill(size_t slice=0)
-	{
-		assert(slice<_au->getCapacity());
-		_au->setInternalCounter(slice);
-		this->cursor() = data()+slice; daeCTC<(size_on_stack>0)>();
-		memset(end(),0x00,sizeof(daeContent)*(_au->getCapacity()-slice));
-	}
-	/**Old "daeContents_in_a_box" API
-	 * This reallocates without calling @c _grow2<daeContent>() so that that
-	 * pathway doesn't have to handle the @c getObject()==nullptr case.
-	 */
-	inline void _element_less_grow(size_t newT)
-	{
-		assert(newT>_au->getCapacity());
-		((daeObject*)nullptr)->reAlloc(_au,newT,_element_less_mover);
-		_0_fill(size());
-	}static void _element_less_mover(const daeObject*,
-	daeAlloc<daeContent> &dst, daeAlloc<daeContent> &src)
-	{
-		memcpy(dst._varray,src._varray,src.getCount()*sizeof(daeContent));
-	}
-
 	template<class Type> //DAEP::Value<...>
 	/**
 	 * Prototype Constructor
@@ -1430,33 +1508,153 @@ COLLADA_(public) //CONSTRUCTORS
 	/**:daeArray<daeContent,size_on_stack>(pt){}*/
 	:daeArray<daeContent,0>(*_au){ assert(pt->empty()); }
 
+COLLADA_(public) //EXPERIMENTAL: Foster/Element-less APIs
+
+	//These methods started out as a way to host an array
+	//on the stack, with or without the element... though
+	//to have children there would need to be a parent of
+	//some kind. A foster parent? XS::Choice fills fields
+	//with dummy data instead of elements. It's not using
+	//it as intended, but it functions well for its needs.
+	//In theory stack oriented arrays would be useful for
+	//certain kinds of I/O operations. E.g. to figure out
+	//how much memory is needed before allocating/copying.
+
+	/**EXPERIMENTAL
+	 * Foster/Element-less Constructor 
+	 */
+	daeContents_size(){ if(size_on_stack>0) _0_fill(); }
+	/**EXPERIMENTAL
+	 * Foster/Element-less Constructor 
+	 */
+	explicit daeContents_size(size_t real_size_on_stack)
+	:
+	daeArray<daeContent,size_on_stack>(nullptr,real_size_on_stack)
+	{
+		daeCTC<(size_on_stack>0)>(); _0_fill();
+	}
+	/**EXPERIMENTAL (Foster/Element-less)
+	 * Zeroes array.
+	 */
+	inline void _0_fill(size_t slice=0)
+	{
+		assert(slice<_au->getCapacity());
+		_au->setInternalCounter(slice);
+		this->cursor() = data()+slice; daeCTC<(size_on_stack>0)>();
+		memset(end(),0x00,sizeof(daeContent)*(_au->getCapacity()-slice));
+	}
+	/**EXPERIMENTAL (Foster/Element-less)
+	 * This reallocates without calling @c _grow2<daeContent>() so its
+	 * pathway doesn't have to handle the @c getObject()==nullptr case.
+	 */
+	inline void _element_less_grow(size_t newT)
+	{
+		assert(newT>_au->getCapacity());
+		daeNullable<> na = {nullptr};
+		na.reAlloc(_au,newT,_element_less_mover);
+		_0_fill(size());
+	}
+	/** Implements @c _element_less_grow(). */
+	static void _element_less_mover(const daeObject*,
+	daeAlloc<daeContent> &dst, daeAlloc<daeContent> &src)
+	{
+		memcpy(dst._varray,src._varray,src.getCount()*sizeof(daeContent));
+	}
+
 COLLADA_(public) //Alternative to old "getChildren" APIs
 	/**
-	 * @c daeElement::getChild() uses exceptions to break out of
-	 * @c for_each_child(). This is to prevent clients from disabling
-	 * exceptions. If this is a problem, a macro can be used, and it can disable
-	 * APIs that require exceptions. Or another macro can enable C++11 lambda support.
-	 * @note THE LIBRARY DOESN'T USE EXCEPTIONS, EXCEPT POSSIBLY LOCALLY & INTERNALLY.
-	 */
-	inline void _exceptions_2016(){ throw 2016; }
-	/**
-	 * Enumerates the contents-array (skipping text.)
+	 * Enumerates @c this, skipping text, excluding 
+	 * @c nullptr child-refs.
 	 */
 	template<class F> void for_each_child(F &f)
 	{
-		iterator it = begin(), itt = end();
-		while(it!=itt) if(it->hasChild())
-		f(*it++);
-		else it+=it->getKnownStartOfText().span();
+		_for_each_child2<iterator,false>(f);
+	}	
+	/**
+	 * Enumerates @c this, skipping text, including 
+	 * @c nullptr child-refs.
+	 */
+	template<class F> void for_each_child_ptr(F &f)
+	{
+		_for_each_child2<iterator,true>(f);
 	}
 	/**CONST-PROPOGATING-FORM
-	 * Enumerates the contents-array (skipping text.)
+	 * Enumerates @c this, skipping text, excluding 
+	 * @c nullptr child-refs.
 	 */
 	template<class F> void for_each_child(F &f)const
 	{
-		const_iterator it = begin(), itt = end();
+		const_cast<daeContents_size*>(this)->
+		_for_each_child2<const_iterator,false>(f);
+	}
+	/**CONST-PROPOGATING-FORM
+	 * Enumerates @c this, skipping text, including 
+	 * @c nullptr child-refs.
+	 */
+	template<class F> void for_each_child_ptr(F &f)const
+	{
+		const_cast<daeContents_size*>(this)->
+		_for_each_child2<const_iterator,true>(f);
+	}
+	/**
+	 * Implements @c for_each_child & @c for_each_child_ptr. 
+	 */
+	template<class IT, bool PTR, class F> void _for_each_child2(F &f)
+	{
+		IT it = begin(), itt = end();
 		while(it!=itt) if(it->hasChild())
-		f(*it++);
+		{
+			if(PTR||*it!=nullptr) f(*it); it++;
+		}
+		else it+=it->getKnownStartOfText().span();
+	}
+
+	template<class F, class G>
+	/**EXPERIMENTAL
+	 * @note This is recursive, but doesn't automatically go
+	 * into children contents-arrays. @a f or @a g has to do
+	 * so themselves. The recursions lets all @a f go before
+	 * all @a g.
+	 *
+	 * Recurses over all descendants one contents-array at a
+	 * time. @a f is called going forward; @a g is called as
+	 * the stack unwinds. This traverses the array only once
+	 * and allows for out-of-order, breadth-first operations.
+	 */
+	inline void for_each(F &f, G &g)
+	{
+		_for_each2(f,g,begin(),end());
+	}
+	template<class F, class G>
+	/**EXPERIMENTAL, CONST-PROPOGATING-FORM
+	 * @note This is recursive, but doesn't automatically go
+	 * into children contents-arrays. @a f or @a g has to do
+	 * so themselves. The recursions lets all @a f go before
+	 * all @a g.
+	 *
+	 * Recurses over all descendants one contents-array at a
+	 * time. @a f is called going forward; @a g is called as
+	 * the stack unwinds. This traverses the array only once
+	 * and allows for out-of-order, breadth-first operations.
+	 */
+	inline void for_each(F &f, G &g)const
+	{
+		_for_each2(f,g,cbegin(),cend());
+	}	
+	template<class IT, class F, class G>
+	/** Implements @c for_each(). */
+	static void _for_each2(F &f, G &g, IT it, const IT itt)
+	{
+		while(it!=itt) if(it->hasChild())
+		{
+			if(*it!=nullptr) 
+			{
+				f(*it); 
+				_for_each2(f,g,it+1,itt);
+				g(*it);
+				return;
+			}
+		}
 		else it+=it->getKnownStartOfText().span();
 	}
 
@@ -1560,6 +1758,7 @@ COLLADA_(public)
 	/**
 	 * This is always present in case there are unnamed children.
 	 * This is housed outside of the contents-array.
+	 * @return Returns a @c dae_Array<> compatible reference.
 	 */
 	inline dae_Array<daeElement,1> &unnamed()
 	{
@@ -1568,6 +1767,7 @@ COLLADA_(public)
 	/**CONST-FORM
 	 * This is always present in case there are unnamed children.
 	 * This is housed outside of the contents-array.
+	 * @return Returns const @c dae_Array<> compatible reference.
 	 */
 	inline const dae_Array<daeElement,1> &unnamed()const 
 	{
@@ -1722,7 +1922,7 @@ COLLADA_(public) //INTERNALS
 	template<class T> static void *__cursorize(const daeChildRef<T> &child)
 	{
 		assert((size_t)&child-1>65535); //-1 is permitting 0.
-		return (void*)&child.content();
+		return (void*)child.content();
 	}
 	/**INTERNAL
 	 * The goal here is to unpack this on the library's side,
@@ -1903,19 +2103,20 @@ COLLADA_(private)
 		mutable bool b; bool typeLookup;				
 		_operation():Change(DAEP::ELEMENT),b(),typeLookup(){}
 		~_operation(){ if(!b) carry_out_change(); } 		
-		static void typeLookup_insert(daeElement*); //maybe()?
-		static void typeLookup_remove(daeElement*); //maybe()?
-		inline void maybe(void op(daeElement*))const //LEGACY
+		static void typeLookup_insert(daeElement&); //maybe()?
+		static void typeLookup_remove(daeElement&); //maybe()?
+		inline void maybe(void op(daeElement&))const //LEGACY
 		{
 			//MIGHT WANT TO DISABLE typeLookup(). BUT NOT YET.
 			//#ifdef COLLADA_NOLEGACY
-			if(typeLookup) op((daeElement*)element_of_change);
+			if(typeLookup) op(dae(*element_of_change));
 			//#endif
 		}		
-		#ifdef NDEBUG
-		#error 1 is as if the document has no xmlns. This needs work.
-		#endif		
-		enum{ o=0,l=1 }; //getElementTags().namespaceTag values.		
+		void set_is_content(unsigned i)const
+		{
+			assert(i!=element_of_change->__DAEP__Element__data.is_content);			
+			element_of_change->__DAEP__Element__data.is_content = 0xff&i;
+		}
 	};		
 	class _remove_operation : virtual public _operation
 	{	protected:
@@ -1925,8 +2126,8 @@ COLLADA_(private)
 			b = true; remove();			
 			//HACK: This can't be the only reference.
 			assert(!_object->_compact()); 
-			((daeSmartRef<>&)element_of_change).~daeSmartRef();
-			if(_object->_getClassTag()--!=l) assert(0);
+			((daeSmartRef<>&)element_of_change).~daeSmartRef();			
+			set_is_content(0);
 		}
 		daeError remove()const
 		{ 
@@ -1963,11 +2164,11 @@ COLLADA_(private)
 		{
 			b = true; if(DAE_OK!=reparent()) return;			
 			insert(); new(&_object) daeSmartRef<>(_object);
-			if(_object->_getClassTag()++!=o) assert(0);
+			set_is_content(1);
 		}
 		daeError reparent()const
 		{
-			return e = _object->_reparent_element_to_element(*p.content.getObject()); 
+			return e = _object->_reparent_element_to_element(*p.content._getObject()); 
 		}
 		void insert()const
 		{
@@ -2008,7 +2209,8 @@ COLLADA_(private)
 				}
 				insert(); 
 			}			
-			assert(l==_object->_getClassTag());
+			//set_is_content(1);
+			assert(1==element_of_change->__DAEP__Element__data.is_content);
 		}public:
 		_insert_move_operation(daeCM_Demotion<> &d, daeCM_Placement<> &p)
 		:_remove_operation(d),_insert_operation(p,*element_of_change){}		
@@ -2020,8 +2222,9 @@ COLLADA_(private)
 		{
 			maybe(typeLookup_insert); //LEGACY
 			b = true; new(&_object) daeSmartRef<>(_object); daeChildID ID(p.name,p.count);
-			p.content.__increment_internal_counter(p.name); if(_object->_getClassTag()++!=o) assert(0);
-			new(p.content._insert_child<+1>(p.insertion_point)) daeContent(p.ordinal,ID,element_of_change);					
+			p.content.__increment_internal_counter(p.name);
+			set_is_content(1);
+			new(p.content._insert_child<+1>(p.insertion_point)) daeContent(p.ordinal,ID,element_of_change);
 		}public:		
 		_insert_new_operation(daeCM_Placement<> &p, const DAEP::Element &e):p(p){ element_of_change = &e; }		
 	};
@@ -2035,7 +2238,7 @@ COLLADA_(private)
 			//HACK: This can't be the only reference.
 			assert(!_object->_compact()); 
 			((daeSmartRef<>&)_object).~daeSmartRef();
-			if(_object->_getClassTag()--!=l) assert(0);			
+			set_is_content(0);
 		}public:
 		_vacate_operation(daeContent &ctv):child_to_vacate(ctv._child.ref)
 		{ element_of_change = ctv._child.DAEP; }		
@@ -2046,8 +2249,7 @@ COLLADA_(private)
 		daeElement* &vacancy;
 		virtual void carry_out_change()const
 		{
-			b = true; populate();
-			if(_object->_getClassTag()++!=o) assert(0);
+			b = true; populate(); set_is_content(1);
 		}
 		void populate()const
 		{
@@ -2104,7 +2306,8 @@ COLLADA_(private)
 				}
 				populate();
 			}			
-			assert(l==_object->_getClassTag());
+			//set_is_content(1);
+			assert(1==element_of_change->__DAEP__Element__data.is_content);
 		}public:
 		_populate_move_operation(daeCM_Demotion<> &d, daeContent &v, daeElement &p)
 		:_remove_operation(d),_populate_operation(v,p,*element_of_change){}		
@@ -2245,7 +2448,7 @@ COLLADA_(private) //BASIC (text nodes are not skimmed) CURSOR ALGORITHM
 	}
 }; 
 
-template<class Type,int Name, bool alone=(Name<0)> 
+template<int Name, bool alone=(Name<0)> 
 class dae_Array_base;
 
 template<class Type, int Name>
@@ -2263,15 +2466,27 @@ template<class Type, int Name>
  * to do here, without the C++11 @c auto keyword. (Not knowing what @a Name is, will
  * instantiate slightly suboptimal code--but this shouldn't be considered whatsoever!)
  */
-class dae_Array : public dae_Array_base<Type,Name>
+class dae_Array : public dae_Array_base<Name>
 { 
-	using dae_Array_base<Type,Name>::_i;
-	using dae_Array_base<Type,Name>::_content;
+	using dae_Array_base<Name>::_i;
+	using dae_Array_base<Name>::_content;
 
 COLLADA_(public) //ACCESSORS & MUTATORS
 
-	using dae_Array_base<Type,Name>::size;
-	using dae_Array_base<Type,Name>::resize;
+	using dae_Array_base<Name>::size;
+	using dae_Array_base<Name>::resize;
+	
+	typedef Type element_type;	
+	typedef daeChildRef<Type> value_type, atom;  	
+	typedef daeSmartRef<Type> element;
+	typedef daeChildRef<Type> *pointer;
+	typedef daeChildRef<Type> &reference;	
+	typedef daeSmartRef<const Type> const_element;
+	typedef const daeChildRef<Type> *const_pointer;
+	typedef const daeChildRef<Type> &const_reference;
+	
+	//I'm pretty sure daeSmartRef interactions rely on this.
+	typedef Type __COLLADA__T;
 
 	/**
 	 * @return Returns @c true if @c 0==size().
@@ -2288,7 +2503,7 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	/**CONST-FORM
 	 * Gets the first element in the array.
 	 */
-	inline const daeChildRef<const Type> &front()const{ return operator[](0); }	
+	inline const daeChildRef<Type> &front()const{ return operator[](0); }	
 
 	/**
 	 * Gets the last element in the array.
@@ -2300,7 +2515,7 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	/**CONST-FORM
 	 * Gets the last element in the array.
 	 */
-	inline const daeChildRef<const Type> &back()const{ return operator[](Name<0?0:size()-1); }
+	inline const daeChildRef<Type> &back()const{ return operator[](Name<0?0:size()-1); }
 
 	/**WARNING
 	 * Post 2.5 @c push_back() should be used instead of the old @c append() API
@@ -2311,7 +2526,7 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	/**
 	 * Complements @c push_back(). (Removes last item.)
 	 */
-	inline void pop_back(){ back() = ""; }
+	inline void pop_back(){ back() = empty_daeString1; }
 
 #if 2 == COLLADA_DOM
 
@@ -2344,7 +2559,7 @@ COLLADA_(public) //ACCESSORS & MUTATORS (2)
 	 * Gets the object at a specific index in the @c dae_Array.
 	 * @return Returns the object at index.
 	 */
-	inline const daeChildRef<const Type> &get(daeCounter index)const
+	inline const daeChildRef<Type> &get(daeCounter index)const
 	{ 
 		return operator[](index); 
 	}
@@ -2367,7 +2582,9 @@ COLLADA_(public) //OPERATORS
 	 */
 	inline bool __inoperable_ptr()const
 	{
-		return (char*)this-(char*)nullptr<65536&&(Name<0||Name>1);
+		//NOTE: Name 0 is generic arrays; 1 is the unnamed array.
+		//return (char*)this-(char*)nullptr<65536&&(Name<0||Name>1);
+		return (Name<0||Name>1)&&daeObject::_this__nullptr(this);
 	}	
 	/**WARNING, CONST-FORM
 	 * Converts into the first element.
@@ -2409,7 +2626,7 @@ COLLADA_(public) //OPERATORS
 	/** 
 	 * Adds an element when one had not previously existed. 
 	 */	
-	inline const daeChildRef<Type> &operator+(){ return +operator[](0); }	
+	inline daeChildRef<Type> &operator+(){ return +operator[](0); }	
 
 	/** 
 	 * Adds an element when one had not previously existed. 
@@ -2444,6 +2661,24 @@ COLLADA_(public) //OPERATORS
 		return (const Type*)got->_child.ref;
 	}
 	
+	/**EXPERIMENTAL
+	 * Implements DAEP QName accessor.
+	 * @warning @c daeQName does not implement speculative access.
+	 */
+	inline const daeSmartTag &operator->*(daeString)
+	{
+		return operator[](0)->*daeString(); 
+	}
+	/**EXPERIMENTAL
+	 * Implements DAEP QName accessor.
+	 * @warning @c daeQName does not implement speculative access.
+	 */
+	inline const daeSmartTag_base &operator->*(daeString)const
+	{
+		const daeChildRef<Type> &o = operator[](0);		
+		return *(daeSmartTag_base*)&o;
+	}
+
 	template<class I> //I defeats operator Type*().
 	/**
 	 * Gets the object at a specific index in the @c dae_Array.
@@ -2469,42 +2704,83 @@ COLLADA_(public) //OPERATORS
 	 * Gets the object at a specific index in the @c dae_Array.
 	 * @return Returns the object at index.
 	 */
-	inline const daeChildRef<const Type> &operator[](I indexIn)const
+	inline const daeChildRef<Type> &operator[](I indexIn)const
 	{
 		daeCounter index = (daeCounter)indexIn;
 		//This assert should support overloading the "alone" arrays
 		assert((Name<0?0:index)<size());
 		const daeContent *got = _content().template _get<Name>(_i(index));
 		assert(got!=nullptr); 
-		return (daeChildRef<const Type>&)got->_child.ref;
+		return *(daeChildRef<Type>*)&got->_child.ref;
 	}	
-	  
-COLLADA_(public) //operator=
 
-	//C++98/03 SUPPORT
-	//DAEP::Child defines this.
-	//inline dae_Array &operator=(const S &cp)
-	//inline daeString1 operator=(daeString1 empty_string_literal)
-	COLLADA__DAEP__Child__union__assignment_operator(Type,Name)
-	template<class S>
-	/** Implements @c operator=() for pointer types. */
-	void __assign(const S &cp,...)
+COLLADA_(public) //ARRAY-ONLY OPERATORS
+
+	//NOTE: Moving out of dae_Array_base to eliminate Type parameter.
+
+	/** 
+	 * Creates a new element on the back of the array.
+	 */	
+	inline daeChildRef<Type> &operator++()
 	{
-		operator[](0) = cp;
-	}
-	template<class> struct __assign_if_class{};
-	template<class S>
-	/** Implements @c operator=() for class types. */
-	void __assign(const S &cp, __assign_if_class<S S::*>*)
-	{
-		__assign_class<S>(cp,nullptr);
-	}
-	template<class S>
-	/** Implements @c operator=() for @c daeSmartRef types. */
-	void __assign_class(const S &cp, typename S::__COLLADA__T*)
-	{
-		operator[](0) = cp;
+		return +operator[](size()); daeCTC<(Name>=0)>();
 	}	
+
+	/** 
+	 * Tears off an array by address of this type, without knowing its @a Name. 
+	 * @note that operating without @a Name is sub-optimal, but is possible, and
+	 * is implemented to be backward compatible with the 2.x style.
+	 */
+	inline operator dae_Array<Type>&()
+	{
+		return *(dae_Array<Type,0>*)this; daeCTC<(Name>=0)>();
+	}
+	/**CONST-FORM
+	 * Tears off an array by address of this type, without knowing its @a Name. 
+	 * @note that operating without @a Name is sub-optimal, but is possible, and
+	 * is implemented to be backward compatible with the 2.x style.
+	 */
+	inline operator const dae_Array<Type>&()const
+	{
+		return *(dae_Array<Type,0>*)this; daeCTC<(Name>=0)>();
+	}
+	  
+COLLADA_(public) //ASSIGNMENT OPERATOR
+	/**C++
+	 * @see @c cast_const()
+	 */
+	inline dae_Array &operator=(const dae_Array &cp)
+	{
+		daeCTC<0>("loses qualifiers");
+	}
+
+	template<class S>
+	/**
+	 * Assignment of smart-refs, arrays, and pointers; also
+	 * "" string-literal.
+	 */
+	inline dae_Array &operator=(S &cp)
+	{
+		return __assign(cp,nullptr);
+	}
+	template<class S>
+	/**
+	 * Assignment of smart-refs, arrays, and pointers; also
+	 * "" string-literal.
+	 */
+	inline typename daeTypic<sizeof(S)-1,
+	dae_Array,daeString1>::type &operator=(const S &cp)
+	{
+		return __assign(cp,nullptr);
+	}
+	template<class S>
+	/**
+	 * Implements @c operator=() for pointer types. 
+	 */
+	inline dae_Array &__assign(S &cp,...)
+	{
+		operator[](0) = cp; return *this;
+	}
 	template<class S>
 	/**LEGACY, OVERLOAD, ***CAUTION!*** 
 	 *
@@ -2520,7 +2796,7 @@ COLLADA_(public) //operator=
 	 * @remarks, this does pointer assignment only.
 	 * It may not be meaningful, but must mimic @c daeArray.
 	 */
-	void __assign_class(const S &cp,...)
+	dae_Array &__assign(S &cp, typename S::value_type*)
 	{
 		daeChildID::POD iN = cp.size(), i = 0;
 		resize(iN);									
@@ -2528,9 +2804,17 @@ COLLADA_(public) //operator=
 		daeContents &ci = _content();
 		daeCursor i_ = ci.end();
 		for(iN+=id._id;id._id<iN;id._id++) 
-		{
-			ci._get<Type,Name>(i_,id) = cp[i++];
-		}
+		ci._get<Type,Name>(i_,id) = cp[i++]; return *this;
+	}	
+	/**
+	 * Removes this element from the contents-array by means
+	 * of converting it to an empty text-node. This will not
+	 * disrupt the array, and so is recommended. The removed
+	 * nodes can be cleaned out en masse as a maintenance op.
+	 */
+	inline daeString1 &__assign(daeString1 &empty_string_literal,...)
+	{
+		return operator[](0) = empty_string_literal;
 	}
 
 #if 2 == COLLADA_DOM
@@ -2567,22 +2851,13 @@ COLLADA_(public) //QUESTIONABLE LEGACY OPERATORS (2)
 #endif //2 == COLLADA_DOM
 };
 					
-template<class Type, int Name>
+template<int Name>
 /**INTERNAL, PARTIAL-SPECIALIZATION
  * This specialization implements arrays that can have more than one child.
  */
-class dae_Array_base<Type,Name,false> 
+class dae_Array_base<Name,false> 
 {
 	template<class,int> friend class dae_Array;
-
-COLLADA_(public) //++ OPERATOR
-	/** 
-	 * Creates a new element on the back of the array.
-	 */	
-	inline const daeChildRef<Type> &operator++()
-	{
-		return +((dae_Array<Type,Name>*)this)->operator[](size());
-	}	
 
 COLLADA_(private) 
 	/** 
@@ -2614,6 +2889,20 @@ COLLADA_(private)
 		assert(index<0xFFFF);
 		return index|(Name==0?_counter&0xFFFF0000:Name<<16);
 	}
+
+COLLADA_(public) //CONVERSION OPERATORS
+	/** 
+	 * Tears off an array by address of this type, without knowing its @a Name. 
+	 * @note that operating without @a Name is sub-optimal, but is possible, and
+	 * is implemented to be backward compatible with the 2.x style.
+	 */
+	inline operator dae_Array<>&(){ return *(dae_Array<>*)this; }
+	/**CONST-FORM
+	 * Tears off an array by address of this type, without knowing its @a Name. 
+	 * @note that operating without @a Name is sub-optimal, but is possible, and
+	 * is implemented to be backward compatible with the 2.x style.
+	 */
+	inline operator const dae_Array<>&()const{ return *(dae_Array<>*)this; }
 	
 COLLADA_(public) //ACCESSORS & MUTATORS
 	/**
@@ -2633,27 +2922,13 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 	 */
 	inline void resize(daeCounter nElements)
 	{
-		COLLADA::INCOMPLETE<Type>::daeMeta
-		::_resizeWID<!'Y'>(_i(nElements),_content(),size());
+		COLLADA_NCOMPLETE(Name) daeMeta
+		::template _resizeWID<!'Y'>(_i(nElements),_content(),size());
 		assert(size()==nElements);
 	}	
-
-COLLADA_(public) //DOWN-CONVERSION OPERATOR
-	/** 
-	 * Tears off an array by address of this type, without knowing its @a Name. 
-	 * @note that operating without @a Name is sub-optimal, but is possible, and
-	 * is implemented to be backward compatible with the 2.x style.
-	 */
-	inline operator dae_Array<Type,0>&(){ return (dae_Array<Type,0>&)*this; }
-	/**CONST-FORM
-	 * Tears off an array by address of this type, without knowing its @a Name. 
-	 * @note that operating without @a Name is sub-optimal, but is possible, and
-	 * is implemented to be backward compatible with the 2.x style.
-	 */
-	inline operator const dae_Array<Type,0>&()const{ return (dae_Array<Type,0>&)*this; }
 };
 
-template<class Type, int Name>
+template<int Name>
 /**INTERNAL, PARTIAL-SPECIALIZATION
  * This specialization implements arrays that can have only one child.*
  * *Still these children can be accessed like arrays, with the [] operator.
@@ -2661,7 +2936,7 @@ template<class Type, int Name>
  * users wish to, or need to, deviate from the XSD schema that was used 
  * to generate their classes--and so code can treat them as-if arrays.
  */
-class dae_Array_base<Type,Name,true> 
+class dae_Array_base<Name,true> 
 {	
 	template<class,int> friend class dae_Array;
 
@@ -2709,8 +2984,8 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 		//-and so should also be called "extra-schema" for consistency.
 		assert(nElements<=1);
 
-		COLLADA::INCOMPLETE<Type>::daeMeta
-		::_resizeWID<!'Y'>(_i(nElements),_content(),size());
+		COLLADA_NCOMPLETE(Name) daeMeta
+		::template _resizeWID<!'Y'>(_i(nElements),_content(),size());
 		assert(size()==(nElements>0?1:0));
 	}
 	/**
@@ -2724,21 +2999,13 @@ COLLADA_(public) //ACCESSORS & MUTATORS
 };
 
 //SCHEDULED FOR REMOVAL
-/**C-PREPROCESSOR-MACRO
- * TODO: EVENTUALLY THIS SHOULD BE REPLACED
- * BY SOME ATTRIBUTE DATA-MEMBERS THAT WILL 
- * GET THE ALIGNMENT ON TRACK. IF THERE ARE
- * NO ATTRIBUTES, ALIGNMENT ISN'T NECESSARY
+/**C-PREPROCESSOR MACRO
+ * The schema generated headers use this macro to add padding after the
+ * attributes data so the 32-bit @c daeChildID fields layout is regular.
  */
 #define COLLADA_WORD_ALIGN COLLADA_ALIGN(COLLADA_PTR_CHAR)
-//__declspec(align(X)) doesn't accept sizeof().
-#if UINT_MAX < COLLADA_UPTR_MAX	
-#define COLLADA_PTR_CHAR 8
-#else
-#define COLLADA_PTR_CHAR 4
-#endif
-static daeCTC<COLLADA_PTR_CHAR==sizeof(void*)> COLLADA_PTR_CHAR_check;
-/**C-PREPROCESSOR-MACRO
+
+/**C-PREPROCESSOR MACRO
  * This macro is used to align the cursor-arrays with the contents-array.
  * @param align is 0 if there is a soft/odd number of 32-bit words in all.
  * If 0, then 64-bit builds add a padding word.

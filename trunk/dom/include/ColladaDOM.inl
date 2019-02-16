@@ -9,7 +9,12 @@
 #ifndef __COLLADA_DOM_INL__
 #define __COLLADA_DOM_INL__
 
-#include "WARNING.HPP" //push
+//#pragma GCC diagnostic push
+//Client code must include again to quiet the GCC team's opionions about their
+//code; Either because of the following link, or precompiled-header limitation.
+//Unfortunately client code must then adopt this library's warning preferences.
+//https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
+#include <ColladaDOM.g++>
 
 //This includes the entirety of the library.
 #include "dae.h"
@@ -20,6 +25,7 @@
 #include "dae/daeStandardURIResolver.h"
 //This is internal, but useful for I/0 code.
 #include "dae/daeRAII.hpp"
+#include "modules/daeSTLDatabase.h"
 
 //Miscellaneous and circularly defined APIs.
 COLLADA_(namespace)
@@ -49,7 +55,7 @@ inline typename daeConstOf
 <T,typename S::__COLLADA__T>::type *daeSafeCast(T *e)
 {
 	const daeElement *upcast = dae(*e);
-	if(e!=nullptr) if(daeUnsafe<S>(upcast))
+	if(e!=nullptr) if(daeUnsafe<S>(*upcast))
 	{
 	#ifndef COLLADA_quiet_daeSafeCast
 	assert(!"daeSafeCast() failed."); //2.5: Alert the user?
@@ -60,16 +66,13 @@ inline typename daeConstOf
 /**TEMPLATE-SPECIALIZATION Implements @c daeUnsafe(). */
 template<class S> inline bool _daeUnsafe2(const daeElement *e)
 {	
+	//Need to check this at the source. Especially with "this".
+	assert(e!=nullptr); 
 	#ifdef COLLADA_dynamic_daeSafeCast
 	return dynamic_cast<const DAEP::Elemental<S>*>(e)==nullptr;
 	#else
-	return e==nullptr||e->getMeta()!=daeGetMeta<S>();
+	return /*e==nullptr||*/e->getMeta()!=daeGetMeta<S>();
 	#endif
-}
-/**TEMPLATE-SPECIALIZATION Implements @c daeUnsafe(). */
-template<> inline bool _daeUnsafe2<domAny>(const daeElement *e)
-{
-	return e==nullptr||!e->_isAny();
 }
 /**TEMPLATE-SPECIALIZATION Implements @c daeUnsafe(). */
 template<> inline bool _daeUnsafe2<daeObject>(const daeElement*){ return false; }
@@ -78,9 +81,9 @@ template<> inline bool _daeUnsafe2<daeElement>(const daeElement*){ return false;
 /**TEMPLATE-SPECIALIZATION Implements @c daeUnsafe(). */
 template<> inline bool _daeUnsafe2<DAEP::Element>(const daeElement*){ return false; }
 /**TEMPLATE-SPECIALIZATION Implements @c daeSafeCast(). */
-template<class S> inline bool daeUnsafe(const daeElement *e)
+template<class S> inline bool daeUnsafe(const daeElement &e)
 {
-	return _daeUnsafe2<typename daeConstOf<int,typename S::__COLLADA__T>::type>(e);
+	return _daeUnsafe2<typename daeConstOf<int,typename S::__COLLADA__T>::type>(&e);
 }
 /**
  * Extract the metadata by constructing an uninitialized "elemental"
@@ -112,15 +115,9 @@ template<class T> inline const daeModel &daeGetModel()
 template<class T> inline daeMeta &daeGetMeta()
 {
 	//Don't use daeOpaque here as long as daeModel converts to daeMeta*.
+	//NOTE: Planning to remove sizeof(typename T::__COLLADA__T) at some
+	//point just because it seems to just chew up memory for little use.
 	return daeOpaque(&daeGetModel<typename T::__COLLADA__T>())[sizeof(typename T::__COLLADA__T)];
-}
-/**TEMPLATE-SPECIALIZATION
- * Since @c domAny is shared, its layout isn't known to clients.
- */
-template<> inline daeMeta &daeGetMeta<domAny>()
-{
-	//Reminder: This lets "math:math" default to domAny.
-	return daeGetModel<domAny>();
 }
 		
 /**CIRCULAR-DEPENDENCY
@@ -146,7 +143,7 @@ inline daeDatabase &daeDoc::getDatabase()const{ return getDOM()->getDatabase(); 
 inline daeDatabase &daeElement::getDatabase()const{ return getDOM()->getDatabase(); }
 
 template<>
-/**KISS, CIRCULAR-DEPENDENCY 
+/**CIRCULAR-DEPENDENCY, SCHEDULED-FOR-REMOVAL 
  * Implements @c daeArray<daeContent>::clear().
  * Perhaps "__COLLADA__clear" is in order? Contents-arrays are special.
  * @see ColladaDOM.inl header's definition.
@@ -155,10 +152,10 @@ inline void daeArray<daeContent>::_clear2(daeContent*)
 {
 	//If getObject() is nullptr it's likely to be @c XS::Choice::_solve().
 	//In that case, clear() is not supported; call _clear2<void>() directly.
-	assert(_au->_offset!=0); ((daeElement*)getObject())->__clear(*this); 
+	assert(_au->_offset!=0); ((daeElement*)_getObject())->__clear(*this); 
 }
 template<>
-/**CIRCULAR-DEPENDENCY
+/**CIRCULAR-DEPENDENCY, SCHEDULED-FOR-REMOVAL
  * @param toCapacity_1 excludes the 0-terminator
  * that holds the @c daeAtomicType::VOID element.
  * Read: @c capacity()-1.
@@ -177,7 +174,7 @@ inline void daeArray<daeContent>::_grow2(size_t toCapacity_1,daeContent*)
 	//>= is used to include the 0-terminator. __grow() adds 1 to minCapcity.
 	//(This diverges from capacity/getCapacity()!)
 	if(toCapacity_1>=getCapacity())
-	((daeElement*)getObject())->__grow(*this,toCapacity_1); 
+	((daeElement*)_getObject())->__grow(*this,toCapacity_1); 
 }
 
 /**LEGACY, CIRCULAR DEPENDENCY
@@ -208,7 +205,7 @@ inline daeOK daeRef::get(daeRefRequest &req)const
 template<int ID, class T, class CC, typename CC::_ PtoM, class S>\
 inline __ &operator bop(__ &lv, const S &rv)\
 {\
-	typedef typename __::underlying_type ut;\
+	typedef typename __::underlying_type ut; lv.__mask(); \
 	struct _{ static void f(ut &lv, const S &rv){ lv bop rv; } };\
 	DAEP::InnerChange<__,S/*,_::f*/> cn(lv,_::f,rv); return lv;\
 }
@@ -219,7 +216,7 @@ _(-=)_(+=)_(/=)_(%=)_(*=)_(<<=)_(>>=)_(&=)_(|=)_(^=)
 template<int ID, class T, class CC, typename CC::_ PtoM>\
 inline __ &operator uop(__ &lv)\
 {\
-	typedef typename __::underlying_type ut;\
+	typedef typename __::underlying_type ut; lv.__mask(); \
 	struct _{ static void f(ut &lv, const int &rv){ lv uop; } };\
 	DAEP::InnerChange<__,int/*,_::f*/> cn(lv,_::f,int()); return lv;\
 }\
@@ -315,14 +312,12 @@ inline const daeStringRef &daeBoundaryStringRef(const S &c, const void*const &st
 //---.
 }//<-'
 
-/** 
- * This macro extends WARNING.HPP. A GCC precompild header will lose the state.
- */
-#ifdef COLLADA_DOM_WARNING_HPP
-#undef __COLLADA_DOM__WARNING_HPP__
-#else
-#include "WARNING.HPP" //pop   
-#endif
+//#pragma GCC diagnostic pop
+//Client code must include again to quiet the GCC team's opionions about their
+//code; Either because of the following link, or precompiled-header limitation.
+//Unfortunately client code must then adopt this library's warning preferences.
+//https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
+#include <ColladaDOM.g++>
 
 #endif //__COLLADA_DOM_INL__
 /*C1071*/

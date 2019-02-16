@@ -15,8 +15,97 @@
 COLLADA_(namespace)
 {//-.
 //<-'
+   
+/**EXPERIMENTAL
+ * Implement this interface in order to provide more context to child
+ * instantation APIs than its QName. In XML the child's class depends
+ * on the xmlns attributes in its tag. These attributes cannot be set
+ * until the child is instantiated, which depends on the class of the 
+ * child. @c xmlns() is important to fully implement XML in all cases.
+ * @see @c daePseudoElement2
+ */
+class daeCreateContext
+{
+	//HACK: Simplifies constructor.
+	friend union daePseudoElement2;
+	operator daeElement*(){ return (daeElement*)this; }
 
-#include "../LINKAGE.HPP" //#define LINKAGE
+COLLADA_(public) //DAEP::Object layout
+	/**VTABLE
+	 * @note The methods that use this now have overloads
+	 * for taking the @c daeElementTags & NCName directly.
+	 * This structure is easy to use in a limited way, or
+	 * if it's too soon to fret over xmlns implementation.
+	 *
+	 * @c return Returns EITHER a @c daeElementTags value
+	 * OR an XML namespace value via @a o. If both values
+	 * are zero/empty searching is done backward starting
+	 * with @c parent. (Note, this is inadequate when the
+	 * xmlns attribute lives in the same child using it.)
+	 *
+	 * @c daeMeta::pushBackWRT() & @c daeMeta::createWRT()
+	 * use @c xmlns() to instantiate @c daeElement derived
+	 * classes. If a nonzero value is returned there is no
+	 * further processing. In theory I/O plugins can speed
+	 * up input this way. Alternatively @a o can be filled
+	 * out with an XML namespace. @a o is provided in case 
+	 * a plugin just wants to scan the local attributes in
+	 * case the child to-be defines its own prefix locally.
+	 * If @c prefix_string==nullptr, it will be filled out.
+	 */
+	virtual unsigned int xmlns(daeName &o) = 0;
+
+	const int _zero; //__DAEP__Object__refs
+
+	unsigned int prefix_extent; //__DAEP__Object__tags
+	
+	daePseudoElement *parent; //__DAEP__Object__parent
+
+COLLADA_(public) //beyond DAEP::Object
+
+	daeString prefix_string;
+
+	inline void prefix(const daeName &cp)
+	{
+		prefix_string = cp.string; 
+		prefix_extent = cp.extent&UINT_MAX;
+	}
+
+COLLADA_(public) //CONSTRUCTOR
+
+	daeCreateContext(daePseudoElement*p=nullptr)
+	:_zero(),prefix_extent(),parent(p),prefix_string(){}
+};
+/**UNION, EXPERIMENTAL
+ * Represents either a parent element for purpose of creating a child
+ * OR the contents of the child to-be's attributes (xmlns especially)
+ * and also the parent, and optionally the QName prefix separate from
+ * the @c daePseudonym string.
+ */
+union daePseudoElement2
+{
+COLLADA_(public) //UNION
+
+	daeCreateContext *context;
+	daePseudoElement *element;	
+	
+COLLADA_(public) //OPERATORS
+	/**
+	 * Mainly to access @c daeElement::getMeta().
+	 */
+	inline daePseudoElement *operator->()
+	{
+		return 0==context->_zero?context->parent:element;
+	}
+
+COLLADA_(public) //CONSTRUCTORS
+
+	//NOTE: Accepts daeSmartRef-like wrappers.
+	template<class T> daePseudoElement2(T&e):element(e){}
+	template<class T> daePseudoElement2(T*e):element(*e){}
+	//HACK: Avoids complex SFINAE constructor.
+	private:operator daeElement*()const{ return element; }
+};
 
 /**SCOPED ENUM */
 struct daeContentModel
@@ -28,6 +117,8 @@ struct daeContentModel
 	 */
 	enum{ EMPTY=0,SIMPLE,COMPLEX,MIXED };
 };
+
+#include "../LINKAGE.HPP" //#define LINKAGE
 
 /**
  * Each instance of the @c daeMetaElement class describes a C++ COLLADA DOM
@@ -48,7 +139,7 @@ struct daeContentModel
  * See @c daeElement for information about the functionality that every @c daeElement implements.
  */
 class daeMetaElement : public daeMetaObject
-{
+{	
 COLLADA_(public) //OPERATORS
 
 	COLLADA_DOM_OBJECT_OPERATORS(daeMetaElement)
@@ -133,6 +224,10 @@ COLLADA_(public) //ACCESSORS
 		return 0!=(_getDSTs()&128); 
 	}
 
+	//SCHEDULED FOR REMOVAL/REFACTOR
+	#ifdef NDEBUG //GCC wants quotes.
+	#error "This just isn't useful. Needs xmlns/XS::Element?"
+	#endif	
 	template<class T>
 	/**LEGACY-SUPPORT
 	 * Formerly "getMetaCMPolicy::findChild."
@@ -149,8 +244,15 @@ COLLADA_(public) //ACCESSORS
 	NOALIAS_LINKAGE daeMeta *_findChild2(daeString)const;
 	/** Implements @c findChild(). */
 	NOALIAS_LINKAGE daeMeta *_findChild2(const daePseudonym&)const;	 
-	/** Implements @c findChild2(). */
-	template<class T> inline daeMeta *_findChild3(const T&)const;
+	/**INTERNAL
+	 * Implements @c findChild2(). 
+	 * @param permanent returns a @c daeClientString inside of the 
+	 * metadata where possible... except if no match exists either
+	 * the size is set to 0 or to a ':' character in case there is
+	 * no match because the name is a QName. Currently the library
+	 * assumes one child per name.
+	 */
+	inline daeMeta *_findChild3(daeName &permanent)const;
 
 	/**LEGACY-SUPPORT
 	 * Formerly "getValueAttribute".
@@ -280,7 +382,7 @@ COLLADA_(public) //daeContent.h "WID" APIs (With-ID)
 	 * Adds an element to the contents-array. It will be constructed according to the
 	 * ID, and its name will be that of the ID's. (It will be a default in every way.)
 	 */
-	LINKAGE static const daeChildRef<> &_addWID(daeChildID,daeContents&,daeContent*_=nullptr);
+	LINKAGE static daeChildRef<> &_addWID(daeChildID,daeContents&,daeContent*_=nullptr);
 
 	template<class U> //See daeContents::__cursorize().
 	/**
@@ -289,7 +391,7 @@ COLLADA_(public) //daeContent.h "WID" APIs (With-ID)
 	 * may already belong to a contents-array or may be @c nullptr.
 	 * @see @c _addWID() Doxygentation.
 	 */
-	inline static const daeChildRef<> &_setWID(daeChildID ID, const U &child, daeContents &c, daeContent *it=nullptr)
+	inline static daeChildRef<> &_setWID(daeChildID ID, const U &child, daeContents &c, daeContent *it=nullptr)
 	{
 		//& is used to invoke the DAEP::Element conversion
 		//to a daeElement& in order to behave like xs::any.
@@ -298,9 +400,9 @@ COLLADA_(public) //daeContent.h "WID" APIs (With-ID)
 		return _==&upcast?_setWID2(ID,(daeElement*)&upcast,c,it):_setWID2(ID,*(daeContent*)_,c,it);
 	}
 	/** Implements @c _setWID(). */
-	LINKAGE static const daeChildRef<> &_setWID2(daeChildID,daeElement*,daeContents&,daeContent*);
+	LINKAGE static daeChildRef<> &_setWID2(daeChildID,daeElement*,daeContents&,daeContent*);
 	/** Implements @c _setWID(). */
-	LINKAGE static const daeChildRef<> &_setWID2(daeChildID,daeContent&,daeContents&,daeContent*);
+	LINKAGE static daeChildRef<> &_setWID2(daeChildID,daeContent&,daeContents&,daeContent*);
 	/** Implements @c _setWID2(). */
 	template<class S> static inline void _setWID3(daeChildID,S&,daeContents&,daeContent*&);
 
@@ -315,7 +417,7 @@ COLLADA_(public) //daeContent.h "WID" APIs (With-ID)
 
 	template<bool Branch>
 	/**
-	 * Sets the number of elements named @a ID.getName() to @a ID.getIndex().
+	 * Sets the number of elements named @c ID.getName() to @c ID.getIndex().
 	 * This can be thought of as either adding placeholders to pad the count,
 	 * -or removing high-index elements in order to truncate the count.
 	 */
@@ -325,6 +427,31 @@ COLLADA_(public) //daeContent.h "WID" APIs (With-ID)
 	}
 	/** Implements _resizeWID(). */
 	LINKAGE static void _resizeWID2(daeContents&,daeChildID::POD,daeChildID::POD);
+
+COLLADA_(public) //BASIC FACTORY
+
+	/**LEGACY-SUPPORT
+	 * This is supplementing @c daeElement::clone(). It does
+	 * the same thing without copying values or requiring an
+	 * element. daeMeta::createWRT() is for determining what
+	 * type of child is compatible with a name and namespace.
+	 * 
+	 * @return Returns @c nullptr if @a DOM isn't a DOM or a
+	 * document or an element. These are the kinds of parent
+	 * objects that elements are permitted to have. After it
+	 * is necessary to place the element in a contents-array
+	 * unless @a DOM is a DOM.
+	 *
+	 * @remark Historically this API took only a name, which
+	 * it used to try to create either a child, or itself if
+	 * it matched. This version however only instantiates an
+	 * element of @c this type. Its name may be different if
+	 * you are trying to replicate a child that uses another
+	 * name than the XML Schema type's name. In that case it
+	 * should be renamed by using @c daeElement::getNCName(). 
+	 * @see @c daeElement::setNamespace().
+	 */
+	NOALIAS_LINKAGE daeElementRef create(daeObject *DOM);
 
 COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	/**WARNING
@@ -351,8 +478,18 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	 * other APIs don't do this; either because they are legacy with
 	 * hard error requirements, or are required to fill @c dae_Array.
 	 * (@c dae_Array indices must always produce identical results.)
+	 *
+	 * @param parent is extended to accept @c daeCreateContext via a
+	 * a @c daePseudoElement2 union. This form is required to define
+	 * a child's prefix via the child's own XML attributes.
 	 */
-	LINKAGE const daeChildRef<> &pushBackWRT(daePseudoElement*, const daePseudonym&)const;
+	LINKAGE daeChildRef<> &pushBackWRT(daePseudoElement2 parent, const daePseudonym&)const;
+	/**EXPERIMENTAL
+	 * This overload forgoes QName checks. If @c !xmlns.found() then
+	 * a prefix is looked for if possible. If not possible the empty
+	 * namespace that @c domAny has by default is used, not prefixed.
+	 */
+	LINKAGE daeChildRef<> &pushBackWRT(daePseudoElement *parent, daeTags xmlns, const daeName &NCName)const;
 
 	/**WARNING, LEGACY
 	 * Formerly "create," second overload form.
@@ -363,7 +500,6 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	 * Looks through the list of potential child elements
 	 * for this metadata finding the corresponding metadata; if metadata
 	 * is found, return an instance of it.
-	 * Typically "place" is called after "create(child_element_name)."
 	 *
 	 * @warning This is the 2.5 entrypoint to the legacy creation/placement
 	 * APIs, including: @c placeWRT(), @c placeAfterWRT() & @c placeBeforeWRT(),
@@ -379,8 +515,18 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	 *
 	 * @return Historically this API returns @c nullptr if @a pseudonym is not matched.
 	 * Therefore it cannot be used to create unnamed children, unless @c getAllowsAny().
+	 *
+	 * @param parent is extended to accept @c daeCreateContext via a @c daePseudoElement2 
+	 * union. This form is required to define a child's prefix via its own XML attributes.
 	 */
-	LINKAGE daeElementRef createWRT(daePseudoElement *parent, const daePseudonym &pseudonym)const;
+	LINKAGE daeElementRef createWRT(daePseudoElement2 parent, const daePseudonym &pseudonym)const;
+	/**OVERLOAD
+	 * This overload retains the original implementation of @c createWRT() except
+	 * for a namespace and prefix pair must be provided by the caller in addition
+	 * to an NCName. It is unforgiving compared to the other overload.
+	 * @param xmlns can take @c daeXMLNS. The low-level type is @c daeElementTags.
+	 */
+	LINKAGE daeElementRef createWRT(daePseudoElement *parent, daeTags xmlns, const daeName &NCName)const;
 					 
 	template<class U> //See daeContents::__cursorize().
 	/**WARNING, LEGACY
@@ -549,7 +695,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	struct _getChildrenWRT_f
 	{	
 		daeArray<daeSmartRef<E>> &result;
-		void operator()(E *ch){ if(ch!=nullptr) result.push_back(ch); } 
+		void operator()(E &ch){ result.push_back(&ch); } 
 	};
 	/**LEGACY
 	 * Formerly "getChildren."
@@ -580,7 +726,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 	struct _getChildrenCountWRT_f
 	{	
 		size_t count;
-		void operator()(const daeElement *ch){ if(ch!=nullptr) count++; }
+		void operator()(const daeElement &ch){ count++; }
 	};
 	/**LEGACY-SUPPORT
 	 * @return Returns what @c getChildrenWRT().size() would be.
@@ -594,7 +740,7 @@ COLLADA_(public) //daeElement "WRT" APIs (with-respect-to)
 COLLADA_(private) //GENERATOR-SIDE APIs
 	
 	friend class domAny;
-	template<class T, unsigned long long, class> 
+	template<class,unsigned long long,class> 
 	friend class DAEP::Elemental;
 
 	/**GENERATOR-SIDE API
@@ -612,31 +758,34 @@ COLLADA_(private) //GENERATOR-SIDE APIs
 		return const_cast<daeAny&>(getAnyAttribute());
 	}
 
-	template<class T, int M, int N> 
+	template<class T> 
 	/**GENERATOR-SIDE API
 	 * Appends a @c XS::Attribute that represents a field corresponding to an
 	 * XML attribute to the C++ version of this element type.
 	 */
-	inline XS::Attribute &addAttribute(T &nul, daeClientStringCP (&typeQName)[M], daeClientStringCP (&pseudonym)[N])
+	inline XS::Attribute &addAttribute(T &nul, daeClientString2 typeQName, daeClientString2 pseudonym)
 	{
 		typedef typename T::underlying_type VT;
 		//Not pretty. Quick fix to build with GCC/C++.
 		//typedef typename XS::List::Item<VT>::type atom;
-		typedef COLLADA_NCOMPLETE(N) XS::List::template Item<VT>::type atom;
+		typedef COLLADA_INCOMPLETE(T) XS::List::template Item<VT>::type atom;
 		typedef daeAlloc<> &(*lt_void)(daeAllocThunk&);
 		typedef daeAlloc<atom> &(*lt_atom)(daeAllocThunk&);
 		XS::Attribute &o = _addAttribute(nul.feature(),nul.offset(),
 		(lt_void)static_cast<lt_atom> //Want to be sure lt/ltT are correct.
-		(daeAlloc<atom>::locateThunk),typeQName,N<=1?daeHashString(nullptr,0):pseudonym);
+		(daeAlloc<atom>::locateThunk),typeQName,pseudonym);
 		//new(o.getType().value) VT();
 		_maybe_prototype<VT>(o); return o;
 	}
-	template<class T, int M> 
+	template<class T> 
 	/**GENERATOR-SIDE API, SHADOWING
 	 * Appends a @c daeValue that represents a field corresponding to an
 	 * XML complexType's "value" pseduo-attribute to the C++ version of this element type.
 	 */
-	inline daeDefault &addValue(T &nul, daeClientStringCP (&typeQName)[M]){ return addAttribute(nul,typeQName,""); }
+	inline daeDefault &addValue(T &nul, daeClientString2 typeQName)
+	{
+		return addAttribute(nul,typeQName,nullptr); 
+	}
 
 	template<class T> //XS::Any, XS::Choice, XS::Element, XS::Group, or XS::Sequence
 	/**GENERATOR API
@@ -650,10 +799,11 @@ COLLADA_(private) //GENERATOR-SIDE APIs
 	 * @note In practice the default arguments are pointless, as this is called by generators.
 	 * (They were historically part of the "daeMetaCMPolicy" based classes, now called @c daeCM.)
 	 */	
-	T &addCM(daeCM* &push, daeCounter ordSubtrahend, int minOccurs=1, int maxOccurs=1)
+	T &addCM(daeCM* &push, daeCounter ordSubtrahend, int minOccurs, int maxOccurs, int reserve=0)
 	{
-		daeParentCM *pop = (daeParentCM*)push;		
-		T &out = static_cast<T&>(_addCM(T::__daeCM__XS_enum,pop,ordSubtrahend,minOccurs,maxOccurs));
+		daeParentCM *pop = (daeParentCM*)push; 
+		int i4[4] = {(int)ordSubtrahend,minOccurs,maxOccurs,reserve};
+		T &out = static_cast<T&>(_addCM(T::__daeCM__XS_enum,pop,i4));
 		if(T::__daeCM__XS_enum!=XS::ELEMENT&&T::__daeCM__XS_enum!=XS::ANY)
 		push = &out; return out;
 		//UNVETTED
@@ -757,8 +907,7 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	{
 		const char *value = &o.getType().value;
 		const char *prototype = value-o.getOffset()-daeOffsetOf(VT,getAU());
-		new((void*)value) VT((daeObject*)prototype);
-		((daeAllocThunk*)((VT*)value)->getAU())->_prototype = &o.getType(); //SKETCHY
+		new((void*)value) VT((daeObject*)prototype);		
 	}
 	template<class> 
 	/**OVERLOAD Implements newPrototype(). */
@@ -768,9 +917,9 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	}
 	template<class> 
 	/**OVERLOAD Implements newPrototype(). */
-	inline void _maybe_prototype2(XS::Attribute&,daeAnySimpleType::TypedUnion*)
+	inline void _maybe_prototype2(XS::Attribute&,daeAST::TypedUnion*)
 	{
-		/*NOP*/ //By default this is the emptry string with daeStringRef type.
+		/*NOP*/ //By default the type is daeAtomicType::VOID.
 	}
 	template<class VT> 
 	/**OVERLOAD Implements newPrototype(). */
@@ -827,28 +976,33 @@ COLLADA_(private) //MODEL SETUP IMPLEMENTATION
 	LINKAGE void *_continue_XS_Schema_addElement2(void(DAEP::Object*),daeFeatureID,daeOffset);
 
 	/** Implements @c addCM(). */	
-	LINKAGE daeCM &_addCM(daeXS,daeParentCM*,daeCounter,int,int);
+	LINKAGE daeCM &_addCM(daeXS,daeParentCM*,int(&)[4]);
 	/** Implements @c addContentModel(). */	
 	LINKAGE void _addContentModel(const daeCM*);
 
 	friend class XS::Group;
 	friend class XS::Element; 
 	/** Implements @c XS::Element::setChild() & XS::Group::addChild(). */	
-	XS::Element &_addChild(const XS::Element&,daeFeatureID,daeOffset,daePseudonym);
+	XS::Element &_addChild(const XS::Element&,daeFeatureID,daeOffset,daeClientString2);
 	/** Adds the default/empty CM child. */	
 	XS::Element &_addChild2(XS::Element *out, int i, daeOffset os);
 
 	/** Implements @c addAttribute(). */	
-	LINKAGE XS::Attribute &_addAttribute(daeFeatureID,daeOffset,daeAlloc<>&(daeAllocThunk&),daeName,daePseudonym);
+	LINKAGE XS::Attribute &_addAttribute
+	(daeFeatureID,daeOffset,daeAlloc<>&(daeAllocThunk&),daeClientString2,daeClientString2);
 	
 #if defined(BUILDING_COLLADA_DOM) || defined(__INTELLISENSE__)
 
 		/** @c addAttribute() and @c daeElement::_cloneAnyAttribute() share this. */	
 		void _addAttribute_maybe_addID(daeAttribute &maybe_ID, const daeElement *prototype_or_domAny);
 	
+COLLADA_(public) //INTERNALS
+
+		struct Subroutine;
 		friend class daeDOM;
 		friend class daeModel;
 		friend class daeElement;
+		friend class XS::Choice;
 
 COLLADA_(protected) //INVISIBLE
 		/**
@@ -873,12 +1027,7 @@ COLLADA_(protected) //INVISIBLE
 		 * @note Constructors of data with ownership semantics must copy
 		 * the data supplied by @c _prototype into their current context.
 		 */
-		void _construct(DAEP::Object *e, DAEP::Object &parent, daeDOM&)const;
-		/**
-		 * This is a subroutine of this class's methods that call for a
-		 * new child.
-		 */
-		daeElement *_construct_new(daePseudoElement &parent)const;
+		daeElement *_construct(DAEP::Object *parent, daeDOM*)const;		
 
 		size_t _clearTOC_offset; //Scheduled for removal?
 		/** 
@@ -886,7 +1035,11 @@ COLLADA_(protected) //INVISIBLE
 		 * This should copy @c _prototype over the "TOC" region of @a e.
 		 * There could be an all-purporse "clear" method, but there's no need.
 		 */
-		void _clearTOC(daeElement *e)const;
+		void _clearTOC(daeElement*)const;
+		/**
+		 * Implements @c _clearTOC() and @c daeElement::clone().
+		 */
+		void _cloneTOC(daeElement*,const daeElement*)const;
 		
 		/**INVISIBLE
 		 * These are subroutines of the placeWRT() methods.
@@ -899,21 +1052,23 @@ COLLADA_(protected) //INVISIBLE
 			void epilog(daeElement&), epilog(daeContent&);
 		};
 
+		//NEW: I don't understand why there isn't a "std" way
+		//to do this given an allocator.		
+		daeStringAllocator<> _allocator()const;
+		void *_new(size_t n){ return _allocator().allocate(n); }
+		template<class T>
+		T *_new(size_t n=1){ return new(_new(n*sizeof(T))) T[n]; }		
+
 		template<class T> 
 		/** These members begin their life as zeroed memory. */
-		T &_bring_to_life(T &t)
-		{
-			new(&t) T(); return t;
-		}					
+		T &_bring_to_life(T &t){ new(&t) T(); return t; }					
 		daeAttribute *_IDs_id,*_IDs;
 		daeDefault *_value;
 		const daeCM *_CMRoot, *_CMEntree;
 		XS::Element *_elem0;		
-		daeArray<XS::Element> _elems;
-		//TODO: THIS MAP SHOULD NOT USE <int> AND IT SHOULD 
-		//INCLUDE ATTRIBUTES ALONGSIDE THE ELEMENTS. BUT IT
-		//CAN'T BE DONE THIS WAY UNTIL domAny IS SORTED OUT.
-		daeStringMap<int> _elem_names;	
+		daeArray<XS::Element> _elems;		
+		daeStringMap<int,0> _elem_names;
+		//SCHEDULED FOR REMOVAL
 		//CreateWRT->PlaceWRT Cache???
 		//Don't know if writing to this memory can be worse 
 		//than doing the lookup or not?
@@ -924,10 +1079,12 @@ COLLADA_(protected) //INVISIBLE
 		//Together these form a dummy AU w/ hidden partition.
 		daeAllocThunk _content_thunk; daeContent _content_0_terminator; 		
 
-		/** Implements daeMetaElement_self_destruct(). */
-		void _self_destruct();
-		/** This is the @c daeObjectMeta::_destructor_ptr. */
-		friend void daeMetaElement_self_destruct(daeMetaObject*); 
+		//NOTE: "SCARY" iterator compilers can omit 0.
+		typedef daeStringMap<int,0>::const_iterator _elem_names_iterator;
+
+		#ifdef NDEBUG
+		#error this/_elems/_attribs should use _allocator. 
+		#endif
 		/**
 		 * Disabled Destructor
 		 * @c daeMetaObject::_self_destruct() is used instead.
@@ -944,13 +1101,6 @@ COLLADA_(protected) //INVISIBLE
 		 * logic to unravel. 
 		 */
 		mutable bool _daeDocument_typeLookup_enabled;
-		/**LEGACY-SUPPORT
-		 * This tries to determine whether to take the typeLookup() path.
-		 * If the element has content it's generally assumed that the graph
-		 * must be traversed, unless the source/destination documents are the
-		 * same, or a global flag that says typeLookup() has never been called.
-		 */
-		static bool _typeLookup_unless(daeElement*);
 
 		friend class XS::Schema;		
 		/**VARIABLE-LENGTH
@@ -962,7 +1112,11 @@ COLLADA_(protected) //INVISIBLE
 		struct _Prototype
 		{
 			//MSVC: Putting after struct doesn't work???
-			COLLADA_ALIGN(8)
+			//COLLADA_ALIGN(8)
+			//MSVC2015 converts __declspec(align) to alignas.
+			//alignas wants data; COLLADA_ALIGN is redundant.
+			double __alignas;
+
 			//daeElement is not yet defined.			
 			operator daeElement*()const{ return (daeElement*)this; }
 			daeElement *operator->()const{ return (daeElement*)this; }			

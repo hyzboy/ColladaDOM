@@ -35,11 +35,13 @@ echo "
     }//<-'
 }
 
+#ifndef COLLADA_DOM_FLAT
 ";
 echo applyTemplate('class-h-inc',$meta);
 if(inline_CM)
 echo applyTemplate('classes-cpp',$meta);
 echoCode("
+	
 #endif //__$1_h__$2",
 $meta['element_name'],$include_guard);
 

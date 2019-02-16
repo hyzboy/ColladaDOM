@@ -80,13 +80,13 @@ COLLADA_(public)
 	 */
 	inline void setIsDeleted(bool y=true)
 	{
-		if(y!=getIsDeleted()) _getClassTag()^=1;
+		if(y!=getIsDeleted()) _getObjectTags().classTag^=1;
 	}
 	/**
 	 * Tells if @c this image's data is "Deleted."
 	 * @see @c setIsDeleted() doxygentation.
 	 */
-	inline bool getIsDeleted()const{ return (_getClassTag()&1)!=0; }
+	inline bool getIsDeleted()const{ return (getObjectTags()&1)!=0; }
 
 	/**
 	 * Tells the atlas that @c this image should be kept
@@ -96,26 +96,26 @@ COLLADA_(public)
 	 */
 	inline void setIsModified(bool y=true)
 	{
-		if(y!=getIsModified()) _getClassTag()^=2;
+		if(y!=getIsModified()) _getObjectTags().classTag^=2;
 	}
 	/**
 	 * Tells if @c this image should be kept even if its
 	 * source has changed.
 	 * Should indicate @c daeAtlasValue::TIME is changed.
 	 */
-	inline bool getIsModified()const{ return (_getClassTag()&2)!=0; }
+	inline bool getIsModified()const{ return (getObjectTags()&2)!=0; }
 
 	/**
 	 * Tells if @c this image's data has been compressed.
 	 * It's likely uncompressed, modified & recompressed.
 	 * "Compression" should match @c daeAtlasValue::CODE.
 	 */
-	inline bool getIsCompressed()const{ return (_getClassTag()&4)!=0; }
+	inline bool getIsCompressed()const{ return (getObjectTags()&4)!=0; }
 
 	/**
 	 * Tells if @c this image's data is a memory pointer.
 	 */
-	inline bool getIsContiguous()const{ return (_getClassTag()&8)!=0; }
+	inline bool getIsContiguous()const{ return (getObjectTags()&8)!=0; }
 
 COLLADA_(public) //daeImage interfaces
 	/**MUTABLE
@@ -445,7 +445,7 @@ COLLADA_(public) //daeAtlas interfaces
 	 * may use a different syntax. They are most likely identical.
 	 * @see @c name().
 	 */
-	virtual daeError getNames(daeArray<daeClientString>&o, daeName wc=nullptr)const = 0;
+	virtual daeError getNames(daeArray<daeClientString>&o, const daeName &wc=nullptr)const = 0;
 	
 	/**WARNING
 	 * Gets metadata belonging to names returned by @c getNames().	 

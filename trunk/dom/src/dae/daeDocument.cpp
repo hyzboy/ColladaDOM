@@ -6,8 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
-
-#include "../../include/dae/daeRAII.hpp"
+#include <ColladaDOM.g++> //GCH
 
 COLLADA_(namespace)
 {//-.
@@ -30,7 +29,7 @@ daeOK daeDocument::setMeta(daeMeta &rm)
 		{
 			//DAEP::Schema<>::__DAEP__Schema__g1__allows_any;
 			_pseudo->_DAEP_Schema^=32;
-		}	 
+		}	 		
 	}
 	else return DAE_ERR_INVALID_CALL; return DAE_OK;
 }
@@ -42,61 +41,79 @@ namespace DAEP //GCC refuses to disable this (erroneous) warning
 		return dae(this)->getMeta().getModel();
 	}
 }
+
+extern daeAlloc<XS::Attribute*,1> daeAA_any_thunk;
 extern const daeStringCP _daePseudoElement_[] = ":daePseudoElement:";
-daeDocument::daeDocument(daeDOM *DOM):daeDoc(DOM,daeDocType::HARDLINK),_fragment(*DOM)
-{	
+inline void daeDocument::_init_pseudo()
+{
 	memset(&_pseudo,0x00,sizeof(_pseudo));
 	daeModel &model = (daeModel&)_pseudo.model;
 	daeMetaElement &meta = (daeMetaElement&)_pseudo.meta;
 	
 	//Do like XS::Scema::addElement().
-	meta._name.string = _daePseudoElement_;
+	//(BY ANY MEANS NECESSARY)
+	meta._name.string = _daePseudoElement_;	
 	(daeMeta*&)model.__DAEP__Model__meta = &meta;
+	//UNION: _schema and _processShare are unions.
 	meta._processShare = domAny::_master.meta._processShare;	
-	meta._sizeof = sizeof(_PseudoElement);	
+	assert(meta._schema!=nullptr);
+	meta._sizeof = sizeof(_PseudoElement);		
+	meta._DAEP_Schema = _PseudoElement::__DAEP__Schema;
 	meta._finalFeatureID = daeFeatureID(-3);
-	meta._DAEP_Schema = 0; //NOT SURE???
-	meta._bring_to_life(meta._attribs());
-	//_PseudoElement::Essentials ee;
+	model[meta._feature_completeID=daeFeatureID(-1)]
+	._localthunk = * //YUCK
+	(meta._attribs().getAU() = daeAA_any_thunk.unit());	
 	_PseudoElement *_; DAEP::Parameters ee(_);
-	model.setObjectType(1); //HACK: get around assert.
+	model.setObjectType(1); //HACK: Get around assert.
 	meta._continue_XS_Schema_addElement<_PseudoElement>(ee);
-	model.setObjectType(0); //HACK: got around assert.
-	//Prevent construction of this element, both because it's unique
-	//and users would have to be tampering for shits and giggles to
-	//ever do it, and because the pseudo-element IS the prototype.
-	//And so it couldn't be copied. The constructor is needed to
-	//destruct a metadata record, but this one isn't destructed.
+	model.setObjectType(0); //HACK: Got around assert.
+	//Prevent construction.
 	meta._constructor = nullptr;	
 
-	daePseudoElement &e = _getPseudoElement();	
-	e.__DAEP__Object__parent = this; //HACK
+	daePseudoElement &e = getPseudoElement();	
+	DAEP::Element &daep = e; //FRIENDS
+	daep.__DAEP__Object__parent = this; //HACK
 	//HACK: it's too late to call __DAEP__Object__embed_subobject().
-	e.__DAEP__Object__refs = _uri.__DAEP__Object__refs;
-	(daeDOM*&)e.__DAEP__Element__data.DOM = DOM;
-
-	daeTOC &TOC = _pseudo->getTOC();
-	for(size_t i=0;i<TOC.size();i++)
-	{
-		//Just for the hell of it, mark root node as required.
-		const_cast<XS::Element&>(TOC[i])._minOccurs = 1;
-	}
+	daep.__DAEP__Object__refs = _uri.__DAEP__Object__refs;
+	(const daeDOM*&)daep.__DAEP__Element__data.DOM = getDOM();
+	
+	//Just for the hell of it, mark root node as required.
+	const_cast<daeCounter&>(_pseudo->jumpIntoTOC(1)._minOccurs) = 1;
 
 	assert(!e._isElement());
+	assert(e.getElementTags().empty());
 	assert(e.getNCName().string==_daePseudoElement_);
-	e.__DAEP__Element__data.is_document_daePseudoElement = 1; 	
-	//This is to be sure !_isAny() and that it's not a system object.
-	assert(0!=e._getPShare()&&!e._isAny());
+	daep.__DAEP__Element__data.is_document_daePseudoElement = 1; 		
+	//NOTE: 2 diverges from meta._schema._elementTags.
+	//It should not be data, but if 0 it might look like one of
+	//the more special internal classes; so using 2 reduces the
+	//chances of getting it mixed up.
+	//HACK: Gaining "protected" access via daeDocument.
+	((daeDocument*)&e)->_getObjectTags().moduleTag = 2;
+	assert(1==e._getPShare()&&!e._isData());
 
 	#ifdef _DEBUG
 	//This is the document's top-level content for NatvisFile.natvis.
 	__Natvis_content = ((_PseudoElement*)&e)->content.operator->();
 	#endif
 }
+daeDocument::daeDocument(daeDOM *DOM):daeDoc(DOM,daeDocType::HARDLINK),_fragment(*DOM)
+{
+	_init_pseudo();
+}
+daeDocument::daeDocument(daeArchive *a):daeDoc(a,daeDocType::HARDLINK),_fragment(*a->getDOM())
+{
+	_init_pseudo();
+}
 daeDocument::~daeDocument() //VERY SKETCHY
 {
 	//Trying to avoid _constructor, but let go of the CM graph.
-	_pseudo->~daeMetaElement(); deAlloc(getContents().getAU());
+	_pseudo->~daeMetaElement(); 
+	
+	assert(getContents().empty());
+	daeNullable<> na = {this}; na.deAlloc(getContents().getAU());
+
+	for(size_t i=0;i<_schemata.size();i++) _schemata[i].second->_users--;
 }
 
 daeOK daeDoc::close()
@@ -108,7 +125,8 @@ daeOK daeDoc::close()
 	return OK;
 }
 void daeDocument::__daeDoc__v1__atomize()
-{					
+{	
+	_xmlBase.clear();
 	//Clearing these ahead avoids individual erasure of their entries.
 	_typeMap.clear(); _idMap.clear(); _sidMap.clear();
 	//This should do it for the root, etc.
@@ -337,7 +355,193 @@ daeError daeDoc::_write2(const_daeDocRef &in, const daeIORequest &reqO, daeIOPlu
 	RAII2.close();
 	return OK?RAII2.OK:OK;
 }
-  
+
+extern XS::Schema domAny_xs;
+void daeDocument::getSchemata(XS::Schemata &o, enum dae_clear e)const	
+{									   
+	if(e==dae_clear) o.clear();		
+	bool any = false;
+	for(size_t i=0;i<_schemata.size();i++)
+	{
+		const XS::Schema *xs = _schemata[i].second;
+		if(xs==&domAny_xs)
+		any = true;
+		else if(xs!=nullptr)
+		o.push_back(xs);
+	}
+	if(any) o.push_back(&domAny_xs);
+}
+bool daeDocument::_get_and_or_use_xs_schema(daeTags et, const XS::Schema* &io)const
+{	
+	size_t nt = et.namespaceTag;
+	size_t i; const XS::Schema *xs;
+	for(i=0;i<_schemata.size();i++) if(nt==_schemata[i].first)
+	{
+		xs = _schemata[i].second; goto xs;
+	}	
+	
+	xs = io;
+	getDOM()->getPlatform().introduceToDocument(*this,et,xs);
+	if(xs==nullptr) goto io;
+	else if(nt!=xs->_elementTags.namespaceTag)
+	{
+		if(xs==&domAny_xs)
+		{
+			/*introduceToDocument can implement this.
+			//NOTE: It might want to do it recursive
+			//or to not do it at all.
+			if(io==nullptr||io==&domAny_xs)
+			{
+				//If the schema imports another schema
+				//it stores its pointer in the CM data.
+				//But if it first appears as an xs:any
+				//child, it might end up with domAny's
+				//schema.
+				for(i=0;i<_schemata.size();i++) 				
+				{
+					xs = &_schemata[i];
+					if(xs->getXMLNS().find(et,i))
+					{
+						xs = xs->getXMLNS()[i].getSchema();
+						if(xs==nullptr) break;
+						else _get_and_or_use_xs_schema(et,xs);
+						goto o;
+					}
+				}
+				xs = &domAny_xs;
+			}*/
+		}
+		else //PROGRAMMER ERROR
+		{	
+			assert(et.namespaceTag==xs->_elementTags.namespaceTag);			
+			xs = nullptr; goto io;
+		}
+	}
+
+	xs->_users++;
+	
+io:	_schemata.push_back(std::make_pair(nt,xs));
+
+	//Helpful? Maybe if locking AU?		
+xs:	if(i!=0) std::swap(_schemata[0],_schemata[i]);	
+
+	bool o = io==xs; io = xs; return o;
+}
+
+static void daeDocument_xmlBase //RECURSIVE
+(daeStringMap<daeURIRef> &c, std::pair<daeName,daeURI*> &io)
+{
+	std::pair<daeStringMap<daeURIRef>::iterator,bool> ins;
+	ins = c.insert(io);
+	if(!ins.second){ io.second = ins.first->second; return; }
+
+	size_t len = strlen(io.first)+1; 
+	if(len!=io.first.extent)			
+	{
+		io.first.string+=len; io.first.extent-=len;
+		daeDocument_xmlBase(c,io);
+		io.first.string-=len; io.first.extent+=len;
+	}
+
+	//The key is stored behind the URI member
+	//data. It may also become the URI string.
+	len = io.first.extent*sizeof(daeStringCP);
+	xmlBase *p = (xmlBase*)operator new(sizeof(*p)+len);	
+	daeCTC<sizeof(xmlBase)==sizeof(daeURI_size<>)>();
+	new(p) xmlBase(dae_default,&io.second->getParentObject());
+	p->setIsAttached();
+	p->__DAEP__Object__unembed();		
+	//1) Copy key; 2) Construct URI; 3) Copy/return an xml:base URI.
+	(void*&)ins.first->first.string = 
+	memcpy((char*)p+sizeof(*p),io.first,len);				 		
+	p->setURI_and_resolve_client_string(ins.first->first,io.second);
+	ins.first->second = io.second = *p; 
+}
+static bool daeDocument_xmlBase_relativistic(const daeName &URI)
+{
+	//NOTE: This is just a heuristic/can afford get it wrong.
+	if(URI.size()>=8) for(size_t i=7;i>0;i--) if(URI[i]==':') 
+	return false; return true;
+}
+static bool daeDocument_next_up(daeObject &d, const daeElement* &e)
+{
+	//NOTE: This can be implemented with the below logic
+	//if callers can be trusted to supply e->getDoc() to
+	//getBaseURI. An infinite-loop is worse than crashes.
+	#ifdef COLLADA_DOM_STABLE
+	return &d!=((const void*&)e=&e->getParentObject());
+	#endif
+	const daeObject &p = e->getParentObject();
+	if(p._isDoc_or_DOM())
+	{
+		assert(&d==&p); return false;
+	}
+	else assert(e!=&p); (const void*&)e = p;
+	assert(e->_isElement()&&e->isContent()); return true;
+}
+static daeName daeDocument_base(const daeElement *e)
+{
+	//HACK: How to support other kinds of bases?
+	//Databases would need to flag the elements.
+	//A callback could obtain attributes.
+	daeName base = e->string("xml:base");
+	//if(base.empty()) base = e->string("href"); 
+	return base;
+}
+const_daeURIRef daeDoc::getBaseURI(const DAEP::Object *c)const
+{
+	daeDocument &d = *(daeDocument*)this; assert(c!=nullptr); 
+	const daeElement *e = *(daeElement*)c;
+	assert(isDocument()||!e->_isElement());
+	if(!e->_isElement()||!d.getPseudoElement().hasAttribute_xml_base())
+	return &d._uri;	
+	else do if(e->hasAttribute_xml_base())
+	{	
+		//TODO: Might want to search getExtraAnyPart first, since
+		//xml:base is likely to be a nonstatic attribute; or very
+		//low in the static attribute array.
+		std::pair<daeName,daeURI*> top(daeDocument_base(e),d._uri);
+		if(top.first.empty()) continue;
+
+		//daeDocument_next_up is implemented to not infinite-loop
+		//if "this" is not a parent of "e" as provided by callers.
+		//NOTE that if its check fails d._getPseudoElement() will
+		//possibly be an access-violation/segmentation-fault. The
+		//checks only "assert" in cases that should be impossible.
+		//while(this!=((const void*&)e=&e->getParentObject()))
+		if(daeDocument_xmlBase_relativistic(top.first))
+		while(daeDocument_next_up(d,e)) 
+		{
+			if(e->hasAttribute_xml_base())
+			{
+				daeName base = daeDocument_base(e);
+				if(base.empty()) continue;
+
+				daeArray<daeStringCP,COLLADA_MAX_PATH> deep;
+				deep.assign(top.first);
+				deep.push_back('\0'); deep.append(base);
+				deep.push_back('\0');					
+				if(daeDocument_xmlBase_relativistic(base))
+				while(daeDocument_next_up(d,e))				
+				if(e->hasAttribute_xml_base())
+				{
+					base = daeDocument_base(e);
+					if(base.empty()) continue;
+					
+					deep.append(base); deep.push_back('\0');
+					if(!daeDocument_xmlBase_relativistic(base))
+					break;
+				}
+				top.first = deep;
+				daeDocument_xmlBase(d._xmlBase,top); return top.second;
+			}
+		}
+		top.first.extent+=1;
+		daeDocument_xmlBase(d._xmlBase,top); return top.second;
+			
+	}while(daeDocument_next_up(d,e)); return &d._uri; 
+}
+
 //// sid/idLookup //// sid/idLookup //// sid/idLookup //// sid/idLookup //// sid/idLookup 
 
 static daeString daeDocument_ID_id(daeString ref)
@@ -357,11 +561,8 @@ void daeDocument::_sidLookup(daeString ref, daeArray<daeElementRef> &matchingEle
 	for(_sidMapIter cit=range.first;cit!=range.second;cit++)	
 	matchingElements.push_back(cit->second);
 }
-void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, daeData *a)const
+void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, const daeData *a)const
 {	
-	//Should this be allowed? For symmetry?
-	assert(this!=nullptr); //if(this==nullptr) return;
-
 	const daeElement *e = dae(c.element_of_change);
 			
 	bool id = a->getName().string[0]=='i';
@@ -369,7 +570,11 @@ void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, daeData 
 
 	daeTypewriter *tw = a->getTypeWRT(e);
 	daeString got = (const daeString&)a->getWRT(e); 
-	if(!tw->hasStringType()) assert(tw->hasStringType());
+	if(!tw->hasStringType())
+	{
+		//Should be an empty string.
+		assert(tw->isAnySimpleType());
+	}
 	else if(got[0]!='\0')
 	{
 		if(!id) //sid?
@@ -387,7 +592,11 @@ void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, daeData 
 	}
 	c.carry_out_change();
 	got = (const daeString&)a->getWRT(e); 
-	if(!tw->hasStringType()) assert(tw->hasStringType());
+	if(!tw->hasStringType())
+	{
+		//Should be an empty string.
+		assert(tw->isAnySimpleType());
+	}
 	else if(got[0]!='\0') 
 	{
 		if(id)
@@ -404,7 +613,7 @@ void daeDocument::_carry_out_change_of_ID_or_SID(const DAEP::Change &c, daeData 
 		else _sidMap.insert(std::make_pair(got,const_cast<daeElement*>(e)));
 	}
 }
-void daeDocument::_migrate_ID_or_SID(const daeDocument *destination, const daeElement *e, const XS::Attribute *a)const
+void daeDocument::_migrate_ID_or_SID(const daeDocument *destination, const daeElement *e, const daeData *a)const
 {
 	//"this" is the source, just to make things simpler.
 	const daeDocument *source = this;
@@ -471,14 +680,14 @@ void daeDocument::_typeLookup(daeMeta &meta, daeArray<daeElementRef> &matchingEl
 	_typeVec &vec = ins.first->second; if(ins.second)
 	{
 		meta._daeDocument_typeLookup_enabled = true;
-		_getElementsByType(meta,vec);
+		getPseudoElement().getDescendantsBy(daeElement::matchMeta(meta),vec);
 	}//vec.data() is C++11.
 	matchingElements.append(vec.empty()?nullptr:&vec[0],vec.size()); 
 }		  
 template<int op> 
-void daeDocument::_typeLookup_migrate_operation<op>::operator()(const daeElement *ch)
+void daeDocument::_typeLookup_migrate_operation<op>::operator()(const daeElement &ch)
 {
-	daeMeta &meta = ch->getMeta();
+	daeMeta &meta = ch.getMeta();
 				   	
 	_typeMapIter cit = doc->_typeMap.find((daeString)&meta); 		
 		
@@ -490,22 +699,22 @@ void daeDocument::_typeLookup_migrate_operation<op>::operator()(const daeElement
 		//be entered if the document is not being closed, yet still the
 		//element is being removed (i.e. an editing/scripting context.)
 		//It can't do much better, except to try to erase them en masse.
-		if(op==1) v.erase(std::find(v.begin(),v.end(),ch));	
-		if(op==0) v.push_back(const_cast<daeElement*>(ch));	
+		if(op==1) v.erase(std::find(v.begin(),v.end(),&ch));	
+		if(op==0) v.push_back(const_cast<daeElement*>(&ch));	
 	}
-	if(!ch->getOptimizationBit_is_definitely_not_a_graph()) //Recurse?
+	if(!ch.getMigrationBit_definitely_is_childless()) //Recurse?
 	{
-		meta.getContentsWRT(ch).for_each_child(*this);
+		meta.getContentsWRT(&ch).for_each_child(*this);
 	}
 }//CIRCULAR-DEPENDENCY
-void daeContents_base::_operation::typeLookup_insert(daeElement *e)
+void daeContents_base::_operation::typeLookup_insert(daeElement &e)
 {
-	daeDocument::_typeLookup_migrate_operation<0> op = { e->getDocument() };
+	daeDocument::_typeLookup_migrate_operation<0> op = { e.getDocument() };
 	if(!op.doc->_typeMap.empty()) op(e);
 }//CIRCULAR-DEPENDENCY
-void daeContents_base::_operation::typeLookup_remove(daeElement *e)
+void daeContents_base::_operation::typeLookup_remove(daeElement &e)
 {
-	daeDocument::_typeLookup_migrate_operation<1> op = { e->getDocument() };
+	daeDocument::_typeLookup_migrate_operation<1> op = { e.getDocument() };
 	if(!op.doc->_typeMap.empty()) op(e);
 }
 daeDocument::_typeVec *daeDocument::_typeLookup_vector(daeMeta &m)const

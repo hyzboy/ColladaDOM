@@ -73,17 +73,21 @@ class _typedData extends _type
 		}
 		else 
 		{
-			//if('xmlns'!==substr($name,0,5))
+			if('xmlns:'===substr($name,0,6))
 			{
 			//	die('die(unexpected attribute)'); //breakpoint
+				
+				$this->attributes['xmlns:'][substr($name,6)] = $value;
 			}
-			echo 'WARNING: Unhandled attribute: ', $name, "\n";			
+			else echo 'WARNING: Unhandled attribute: ', $name, "\n";			
 		}
 	}
 
 	function getAttribute($name)
 	{
-		return isset($this->attributeMeta[$name])&&isset($this->attributes[$name])
+		//Needless?? Allow access to the above 'xmlns:' hack.
+		//return isset($this->attributeMeta[$name])&&isset($this->attributes[$name])
+		return isset($this->attributes[$name])
 		?$this->attributes[$name]:'';
 	}
 
@@ -200,7 +204,7 @@ class _elementSet2 extends _elementSet
 		//WORKAROUND PHP Strict standards:  Only variables should be passed by reference in ...
 		$st = array(true,1,array()); $this->generateContentModel2($st,$element,$generator,$maxOccurs);
 	}
-	function generateContentModel2(& $st, _elementSet $element, ElementMeta& $generator, $maxOccurs)
+	function generateContentModel2(& $st, _elementSet $element, ElementMeta& $generator, $maxOccurs, & $total=NULL)
 	{
 		global $subgroups;
 		
@@ -219,6 +223,8 @@ class _elementSet2 extends _elementSet
 		//echo "in generateContentModel ";
 		foreach($element->getElements() as $ea) 
 		{
+			if(isset($total)) $total++; //NEW: count of compositor particles
+			
 			$type = $ea->getType(); if($type==='xsAttribute')
 			{
 				if(!$add) die('die(unexpected behavior)');
@@ -249,13 +255,25 @@ class _elementSet2 extends _elementSet
 				array_push($stack,-$nonce++);
 				
 			seq_like: //goto seq_like;
+				
+				if($add) 
+				{
+					$PHP =& $generator->addContentModel($cm,$minO,$maxO);
 					
-				if($add) $generator->addContentModel($cm,$minO,$maxO);
+					$local_total = 0; //NEW
+				}				
+				
 				//propagate the maxOccurs down through choice hierarchy (while flattening)
 				$local_max = $ea->getAttribute('maxOccurs');
-				$this->generateContentModel2($st,$ea,$generator,max($maxOccurs,$local_max));				
+				$this->generateContentModel2($st,$ea,$generator,max($maxOccurs,$local_max),$local_total);				
 				//END content model
-				if($add) $generator->endContentModel(); //ElementMeta::CMclosure
+				if($add) 
+				{
+					$generator->endContentModel(); //ElementMeta::CMclosure
+					
+					$PHP['total'] = $local_total; unset($local_total); //NEW
+					
+				}
 				array_pop($stack);
 				break;			
 			case 'xsGroup': 

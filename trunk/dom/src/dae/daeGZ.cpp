@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 #ifdef __COLLADA_DOM__ZAE
 

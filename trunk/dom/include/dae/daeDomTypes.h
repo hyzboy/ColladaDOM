@@ -23,6 +23,9 @@ operator __enum__()const{ return __value__; }\
 template<class T> __enum__ operator=(const T &v){ return __value__ = v; }\
 x(__enum__ v=(__enum__)0):__value__(v){}
 #endif
+#ifdef NDEBUG
+#error I worry omitting operator= may add redundant ref-count code.
+#endif
 #ifndef COLLADA_DOM_3__struct__daeSmartRef
 #define COLLADA_DOM_3__struct__daeSmartRef(x) \
 template<class T> x(T &cp):daeSmartRef(cp){}\
@@ -40,16 +43,29 @@ template<> struct __NS__<N>:DAEP::Note<>\
 
 COLLADA_(namespace)
 {	
-	namespace xs
-	{
-		//These are defined last below.
-		//DAEP::xs needs to using this.
-	};
+	/**EXPERIMENTAL
+	 * Gives @c operator->*(xs::QName)
+	 * access to namespace/prefix part.
+	 */
+	typedef daeXMLNS xmlns;
+
 	//Refs default to the "ref" attribute.
 	namespace xml
 	{
-		typedef daeURI base; //xml:base
+		/**
+		 * Users should prefer @c xml::baseURI 
+		 * if possible. The 2.4 code generator
+		 * may need to be modified.
+		 */
+		typedef daeURI_size<> base; //xml:base
+
+		typedef daeURI baseURI; //auto-complete
 	}
+	namespace xs
+	{
+		//These are defined last below.
+		//DAEP::xs using's COLLADA::xs.
+	};
 	namespace math
 	{
 		/////////////////////////////////////////////
@@ -59,18 +75,62 @@ COLLADA_(namespace)
 	}
 	namespace DAEP
 	{
-		namespace math //math:math default type
+		/**
+		 * @c DAEP::__DAEP__Object__v1__model() is using
+		 * this to look nice/not redefine C-preprocessor 
+		 * macros.
+		 */
+		namespace xmlns = COLLADA;
+
+		namespace xml
 		{
-			typedef domAnyRef math; 
-			typedef const_domAnyRef const_math; 
+			typedef daeURI baseURI; //auto-complete
+
+			/**
+			 * @c COLLADA::DAEP::xml::base takes the place 
+			 * of COLLADA::xml::base.
+			 */
+			struct base : const_daeURIRef
+			{	
+				template<class T>
+				base &operator=(const T &cp)
+				{
+					_assign(base(cp)); return *this; 
+				}
+				template<int N>
+				base(const daeURI_size<N> *p):daeSmartRef(p)
+				{}
+				base(const daeDoc &doc, const DAEP::Object *c)
+				{
+					new(this) const_daeURIRef(doc.getBaseURI(c)); 
+				}
+				base(const DAEP::Object *c=nullptr)
+				{
+					const daeDoc *d = 
+					c==nullptr?nullptr:((daeObject*)c)->getDoc();
+					if(d!=nullptr) new(this) base(*d,c);
+				}
+				template<int ID, class CC, typename CC::_ PtoM>
+				base(const DAEP::Value<ID,xmlBase,CC,PtoM> &xml_base)
+				{
+					new(this) base(&xml_base.object());
+				}
+			};
 		}
+
 		namespace xs //xs:any abstract type
 		{
 			using namespace ::COLLADA::xs;
 			typedef daeElementRef any;
 			typedef const_daeElementRef const_any;
 		}
-
+		
+		namespace math //math:math default type
+		{
+			typedef domAnyRef math; 
+			typedef const_domAnyRef const_math; 
+		}
+		
 		template<class Note, class Unsigned>
 		/**TEMPLATE-SPECIALIZATION, BREAKING-CHANGE
 		 * Don't know if this is helpful or not. It breaks client code, 
@@ -151,6 +211,36 @@ COLLADA_(namespace)
 		};
 		#endif
 
+		template<class Unsigned>
+		/**PARTIAL-TEMPLATE-SPECIALIAZTION 
+		 * @c daeBoolean is the storage class for @c bool (@c xs::boolean).
+		 * It remembers if XML had used a 0/1 presenation of an xs:boolean
+		 * or a true/false presentation. It defaults to 0/1 in the xs:list
+		 * context, and the more friendly true/false in an attribute/value
+		 * context.
+		 */
+		struct Container<bool,Unsigned>
+		{
+			typedef daeArray<daeBoolean> type; 
+		};		
+
+		template<>
+		/**
+		 * Not sure how to deal with this, or if it's valid, however, with
+		 * @c xsAnySimpleType the implementation can't distinguish between
+		 * @c daeAST::Data and @c daeArray<daeAST::TypedUnion> because the
+		 * offsets can't be demonstrated to be inside the container object.
+		 */
+		struct Container<xsAnySimpleType,signed>
+		{
+			//TODO: xs::anyAtomicType could be put here. It could not have 
+			//the same semantics as xsAnySimpleType. There's not much need
+			//to go to this length however, since its use would be limited
+			//to schemata that actually use this pattern... which might be 
+			//none.
+			typedef xsAnySimpleType type; 
+		};		
+
 		template<int N, class Unsigned>
 		/**PARTIAL-TEMPLATE-SPECIALIAZTION 
 		 * For some misbegotten reason COLLADA 1.4.1 and 1.5.0 have spaces
@@ -172,7 +262,7 @@ COLLADA_(namespace)
 		struct Container<daeBinary<N>,Unsigned>
 		{
 			typedef daeArray<daeBinary<N,sizeof(void*)>,1> type; 
-		};
+		};		
 
 		template<class Unsigned>
 		/**PARTIAL-TEMPLATE-SPECIALIAZTION 
@@ -201,41 +291,96 @@ COLLADA_(namespace)
 		{
 			typedef daeArray<daeTokenRef> type; 
 		};
+		
+		template<int ID, class CC, typename CC::_ PtoM>
+		/**TEMPLATE-SPECIALIZATION
+		 * @see the @c daeBoolean specialization of DAEP Container Doxygentation.
+		 */
+		class Value<ID,bool,CC,PtoM> 
+		:
+		public InnerValue<ID,bool,CC,PtoM,daeBoolean>
+		{
+			COLLADA_DOM_INNER_OPERATORS //C2679
+
+			/**
+			 * I don't think this is needed.
+			 */
+			//inline operator bool()const{ return this->value; }
+			/**
+			 * I know this will be required. I'm not sure what else. @c daeBoolean
+			 * is not as C-like as a raw @c bool.
+			 */
+			inline bool operator!()const{ return !this->value; }
+		};
 
 		template<int ID, class CC, typename CC::_ PtoM>
 		/**TEMPLATE-SPECIALIZATION
 		 * @see the @c daeURI specialization of DAEP Container Doxygentation.
 		 */
-		class Value<ID,daeURI,CC,PtoM> : public DAEP::InnerValue<ID,daeURI,CC,PtoM,daeStringRef>
+		class Value<ID,daeURI,CC,PtoM> : public InnerValue<ID,daeURI,CC,PtoM,daeStringRef>
 		{
-		public: using InnerValue<ID,daeURI,CC,PtoM,daeStringRef>::operator=; //C2679
+			COLLADA_DOM_INNER_OPERATORS //C2679
 		};
 		template<int ID, class CC, typename CC::_ PtoM>
 		/**TEMPLATE-SPECIALIZATION
 		 * @see the @c daeURI specialization of DAEP Container Doxygentation.
 		 */
-		class Value<ID,daeIDREF,CC,PtoM> : public DAEP::InnerValue<ID,daeIDREF,CC,PtoM,daeTokenRef>
+		class Value<ID,daeIDREF,CC,PtoM> : public InnerValue<ID,daeIDREF,CC,PtoM,daeTokenRef>
 		{
-		public: using InnerValue<ID,daeIDREF,CC,PtoM,daeTokenRef>::operator=; //C2679
+			COLLADA_DOM_INNER_OPERATORS //C2679
 		};
 		template<int ID, class CC, typename CC::_ PtoM>
 		/**TEMPLATE-SPECIALIZATION
 		 * @see the @c daeURI specialization of DAEP Container Doxygentation.
 		 */
-		class Value<ID,daeSIDREF,CC,PtoM> : public DAEP::InnerValue<ID,daeSIDREF,CC,PtoM,daeTokenRef>
+		class Value<ID,daeSIDREF,CC,PtoM> : public InnerValue<ID,daeSIDREF,CC,PtoM,daeTokenRef>
 		{
-		public: using InnerValue<ID,daeSIDREF,CC,PtoM,daeTokenRef>::operator=; //C2679
+			COLLADA_DOM_INNER_OPERATORS //C2679
+		};		
+
+		//HACK: xml::base is daeURI_size<1> using xs::anySimpleType in place
+		//of daeStringRef.
+		template<int ID, class CC, typename CC::_ PtoM>
+		/**TEMPLATE-SPECIALIZATION
+		 * @see the @c daeURI specialization of DAEP Container Doxygentation.
+		 */
+		class Value<ID,xmlBase,CC,PtoM> : public InnerValue<ID,xmlBase,CC,PtoM,xsAnySimpleType>
+		{
+			COLLADA_DOM_INNER_OPERATORS //C2679
 		};
 	}
 	//IT SEEMS USING DAEP::Container BELOW MAKES THESE DEPENDENT ON THE ABOVE SPECIALIZATIONS
 	namespace xs
 	{
 	//EXPERIMENTAL
-	typedef daeElement any; //DAEP::Element
+	/**
+	 * @c any changes similar to how generated 
+	 * classes change from object to smart-ref.
+	 */
+	typedef daeElement any; 	
+	typedef any element_type;
+	typedef element_type any_type;
+	typedef dae_Array<any,1> any_name;	
+	typedef daeContents complexContent;
+	#if ! COLLADA_(using)
+	typedef daeChildRef<> element;
+	typedef dae_Array<> element_name;	
+	#elif COLLADA_(using)
+	template<class T=daeElement>
+	using element = daeChildRef<T>;
+	template<class T=daeElement>
+	using element_name = dae_Array<T>;	
+	template<class T, int size_on_stack=0>
+	using list = daeArray<T,size_on_stack>; //xs:list
+	#endif
+	typedef daeSmartTag complexType;
+	typedef daeSmartTag_base const_complexType;
 
+	typedef domAny anyType;
 	typedef daeAnyAttribute anyAttribute;
 	typedef daeAST::TypedUnion anySimpleType;
 	typedef daeURI anyURI;	
+	typedef daeString language;
 	typedef daeString duration;
 	typedef daeString dateTime;	
 	typedef daeString fate, time;	
@@ -256,8 +401,9 @@ COLLADA_(namespace)
 	typedef daeString Name;	
 	typedef daeString token;	
 	typedef daeString string;	
+	typedef daeHashString string_view;
 	typedef daeString normalizedString;
-	typedef daeBoolean boolean;	
+	typedef bool boolean; //daeBoolean
 	typedef daeFloat float__alias;	
 	typedef daeDouble double__alias;	
 	typedef daeDouble decimal;	
@@ -290,7 +436,7 @@ COLLADA_(namespace)
 	typedef daeHashString daeHashString2;
 
 	//2.5 refs default to the "ref" attribute.
-	typedef daeURI xmlBase; //xml:base
+	typedef daeURI_size<> xmlBase; //xml:base
 	typedef domAny mathMath; //math:math default type
 	typedef daeSmartRef<domAny> mathMathRef;
 
@@ -309,6 +455,7 @@ COLLADA_(namespace)
 	typedef daeArray<daeElementRef> xsAny_Array;
 	typedef daeArray<const_daeElementRef> const_xsAny_Array;
 
+	typedef domAny xsAnyType;
 	typedef daeAnyAttribute xsAnyAttribute;
 	typedef daeAST::TypedUnion xsAnySimpleType;
 	typedef daeURI xsAnyURI;
@@ -318,7 +465,7 @@ COLLADA_(namespace)
 	xsDuration, xsDateTime, xsDate, xsTime, 
 	xsGYear, xsGMonth, xsGDay, xsGYearMonth, xsGMonthDay,
 	xsQName, xsNOTATION, xsENTITY, xsNCName, xsNMTOKEN, 
-	xsID;
+	xsID, xsLanguage;
 	typedef daeArray<daeTokenRef> xsStringArray, 
 	xsNameArray, xsNMTOKENS, xsNMTOKENArray, xsNormalizedStringArray, 
 	xsDurationArray, xsDateTimeArray, xsDateArray, xsTimeArray,
@@ -329,7 +476,7 @@ COLLADA_(namespace)
 	typedef daeArray<xsHexBinary> xsHexBinaryArray; //A		
 	typedef daeBinary<64> xsBase64Binary;	
 	typedef daeArray<xsBase64Binary> xsBase64BinaryArray; //A
-	typedef daeBoolean xsBoolean;
+	typedef bool xsBoolean; //daeBoolean
 	typedef daeArray<daeBoolean> xsBooleanArray; //A
 	typedef daeFloat xsFloat;
 	typedef daeArray<daeFloat> xsFloatArray; //A

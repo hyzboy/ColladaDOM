@@ -47,7 +47,7 @@ struct daeLegacyIOPlugins : daeIOEmpty //INTERNAL
 
 #include "../LINKAGE.HPP" //#define LINKAGE
 
-/**LEGACY, ABSTRACT INTERFACE 
+/**LEGACY, ABSTRACT-INTERFACE 
  * This class exists only to serve as a base class for the common functionality
  * between the @c daeLibXMLPlugin and @c daeTinyXMLPlugin classes.
  */
@@ -69,9 +69,42 @@ COLLADA_(protected) //Visual Studio workaround
 
 	/**Implements constructors/destructors. */
 	LINKAGE void __xstruct(int x, int legacy=0);
-	
+
+COLLADA_(public) //FORMERLY set/getOption()
+
+	/**WARNING, LEGACY-SUPPORT
+	 * Controls handling of default attributes.
+	 * @see @c daePlatform::LEGACY_ATTRIBUTE_MASKS
+	 *
+	 * @warning XML allows attribute="" values. This library cannot
+	 * represent "" values in all cases. It also uses "" as special
+	 * values that mean to remove/default attributes. It is hostile
+	 * to these values in other words, but eventually would be able
+	 * to allow them in some form or other. Write-masks are ignored
+	 * but could work for static attributes. Non-static values will
+	 * have to be set to a special EMPTY type.
+	 * 
+	 * READING (INPUT)
+	 * 2.4 did not track attributes so that if a document assigns a
+	 * default value to an attribute, on round-trip such attributes
+	 * are not written back to the document.
+	 * 2.5 sets the write-mask for these attributes so that they're
+	 * not lost. This option, in the affirmative, enables the lossy
+	 * behavior. That behavior can be useful if such attributes are
+	 * thought superfluous, or otherwise undesirable.
+	 *
+	 * WRITING (OUTPUT)
+	 * The plugins are very conservative about the write-masks, but
+	 * how it essentially works, in the affirmative, is to not emit
+	 * attributes that match their schemata's default values--where
+	 * otherwise 2.5 writes attributes according to the write-masks. 
+	 */
+	LINKAGE void option_to_not_retain_default_attributes(bool o=true)
+	SNIPPET( _legacyAttributes = o; )
+
 COLLADA_(public) //These status APIs are new in 2.5.
 
+	//TODO: Need a minimal "_writeFlag" feature set. 
 	enum
 	{
 	_readFlag_data_loss=1,
@@ -142,7 +175,7 @@ COLLADA_(protected)
 		/**
 		 * Default Constructor
 		 */
-		daeIOPluginCommon();
+		daeIOPluginCommon(int);
 		/**
 		 * Virtual Destructor
 		 */
@@ -150,37 +183,41 @@ COLLADA_(protected)
 			
 		//STATEFUL
 		int _readFlags;	
+		bool _legacyAttributes;
 		//STATELESS		
 		//ctype.h has #define _X 0100. (GCC)
 		//xlocinfo.h has #define _XD _HEX. (Win32; ctype related)
-		daeArray<daeStringCP> _CD,_X_CD; //_X //_XD
+		daeArray<> _CD,_X_CD; //_X //_XD
 		typedef std::pair<daeName,daeHashString> _attrPair;
 		std::vector<_attrPair> _attribs;		
 		//Only the LibXML loader uses these, but the reader must pass-through.
-		daeHashString (*_encoder)(const daeHashString&,daeArray<daeStringCP>&);
-		daeHashString (*_decoder)(daeArray<daeStringCP>&,daeArray<daeStringCP>&);
-		inline daeHashString _encode(const daeHashString &i, daeArray<daeStringCP> &CD)
+		daeHashString (*_encoder)(const daeHashString&,daeArray<>&);
+		daeHashString (*_decoder)(daeArray<>&,daeArray<>&);
+		inline daeHashString _encode(const daeHashString &i, daeArray<> &CD)
 		{
 			return _encoder==nullptr?i:_encoder(i,CD);
 		}
-		inline daeHashString _encode(const unsigned char *i, daeArray<daeStringCP> &CD)
+		inline daeHashString _encode(const unsigned char *i, daeArray<> &CD)
 		{
 			return _encoder==nullptr?(daeString)i:_encoder((daeString)i,CD).string; 
 		}
-		inline const unsigned char *_decode(daeArray<daeStringCP> &CD, daeArray<daeStringCP> &X)
+		inline const unsigned char *_decode(daeArray<> &CD, daeArray<> &X)
 		{
 			return (const unsigned char*)(_decoder==nullptr?CD.data():_decoder(CD,X).string);
 		}				
 		//NEW, OPTIMIZATION
 		//Returns false if nullptr==_encoder.
 		//Char-set recoding is an old feature request; this avoids it for ASCII types.
-		bool _maybeExtendedASCII(const daeData&, const daeElement&);
+		bool _maybeExtendedASCII(daeData&, const daeElement&);
 
-		/**ABSTRACT INTERFACE 
+		/**ABSTRACT-INTERFACE 
 		 * The two loaders implement reading via this method. Writing is independent.
 		 */
 		virtual bool _read(daeIO &IO, daeContents &content) = 0;
-		/**ABSTRACT INTERFACE 
+		/**ABSTRACT-INTERFACE 
+		 */
+		virtual void _writeAttribute(daeData&,const daeElement&) = 0;
+		/**ABSTRACT-INTERFACE 
 		 * TinyXML's version is untested. It may never work. It had not previously.
 		 */
 		virtual int _errorRow() = 0;
@@ -190,10 +227,17 @@ COLLADA_(protected)
 		/** This initializs the XML declaration. Both require special handling. */
 		void _push_back_xml_decl(daeContents&,daeName,daeName,bool);
 		
-		//LEGACY
-		daeElement &_beginReadElement(daePseudoElement &parent, const daeName &elementName);
+		struct _beginReadContext:daeCreateContext //EXPERIMENTAL
+		{
+			virtual unsigned int xmlns(daeName&); bool xmlnstr(daeString);
+		}_cc;
+
+		//LEGACY		
+		daeElement &_beginReadElement(daePseudoElement2, const daeName &elementName);
 		//LEGACY
 		void _readElementText(daeElement &element, const daeHashString &text);
+								
+		void _writeAttributes(const daeElement &element);
 
 #endif //BUILDING_COLLADA_DOM
 };
@@ -227,19 +271,19 @@ COLLADA_(protected) //daeIOPlugin methods
 	/**PURE-OVERRIDE */
 	virtual daeOK writeContent(daeIO &IO, const daeContents &content);
 
-COLLADA_(public) //FORMERLY set/getOption()	
+COLLADA_(public) //FORMERLY set/getOption()
 	/**
 	 * This is to encode to a system's narrow code-page. It was added long ago to
 	 * support a generic 8-bit European character-set. Extended Latin. LibXML has
 	 * a default implementation for that. Users can now provide their own encoder.
 	 */
-	typedef daeHashString (*Encoder)(const daeHashString&,daeArray<daeStringCP>&);
+	typedef daeHashString (*Encoder)(const daeHashString&,daeArray<>&);
 	/**
 	 * This is expected to deode to UTF-8. It could do otherwise with some work.
 	 * The encoding would need to match the XML-declaration as written.
 	 * The input strings are assumed to be compatible with the paired @c Encoder.
 	 */	
-	typedef daeHashString (*Decoder)(daeArray<daeStringCP>&,daeArray<daeStringCP>&);
+	typedef daeHashString (*Decoder)(daeArray<>&,daeArray<>&);
 	/**
 	 * This had been limited to Latin1. You can set this up yourself now.
 	 * @param e must encode strings to the system-wide character set that is can
@@ -254,12 +298,14 @@ COLLADA_(public) //FORMERLY set/getOption()
 	 * This is the internal implementation that leverages the LIBXML APIs.
 	 * @remarks This replaces @c daeDOM::setCharEncoding(). It can be made
 	 * the default FOR DEFAULT PLUGINS only by @c daePlatform::setLegacy().  
+	 * @see @c daePlatform::LEGACY_EXTENDED_LATIN1
 	 */
 	LINKAGE void option_to_use_codec_Latin1();
 	
 	/**LEGACY, NOT RECOMMENDED, COLLADA EXTENSION
 	 * Set @c true to save float_array & int_array data to .raw binary files. 
 	 * @c daeRawResolver converts the data back into domFloat_array elements upon load.
+	 * @see @c daePlatform::LEGACY_LIBXML_RAW
 	 *
 	 * @note The Raw Resolver effectively acts like a dynamic script, that manipulates
 	 * the XML document on input, pulling in the RAW files. The reverse is facilitated
@@ -283,6 +329,8 @@ COLLADA_(private) //daeIOPluginCommon methods
 		/**PURE-OVERRIDE */
 		virtual bool _read(daeIO &IO, daeContents &content);
 		/**PURE-OVERRIDE */
+		virtual void _writeAttribute(daeData&,const daeElement&);
+		/**PURE-OVERRIDE */
 		virtual int _errorRow();
 
 COLLADA_(private)		
@@ -303,7 +351,6 @@ COLLADA_(private)
 		int _readContent2(daePseudoElement&);
 
 		void _writeElement(const daeElement &element);
-		void _writeAttribute(daeData &attr, const daeElement &element);
 		void _writeValue(const daeElement &element);
 		void _writeContent2(const daeContents&);
 		void _writeRawSource(const daeElement &source, const daeElement &array, const daeElement &technique_common);
@@ -356,6 +403,10 @@ COLLADA_(protected) //daeIOPlugin methods
 
 COLLADA_(public)
 		/**
+		 * Constructor 
+		 */
+		daeTinyXMLPlugin(int legacy);
+		/**
 		 * Virtual Destructor 
 		 */
 		virtual ~daeTinyXMLPlugin(){ /*NOP*/ }
@@ -364,6 +415,8 @@ COLLADA_(private) //daeIOPluginCommon methods
 
 		/**PURE-OVERRIDE */
 		virtual bool _read(daeIO &IO, daeContents &content);
+		/**PURE-OVERRIDE */
+		virtual void _writeAttribute(daeData&,const daeElement&);
 		/**PURE-OVERRIDE */
 		virtual int _errorRow();
 
@@ -374,7 +427,9 @@ COLLADA_(private)
 
 		struct Value; 
 		template<class T>
-		static T *setValue(T*, const daeHashString&);
+		static T *setValue(T*,const daeHashString&);
+		template<class T>
+		static T*setQName(T*,daeName,const daeName&);
 		void _readElement(TiXmlElement*,daeElement&);
 		void _readContent2(TiXmlNode*,daePseudoElement&);
 
@@ -392,7 +447,8 @@ struct daeLegacyIOPlugins //INTERNAL
 	char IO[sizeof(A)>sizeof(B)?sizeof(A):sizeof(B)];
 	daeLegacyIOPlugins(int legacy, const daeURI&)
 	{
-		if(0!=(legacy&daePlatform::LEGACY_LIBXML)) new(IO)A(legacy); else new(IO)B;
+		if(0!=(legacy&daePlatform::LEGACY_LIBXML))
+		new(IO)A(legacy); else new(IO)B(legacy);
 	}
 	operator daeIOPlugin&(){ return (daeIOPlugin&)*IO; }
 	~daeLegacyIOPlugins(){ ((daeIOPlugin&)*IO).~daeIOPlugin(); }
@@ -400,7 +456,7 @@ struct daeLegacyIOPlugins //INTERNAL
 #else
 struct daeLegacyIOPlugins : daeTinyXMLPlugin //INTERNAL
 {
-	daeLegacyIOPlugins(int legacy, const daeURI&)
+	daeLegacyIOPlugins(int legacy, const daeURI&):daeTinyXMLPlugin(legacy)
 	{
 		assert(0==(legacy&daePlatform::LEGACY_LIBXML)); 
 	}

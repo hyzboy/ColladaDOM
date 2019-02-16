@@ -67,62 +67,58 @@ COLLADA_(protected) //daeRefResolver::_resolve
 	/**PURE-OVERRIDE
 	 * Implements @c daeRefResolver::_resolve() for @c daeRefResolveList.
 	 */
-	virtual daeOK _resolve(const daeRef &ref, daeRefRequest &req)const
+	virtual daeError _resolve(const daeRef &ref, daeRefRequest &req)const
 	{
-		daeError OK = DAE_OK; const daeURI &URI = (daeURI&)ref;
-		
-		const_daeDOMRef dom;
+		const daeURI &URI = static_cast<const daeURI&>(ref);
+
+		//If there are additional arguments, assume they
+		//are intended for another resolver.
+		if(!req.empty()) return DAE_ERR_NOT_IMPLEMENTED;
+				
+		const_daeDOMRef dom; daeError err = DAE_OK; 
 		if(req.object!=nullptr) dom = req.object->getDOM();
 		if(dom==nullptr) dom = ref.getDOM();
 		if(dom!=nullptr) 
 		{
-			daeDocRef doc;
-			if(!req.empty())
+			const_daeDocRef doc = URI.getDoc();			
+			if(doc!=nullptr)
 			{
-				//no special commands are being supported
-				OK = DAE_ERR_NOT_IMPLEMENTED; assert(0);
+				if(URI.isFragmentURI()) goto fragment;
+				if(!URI.getIsResolved()) URI.resolve();
+				if(URI.referencesDoc2(doc)) goto fragment;
+				
+				doc = nullptr; goto document;
 			}
-			else if(URI.isFragmentURI())
-			{
-				doc = const_cast<daeDoc*>(URI.getDoc()); 
-				if(doc!=nullptr)
-				{
-					if(!URI.getIsResolved()||URI.referencesDoc(doc))
-					goto fragment; 
-					else doc = nullptr;
-				}
-				goto doc_less;
-			}
-			else doc_less:
+			else document:
 			{			
 				if(URI.docLookup2(*dom,doc)==nullptr)
 				{	
 					doc = const_cast<daeDOM&>(*dom).openDoc<void>(URI);
 					if(doc==nullptr)
-					OK = DAE_ERR_QUERY_NO_MATCH;
+					err = DAE_ERR_QUERY_NO_MATCH;
 				}
 			}
 			if(doc!=nullptr) fragment:
 			{
-				daeRefView id = URI.getURI_fragment();
+				daeName id = URI.getURI_fragment();
 				if(!id.empty())
 				{
 					daeObjectRef obj;
 					if(nullptr==doc->getDocument()->idLookup(id,obj))
-					OK = DAE_ERR_QUERY_NO_MATCH;
+					err = DAE_ERR_QUERY_NO_MATCH;
 					else req.object = obj;
 				}
-				else req.object = doc;	 				
-				if(OK==DAE_OK)
+				else req.object = &const_cast<daeDoc&>(*doc);
+				if(err==DAE_OK)
 				req.typeInstance = nullptr;
 			}
 		}
-		else OK = DAE_ERR_INVALID_CALL; 
+		else err = DAE_ERR_INVALID_CALL; 
 		
-		if(OK!=DAE_OK) URI.resolve();
-		if(OK!=DAE_OK) _printError(OK,URI.getURI()); return OK;
+		if(err==DAE_OK) URI.resolve();
+		if(err!=DAE_OK) _printError(err,URI.getURI()); return err;
 	}
-	static void _printError(daeError err, const daeRefView &uri)	
+	static void _printError(daeError err, const daeName &uri)	
 	{
 		daeEH::Warning<<"daeDefaultURIResolver - Failed to resolve:\n"<<uri;
 	}
@@ -147,7 +143,7 @@ COLLADA_(public)
 
 	inline const daeElementRef lookup(const daeURI &uri) 
 	{
-		Table::iterator it = _lookupTable.find(uri.getURI());
+		Table::iterator it = _lookupTable.find(uri.data());
 		if(it==_lookupTable.end()) return nullptr; //miss				
 		return (daeElementRef&)it->second; //hit		
 	}
@@ -156,7 +152,7 @@ COLLADA_(public)
 	{		
 		daeDatabase *db = elt->_getDBase();
 		if(db!=nullptr&&db->cacheResolverResult(*this))
-		_lookupTable[URI.getURI()] = elt; 
+		_lookupTable[URI.data()] = elt; 
 	}
 
 	inline void clear(){ _lookupTable.clear(); }
@@ -245,12 +241,12 @@ COLLADA_(protected) //daeRefResolver::_resolve
 	/**PURE-OVERRIDE
 	 * Implements @c daeRefResolver::_resolve() for @c daeRefResolveList.
 	 */
-	virtual daeOK _resolve(const daeRef &ref, daeRefRequest &req)const
+	virtual daeError _resolve(const daeRef &ref, daeRefRequest &req)const
 	{
 		const daeURI &uri = static_cast<const daeURI&>(ref);
 		daeElementRef hit = _cache.lookup(uri);
-		daeError out = _resolve_exported(hit,uri,req);
-		if(out==DAE_OK&&hit!=req.object) _cache.add(uri,req.object); return out;
+		daeError err = _resolve_exported(hit,uri,req);
+		if(err==DAE_OK&&hit!=req.object) _cache.add(uri,req.object); return err;
 	}
 	COLLADA_DOM_LINKAGE
 	/**

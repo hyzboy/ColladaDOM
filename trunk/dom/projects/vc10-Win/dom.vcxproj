@@ -19,6 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\include\ColladaDOM.g++">
+      <FileType>Document</FileType>
+    </ClInclude>
     <None Include="..\..\include\ColladaDOM.inl" />
     <None Include="..\..\include\ColladaLAB.inl" />
     <None Include="..\..\projects\NatvisFile.natvis">
@@ -28,6 +31,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\dae.h" />
     <ClInclude Include="..\..\include\DAEP.h" />
+    <ClInclude Include="..\..\include\dae\daeAnySimpleType.h" />
     <ClInclude Include="..\..\include\dae\daeArray.h" />
     <ClInclude Include="..\..\include\dae\daeAtlas.h" />
     <ClInclude Include="..\..\include\dae\daeAtomicType.h" />

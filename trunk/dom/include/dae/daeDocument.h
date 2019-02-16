@@ -92,7 +92,7 @@ COLLADA_(public) //OPERATORS
 
 COLLADA_(public) //ABSTRACT INTERFACE
 
-	/**ABSTRACT INTERFACE
+	/**ABSTRACT-INTERFACE
 	 * Initiates the "teardown" sequence.
 	 * Doing this as @c virtual makes it easier to
 	 * call, and looks forward to possible plugin extension.
@@ -131,8 +131,8 @@ COLLADA_(public)
 	/**
 	 * @return Returns HARDLINK, SYMLINK, or ARCHIVE. 
 	 */
-	inline int getDocType()const{ return 3&_getClassTag(); } 
-
+	inline int getDocType()const{ return 3&getObjectTags(); } 
+	
 	/**
 	 * @return Returns @c true if this @c daeDoc is a @c daeDocument.
 	 */
@@ -160,13 +160,27 @@ COLLADA_(public)
 		p = ((daeDoc*)p)->_archive; return a==p;
 	}
 
+	/**EXPERIMENTAL	 
+	 * @return Returns @c true if the doc has URI semantics.
+	 * Docs made by @c daeElement::getProvisionalDocument() 
+	 * and @c daeDOM::getWorkingMemory() lack URI semantics.
+	 * "URI semantics" means when a URI is resolved it will
+	 * find the document if @c hasOwnURI(). Likewise if the
+	 * URI is changed to one of another document's, it will
+	 * replace that document.
+	 */
+	inline bool hasOwnURI()const
+	{
+		//Note: Should be consistent in nested archive scenarios.
+		return !_uri.isUnparentedObject(); 
+	}
+
 	/**NOT-THREAD-SAFE
 	 * Closes the doc, unloading all memory used by the document-or-archive.
 	 * With the exception of @c daeDOM, @c daePlatform::closeURI() can veto
 	 * the close. Details/override procedures follow:
 	 *
-	 * @return Returns DAE_OK if the document is closed, and FOR COMPLETENESS:
-	 * If MULTI-THREAD, @c DAE_NOT_NOW is returned if the platform is deciding
+	 * @return Returns @c DAE_NOT_NOW if the platform is deciding
 	 * to close or not on a different thread from the calling one.
 	 * (This doesn't mean the library is thread safe--the application must be.)
 	 *
@@ -175,8 +189,14 @@ COLLADA_(public)
 	 * -because it's A) not nice, and B) makes the URI unusable for diagnostics.
 	 */
 	LINKAGE daeOK close();
+
 	/**
-	 * Tells that this doc is surely housed in @c daeDOM::_closedDocs. 
+	 * Tells that this doc is surely housed in @c daeDOM::_closedDocs.
+	 * @note It seems that docs are temporarily parked when their URI 
+	 * is in the process of changing. It looks like @c isClosed() may
+	 * appear to be so both during this change, and if the URI is not
+	 * set after creating the doc, e.g. the @c daeDocumentRef factory
+	 * constructor, or @c daeIOPlugin::addDoc(). Set URIs immediately.
 	 */
 	inline bool isClosed()const
 	{
@@ -216,6 +236,28 @@ COLLADA_(public)
 	 * The URIs are doc-aware; meaning altering a doc's URI, relocates it in the DOM.
 	 */
 	inline const daeURI &getDocURI()const{ return _uri; }
+		
+	//NOTE: Using 'noalias' even though _xmlBase is modified, because
+	//it's not a global state, or is fully encapsulated. Only the CRT
+	//is involved.
+	COLLADA_NOALIAS
+	/**XML-BASE
+	 * Gets an xml:base like base-URI relative to @a c where it is an
+	 * element; if an element, it's assumed @c this==dae(c)->getDoc()
+	 * and so, @c true==isDocument().
+	 * @see daeElement::getBaseURI()
+	 * SEE-ALSO @c daeURI::isSameDocumentReference()
+	 *
+	 * @note It's not a misnomer to call this a "document URI" as the
+	 * concept of "same document references" applies to xml:base just
+	 * as to the actual document.
+	 *
+	 *   http://lists.xml.org/archives/xml-dev/201705/msg00017.html
+	 *
+	 * @return Returns @c &getDocURI() if xml:base attributes are not
+	 * present.
+	 */
+	LINKAGE const_daeURIRef getBaseURI(const DAEP::Object *c)const;
 
 	/** 
 	 * Gets the links' archive. 
@@ -249,7 +291,7 @@ COLLADA_(public)
 		const daeDoc *p = this; if(p!=nullptr) while(p->_link!=nullptr) p = p->_link;
 		//GCC/C++ want a defined outside the class body, so it can't be instantiated.
 		//return const_cast<daeDoc*>(p)->a<daeDocument>();
-		return p!=nullptr&&p->isDocument()?(daeDocument*)p:nullptr;
+		return p==nullptr||!p->isDocument()?nullptr:(daeDocument*)p;
 	}
 
 	/**LEGACY, CIRCULAR-DEPENDENCY
@@ -260,10 +302,15 @@ COLLADA_(public)
 
 #ifdef BUILDING_COLLADA_DOM
 
+COLLADA_(public)
 	/**
 	 * Constructor
 	 */
-	explicit daeDoc(daeDOM *a, int dt=daeDocType::HARDLINK);
+	explicit daeDoc(daeDOM *a, int dt);
+	/**
+	 * Constructor of getProvisionalDocument
+	 */
+	explicit daeDoc(daeArchive *a, int dt);
 	/**
 	 * Virtual Destructor
 	 */
@@ -332,7 +379,9 @@ COLLADA_(public) //daeSafeCast() SHORTHANDS (Continued after class.)
 	{
 		return daeObject::a<T>();
 	}
-	/**CONST-FORM Following style of daeElement::a(). */
+	/**CONST-FORM
+	 * Following style of daeElement::a(). 
+	 */
 	template<class T> inline const T *a()const
 	{
 		return const_cast<daeDoc*>(this)->a<T>();
@@ -344,15 +393,21 @@ template<> inline daeDoc *daeDoc::a<daeDoc>()
 {
 	return this;
 }
-/** Follows style of daeElement::a(): @c This->a<daeDocument>(). */
+/**
+ * Follows style of daeElement::a(): @c This->a<daeDocument>(). 
+ */
 template<> inline daeDocument *daeDoc::a<daeDocument>()
 {
-	return this!=nullptr&&isDocument()?(daeDocument*)this:nullptr;
+	if(daeObject::_this__nullptr(this)||!isDocument())
+	return nullptr; return (daeDocument*)this;
 }
-/** Follows style of daeElement::a(): @c This->a<daeArchive>(). */
+/**
+ * Follows style of daeElement::a(): @c This->a<daeArchive>(). 
+ */
 template<> inline daeArchive *daeDoc::a<daeArchive>()
 {
-	return this!=nullptr&&isArchive()?(daeArchive*)this:nullptr;
+	if(daeObject::_this__nullptr(this)||!isArchive())
+	return nullptr; return (daeArchive*)this;
 }
 
 extern bool daeDocument_typeLookup_called;
@@ -391,15 +446,48 @@ COLLADA_(public) //DAEP::Object methods
 	/**PURE-OVERRIDE */
 	virtual void __daeDoc__v1__atomize();
 
-COLLADA_(private) //INTERNALS	
+COLLADA_(public) //INTERNALS	
 	
-	NOALIAS_LINKAGE daePseudoElement &_getPseudoElement()const
+	friend class daeAST::TypedUnion;
+	/**LOW-LEVEL
+	 * Gets @c getContents().getElement(). The attributes of
+	 * this element are not read/written by I/O plugins, and
+	 * so can be freely used by client code to manage states.
+	 * @c getPseudoElement().hasAttribute_xml_base() relates
+	 * to the presence of xml:base attributes or any kind of
+	 * base at any point within @c this document. The pseudo
+	 * element is a part of the document and a @c daeElement.
+	 *
+	 * @remark Databases must implement element-migration in
+	 * which the element graph is traversed in response to a
+	 * change-notice that moves an element from one document
+	 * or from no-document, to another document. In order to
+	 * use xml:base @c getPseudoElement().getMigrationByte()
+	 * must be used to flip-on @c daeMigrationByte::XML_BASE.
+	 */
+	NOALIAS_LINKAGE daePseudoElement &getPseudoElement()
 	SNIPPET( return *_pseudo.element(); )
+	/**CONST-FORM
+	 * @see overload Doxygentation.
+	 */
+	inline daePseudoElement &getPseudoElement()const
+	{
+		return const_cast<daeDocument*>(this)->getPseudoElement();
+	}
 
 #if defined(BUILDING_COLLADA_DOM) || defined(__INTELLISENSE__)
+													
+COLLADA_(private) //INTERNALS	
 
 		/** @see getFragment() doxygentation. */
 		mutable daeStringRef _fragment;
+
+		friend class daeURI_base;	
+		/** Implements @c daeDoc::getBaseURI(). */
+		mutable daeStringMap<daeURIRef> _xmlBase;
+
+		/** Implements @c getSchemata(), @c _get_and_or_use_xs_schema(). */
+		mutable std::vector<std::pair<size_t,const XS::Schema*>> _schemata;
 
 		//GCC (template parameter lists.)
 		template<class,unsigned long long,class> 
@@ -409,14 +497,20 @@ COLLADA_(private) //INTERNALS
 		:
 		public daeElemental<_PseudoElement,32+2>
 		{
+		public: //COLLADA-DOM 2
+			/**
+			 * These were deprecated; but are kept for switch-cases.
+			 */
+			enum{ elementType=daeObjectType::_ };
+
 		public: //Parameters
 
 			typedef struct:Elemental
-			{	DAEP::Value<0,xsAnyAttribute>
+			{	COLLADA_DOM_0
 			_0; COLLADA_WORD_ALIGN
 				COLLADA_DOM_Z(0,0)
-			DAEP::Value<1,dae_Array<>> _Z; enum{ _No=1 };
-			DAEP::Value<2,daeContents> content; typedef void notestart;
+			DAEP::Value<sizeof(1),dae_Array<>> _Z; enum{ _No=1 };
+			DAEP::Value<sizeof(2),daeContents> content; typedef void notestart;
 			}_;
 
 		public: //Attributes
@@ -430,9 +524,9 @@ COLLADA_(private) //INTERNALS
 			 * These attributes are invalid according to the schema. They may be user- 
 			 * defined additions and substitutes.
 			 */
-			DAEP::Value<0,xsAnyAttribute,_,(_::_)&_::_0> padding;
+			DAEP::Value<0,xsAnyAttribute,_,(_::_)&_::_0> userdata;
 
-		public: //Content
+		public: //Complex Content Model
 
 			COLLADA_WORD_ALIGN
 			COLLADA_DOM_Z(0,0) 
@@ -466,6 +560,14 @@ COLLADA_(protected)
 		 * Constructor
 		 */
 		explicit daeDocument(daeDOM*);
+		/**
+		 * Constructor of getProvisionalDocument
+		 */
+		explicit daeDocument(daeArchive*);
+		/**
+		 * Constructs @c _pseudo.
+		 */
+		inline void _init_pseudo();
 
 COLLADA_(public/*C4624*/) 
 		/**
@@ -480,6 +582,15 @@ COLLADA_(public) ~daeDocument(){ assert(0); }
 #endif //BUILDING_COLLADA_DOM
 
 COLLADA_(public)	
+	/**NEVER-NULL
+	 * @see @c daeObject::getDOM().
+	 */
+	inline const daeDOM *getDOM()const
+	{
+		assert(getParentObject()._isDOM());
+		return (daeDOM*)__DAEP__Object__parent;
+	}
+
 	/**ZAE
 	 * Gets the fragment part of the document's URL that was removed
 	 * when @c this document was opened or was later associated with
@@ -500,7 +611,7 @@ COLLADA_(public)
 	 */
 	inline daeContents &getContents()
 	{
-		return _getPseudoElement().getContents(); 
+		return getPseudoElement().getContents(); 
 	}
 	/**CONST-PROPOGATING-FORM
 	 * Gets the contents-array of this document.
@@ -508,7 +619,7 @@ COLLADA_(public)
 	 */
 	inline const daeContents &getContents()const
 	{
-		return _getPseudoElement().getContents(); 
+		return getPseudoElement().getContents(); 
 	}
 
 	/**
@@ -521,7 +632,7 @@ COLLADA_(public)
 	 */
 	inline daeMeta &getMeta()const
 	{
-		return _getPseudoElement().getMeta().jumpIntoTOC(1).getChild();
+		return getPseudoElement().getMeta().jumpIntoTOC(1).getChild();
 	}
 	/**
 	 * It seems harmless to let this be set directly if the document
@@ -531,9 +642,29 @@ COLLADA_(public)
 	 */
 	LINKAGE daeOK setMeta(daeMeta&);
 
+	//NOT THREAD-SAFE	
+	/**EXPERIMENTAL
+	 * Gets XML Schema added by @c daePlatform::introduceToDocument().
+	 * @note Presently there is no way to add schemas directly to the
+	 * document. It is done when an element is first created/inserted.
+	 * (Note that inserted means after elements created-from-thin-air
+	 * are inserted into the document.)
+	 * @see @c XS::Schema::getUsers().
+	 */
+	LINKAGE void getSchemata(XS::Schemata &o, enum dae_clear e=dae_clear)const;
+	/**MUTABLE
+	 * There is not an advertised API for doing this, but if you need
+	 * to add schemata to @c getSchemata() then by all means use this.
+	 * @return Returns @true if the input schema and output are equal.
+	 * The input schema must be initialized. It is a default, and can
+	 * be @c nullptr in or out. @c daePlatform::introduceToDocument() 
+	 * can change it to @c nullptr.
+	 */
+	LINKAGE bool _get_and_or_use_xs_schema(daeTags,const XS::Schema*&)const;
+
 	/**
 	 * Accessor to get the XML-like ROOT node associated with this document.
-	 * @return A @c daeElementRef for the the root of this document.
+	 * @return A @c dae_Array<> reference for the the root of this document.
 	 * @remarks Technically 1 means there can be more than one root.
 	 */	
 	inline dae_Array<daeElement,1> &getRoot()
@@ -542,7 +673,7 @@ COLLADA_(public)
 	}
 	/**CONST-PROPOGATING-FORM
 	 * Accessor to get the XML-like ROOT node associated with this document.
-	 * @return A @c daeElementRef for the the root of this document.
+	 * @return A @c dae_Array<> reference for the the root of this document.
 	 * @remarks Technically 1 means there can be more than one root.
 	 */	
 	inline const dae_Array<daeElement,1> &getRoot()const
@@ -551,20 +682,11 @@ COLLADA_(public)
 	}
 	
 	#ifndef COLLADA_NODEPRECATED
-	COLLADA_DEPRECATED("getDocURI or getBaseURI")
-	/**LEGACY
-	 * @return Returns a pointer to the URI of this document.	 
-	 * The old pointer way is supported by overloading @c daeURI's operators.
-	 */
-	inline daeURI &getDocumentURI(){ return _uri; }
-	#endif //COLLADA_NODEPRECATED
-
-	/**CONST-ONLY
-	 * Gets the base URI used for resolving relative URI references. 
-	 * @return Returns the same @c daeURI& as @c daeDoc::getDocURI().
-	 */
-	inline const daeURI &getBaseURI()const{ return _uri; }
-			
+	COLLADA_DEPRECATED("Post-2.5: END-OF-SUPPORT\n\
+	Use getBaseURI to implement xml:base, or getDocURI().")
+	void getDocumentURI()const;
+	#endif
+				
 COLLADA_(public) //LEGACY: old "database" APIs
 
   /////////////////////////////////////////////////////////////////
@@ -674,28 +796,22 @@ COLLADA_(public) //LEGACY: old "database" APIs
 		if(clear) matchingElements.clear(); 
 		_typeLookup(same,(daeArray<daeElementRef>&)matchingElements); return matchingElements;
 	}	
-		
-	template<class T>
+
+	template<template<class> class V, typename T>
 	/**LEGACY-SUPPORT
-	 * Recursive version of @c daeElement::getChildrenByType().
-	 * @remarks Post-2.5 this is used/added to implement @c daeDocument::typeLookup().
-	 */	
-	inline T &_getElementsByType(daeMeta *meta, T &matchingElements)const
-	{
-		daeElement::_getChildrenByType_f<1,T> f = { matchingElements,meta };		
-		const_daeElementRef root = getRoot();
-		//FIX-ME: CASTING BECAUSE daeElement ISN'T FULLY CONST-CORRECT.
-		if(root!=nullptr) f((daeElement*&)root); return matchingElements;
-	}	
-	template<typename T>
-	/**LEGACY-SUPPORT
-	 * Advertised version of @c _getElementsByType(). Use it if you want.
 	 * Similar to @c daeElement::getDescendantsByType(), but with root included. Nothing special.
 	 */	
-	inline daeArray<daeSmartRef<T>> &getElementsByType(daeArray<daeSmartRef<T>> &matchingElements, enum dae_clear clear=dae_clear)const
+	inline V<T> &getElementsByType(V<T> &matchingElements, enum dae_clear clear=dae_clear)
 	{
-		if(clear) matchingElements.clear();
-		_getElementsByType(daeGetMeta<T>(),(daeArray<daeElementRef>&)matchingElements); return matchingElements;
+		return getPseudoElement().getDescendantsByType(matchingElements,clear);
+	}	
+	template<template<class> class V, typename T>
+	/**CONST-FORM
+	 * @see overload Doxygentation.
+	 */	
+	inline V<T> &getElementsByType(V<T> &matchingElements, enum dae_clear clear=dae_clear)const
+	{
+		return getPseudoElement().getDescendantsByType(matchingElements,clear);
 	}	
 	
 COLLADA_(private) //exported indexing methods
@@ -714,7 +830,7 @@ COLLADA_(public) //LEGACY-SUPPORT
 	 * to @c daeDatabase::_v1_note(). Databases are not obliged to do so. Notification
 	 * is required to go to the database. It's this way so that there aren't duplicate paths.
 	 */
-	LINKAGE void _carry_out_change_of_ID_or_SID(const DAEP::Change&, daeData*)const;
+	LINKAGE void _carry_out_change_of_ID_or_SID(const DAEP::Change&, const daeData*)const;
 	/**LEGACY
 	 * Not only is it necessary to capture changes of the attributes, whenever an
 	 * element having an "id" or "sid" attribute is inserted or removed from a document
@@ -725,7 +841,7 @@ COLLADA_(public) //LEGACY-SUPPORT
 	 * @c this can also be @c nullptr. The API is not @c static "just because." E.g:
 	 * @c source->_migrate_ID_or_SID(destination,...);
 	 */
-	LINKAGE void _migrate_ID_or_SID(const daeDocument *destination, const daeElement*, const XS::Attribute*)const;
+	LINKAGE void _migrate_ID_or_SID(const daeDocument *destination, const daeElement*, const daeData*)const;
 
 #ifdef BUILDING_COLLADA_DOM
 
@@ -733,27 +849,25 @@ COLLADA_(private) //LEGACY: old "database" API stuff
 
 		mutable daeStringRefMap<daeElement*> _idMap;
 		typedef daeStringRefMap<daeElement*>::const_iterator _idMapIter;
-		typedef std::pair<daeString,daeElement*> _idMapPair;
 
-		mutable daeStringRefMultiMap<daeElement*> _sidMap;		
+		mutable daeStringRefMultiMap<daeElement*> _sidMap;	
 		typedef daeStringRefMultiMap<daeElement*>::const_iterator _sidMapIter;
-		typedef std::pair<daeString,daeElement*> _sidMapPair;
 		typedef std::pair<_sidMapIter,_sidMapIter> _sidMapRange;
 
 		friend daeMetaElement;
 		mutable daeStringRefMap<std::vector<daeElement*>> _typeMap; 
 		typedef std::vector<daeElement*> _typeVec;		
-		typedef daeStringRefMap<_typeVec>::iterator _typeMapIter;
+		typedef daeStringRefMap<std::vector<daeElement*>>::iterator _typeMapIter;
 		friend daeContents_base;		
 		template<int op> struct _typeLookup_migrate_operation
 		{
-			const daeDocument *doc;	void operator()(const daeElement *ch);
+			const daeDocument *doc;	void operator()(const daeElement&);
 		};
 		friend daeElement;		
 		_typeVec *_typeLookup_vector(daeMeta&)const;
 		void _typeLookup_self_remove(daeMeta&,daeElement&)const;
 		void _typeLookup_bulk_remove(daeMeta&/*,UNIMPLEMENTED*/)const;
-
+		
 #endif //BUILDING_COLLADA_DOM
 };
 

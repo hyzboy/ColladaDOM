@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 COLLADA_(namespace)
 {//-.
@@ -192,9 +193,7 @@ inline daeError XS::Sequence::__placeOccurrence(A a, daeCM_Placement<C> &p, B b,
 	for(it=_deepCM[p.name].begin(),itt=_deepCM[p.name].end();it!=itt;it++)	
 	{
 		const daeCM *nameclash = _CM[*it];
-		daeCounter daeCM::*_unprotect_max_x_max;
-		_unprotect_max_x_max = &XS::Sequence::_maxOrdinals_x_maxOccurs;
-		if(nameclash->__between(a,o-nameclash->getSubtrahend(),b,_unprotect_max_x_max))
+		if(nameclash->__between(a,o-nameclash->getSubtrahend(),b,&daeCM::_maxOrdinals_x_maxOccurs))
 		{
 			e = nameclash->__placeXS<1>(a,p,b,o); if(e==DAE_OK) break;
 		}
@@ -320,7 +319,7 @@ void daeCM::_prepareContentModel2() //RECURSIVE
 {
 	if(isParentCM())
 	{
-		const std::vector<const daeCM*>&_CM(((daeParentCM*)this)->_CM);
+		const _CM_vector &_CM = ((daeParentCM*)this)->_CM;
 		for(daeCounter i=0,j=-1;i<_CM.size();j=_CM[i++]->_ordSubtrahend) 
 		if(_CM[i]->_xs!=XS::ELEMENT)
 		const_cast<daeCM*>(_CM[i])->_prepareContentModel2();
@@ -383,7 +382,7 @@ inline bool daeCM::__subsetofXS(const daeCM &b)const
 }
 
 static size_t daeMetaElementAttribute__prepare_migrate
-(short *buf, size_t io, const std::basic_string<short> *proclaimCM)
+(short *buf, size_t io, const daeParentCM::_DeepCM_string *proclaimCM)
 {	
 	short cmp = buf[io]; 
 	for(size_t i=io;i--!=0;)
@@ -512,7 +511,7 @@ const daeContent *XS::Choice::_solve(_solution &s, const daeContent *it, size_t 
 	const daeOrdinal ot = o-_maxOrdinals;
 	for(daeCounter ID=0;it->_child.ordinal>ot;ID++)
 	{	
-		//HACK: this avoids _grow2<daeContent>().
+		//HACK: This avoids _grow2<daeContent>().
 		if(++size==capacity)
 		p_content._element_less_grow(capacity=size*2);
 
@@ -560,7 +559,8 @@ const daeContent *XS::Choice::_solve(_solution &s, const daeContent *it, size_t 
 	if(!demote) new_size+=names*(OK?2:1);
 	s.keysN = iN;	
 	s.to = _CM[to]; s.fro = _CM[fro];
-	s.keys = new daeOrdinal[new_size];	
+	//s.keys = new daeOrdinal[new_size];	
+	s.keys = const_cast<daeMetaElement*>(_meta)->_new<daeOrdinal>(new_size);	
 	//Zeroing this up front keeps everything simple.
 	memset(s.keys,0x00,new_size*sizeof(daeOrdinal));
 	const daeCounter sub = daeOrdinals-o; 
@@ -698,103 +698,99 @@ const daeContent *XS::Choice::_solve(_solution &s, const daeContent *it, size_t 
 	p_content.getAU()->setInternalCounter(0); return itt;
 } 
 
-namespace XS //COLLADA_GCC(namespace XS{) //explicit-specialization crap.
+template<class A, class B>
+inline daeOrdinal XS::Choice::_solution::place(A,int,B,daeOrdinal)const
 {
-	template<class A, class B>
-	inline daeOrdinal XS::Choice::_solution::place(A,int,B,daeOrdinal)const
+	daeCTC<0>(); //TODO: not _placeElement() nor _placeElementBetween().
+	return 0; //-Wreturn-type
+}
+template<>
+inline daeOrdinal XS::Choice::_solution::place(void*, int name, void*, daeOrdinal)const
+{
+	return unordered_places[name];
+}
+template<>
+inline daeOrdinal XS::Choice::_solution::place(daeOrdinal a, int name, daeOrdinal b, daeOrdinal o)const
+{
+	//Note, the below code assumes k starts here.
+	size_t k = keysN-1;
+
+	//This is the optimize default for back insertion.
+	if(keys[k]>=a) return ordered_places[name];
+
+	//This is indicating that there is no ordered solution.
+	if(ordered_mapping==nullptr) return 0;
+
+	////THIS IS A PROPOSED ROUTE, THAT IS POSSIBLE IN SOME CASES////
+
+	#ifdef _DEBUG
+	//It must be proved there's a 1:1 name:ordinal relationship.
+	if(ordered_places==unordered_places)
 	{
-		daeCTC<0>(); //TODO: not _placeElement() nor _placeElementBetween().
-		return 0; //-Wreturn-type
+		assert(0); //THIS IS NOT IMPLEMENTED
+		daeOrdinal p = ordered_places[name];
+		//Return if no range tests are required.
+		if(p==0||a>keys[0]&&b<keys[k])
+		return p;
+		//Could be a binary-search, but will be small typically.
+		for(k=0;ordered_mapping[k]>p;k++);
+		//Past end?
+		if(k==keysN) return b>=keys[keysN-1]?0:p;
+		//else
+		return keys[k]>=a||b>keys[k]?0:p;
 	}
-	template<>
-	inline daeOrdinal XS::Choice::_solution::place(void*, int name, void*, daeOrdinal)const
+	#endif
+
+	////THIS SIMULATES INSERTION INTO A MINIATURE CONTENTS-ARRAY////
+
+	//HERE b IS UNCHARACTERISTICALLY DONE FIRST, BECAUSE k==keysN-1.
+
+	if(b>=keys[0])
 	{
-		return unordered_places[name];
+		//This is mainly to prevent underflow on the loop below.
+		//There's not a meaningful value for b if this doesn't hold.
+		k = 0; assert(b==keys[0]);
 	}
-	template<>
-	inline daeOrdinal XS::Choice::_solution::place(daeOrdinal a, int name, daeOrdinal b, daeOrdinal o)const
+	else while(b>keys[k]) k--; //Could be a binary-search, but will be small typically.
+
+	if(b!=ordered_mapping[k])
 	{
-		//Note, the below code assumes k starts here.
-		size_t k = keysN-1;
-
-		//This is the optimize default for back insertion.
-		if(keys[k]>=a) return ordered_places[name];
-
-		//This is indicating that there is no ordered solution.
-		if(ordered_mapping==nullptr) return 0;
-
-	  ////THIS IS A PROPOSED ROUTE, THAT IS POSSIBLE IN SOME CASES////
-
-		#ifdef _DEBUG
-		//It must be proved there's a 1:1 name:ordinal relationship.
-		if(ordered_places==unordered_places)
-		{
-			assert(0); //THIS IS NOT IMPLEMENTED
-			daeOrdinal p = ordered_places[name];
-			//Return if no range tests are required.
-			if(p==0||a>keys[0]&&b<keys[k])
-			return p;
-			//Could be a binary-search, but will be small typically.
-			for(k=0;ordered_mapping[k]>p;k++);
-			//Past end?
-			if(k==keysN) return b>=keys[keysN-1]?0:p;
-			//else
-			return keys[k]>=a||b>keys[k]?0:p;
-		}
-		#endif
-
-	  ////THIS SIMULATES INSERTION INTO A MINIATURE CONTENTS-ARRAY////
-
-		//HERE b IS UNCHARACTERISTICALLY DONE FIRST, BECAUSE k==keysN-1.
-
-		if(b>=keys[0])
-		{
-			//This is mainly to prevent underflow on the loop below.
-			//There's not a meaningful value for b if this doesn't hold.
-			k = 0; assert(b==keys[0]);
-		}
-		else while(b>keys[k]) k--; //Could be a binary-search, but will be small typically.
-
-		if(b!=ordered_mapping[k])
-		{
-			/*A 0-terminator exists at [keysN-1+1]*/
-			//This is inexact, but works on the assumption that b belongs to existing content.
-			b = /*k==keysN-1?0:*/ordered_mapping[k+1];
-		}
-		else b = ordered_mapping[k];
-
-		k = 0; while(keys[k]>a) k++; //Could be a binary-search, but will be small typically.
-
-		if(a!=ordered_mapping[k])
-		{
-			//This is inexact, but works on the assumption that a belongs to existing content.
-			a = k==0?daeOrdinals:ordered_mapping[k-1];
-		}
-		else a = ordered_mapping[k];
-
-		daeCM_Placement<_solution> p
-		(name,0,const_cast<_solution&>(*this));
-		if(DAE_OK==to->__placeXS<1>(a,p,b,o)) return p.ordinal; return 0;
+		/*A 0-terminator exists at [keysN-1+1]*/
+		//This is inexact, but works on the assumption that b belongs to existing content.
+		b = /*k==keysN-1?0:*/ordered_mapping[k+1];
 	}
+	else b = ordered_mapping[k];
 
-	template<class A, class B>
-	inline bool XS::Choice::_solution::requires_rearrange(A,B)const
+	k = 0; while(keys[k]>a) k++; //Could be a binary-search, but will be small typically.
+
+	if(a!=ordered_mapping[k])
 	{
-		daeCTC<0>(); //TODO: not _placeElement() nor _placeElementBetween().
-		return 0; //-Wreturn-type
+		//This is inexact, but works on the assumption that a belongs to existing content.
+		a = k==0?daeOrdinals:ordered_mapping[k-1];
 	}
-	template<>
-	inline bool XS::Choice::_solution::requires_rearrange(void*,void*)const
-	{
-		return ordered_mapping!=unordered_mapping;
-	}
-	template<>
-	inline bool XS::Choice::_solution::requires_rearrange(daeOrdinal,daeOrdinal)const
-	{
-		assert(ordered_mapping!=nullptr); return false;
-	}
+	else a = ordered_mapping[k];
 
-} //COLLADA_GCC(})
+	daeCM_Placement<_solution> p
+	(name,0,const_cast<_solution&>(*this));
+	if(DAE_OK==to->__placeXS<1>(a,p,b,o)) return p.ordinal; return 0;
+}
+
+template<class A, class B>
+inline bool XS::Choice::_solution::requires_rearrange(A,B)const
+{
+	daeCTC<0>(); //TODO: not _placeElement() nor _placeElementBetween().
+	return 0; //-Wreturn-type
+}
+template<>
+inline bool XS::Choice::_solution::requires_rearrange(void*,void*)const
+{
+	return ordered_mapping!=unordered_mapping;
+}
+template<>
+inline bool XS::Choice::_solution::requires_rearrange(daeOrdinal,daeOrdinal)const
+{
+	assert(ordered_mapping!=nullptr); return false;
+}
 
 namespace //C++98/03 (C2918)
 {
@@ -856,7 +852,7 @@ daeError XS::Choice::__tryCM(daeContent *text, daeContent *it, size_t to, size_t
 	 ||_solution_cache->fro!=froCM
 	 ||0!=pred.cmp(it,*_solution_cache))
 	{
-		std::vector<_solution>::iterator lb;
+		_solutions_vector::iterator lb;
 		lb = std::lower_bound(_solutions.begin(),_solutions.end(),it,pred);
 		if(pred.result!=0) //Inserting (NOT-THREAD-SAFE)
 		{

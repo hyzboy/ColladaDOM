@@ -47,7 +47,7 @@ RT::Texture * /*C4138*//*RT::*/LoadTargaFromMemory(const void *buf, size_t size,
 	daeIOController::BigEndian<16>(h.ImageHeight);
 	daeEH::Verbose<<"TGA texture loaded to memory "<<
 	h.ImageWidth<<" by "<<h.ImageHeight<<", pixeldepth is "<<h.PixelDepth;
-	#ifndef COLLADA_RT_BIG_ENDIAN 
+	#ifndef COLLADA_BIG_ENDIAN 
 	daeEH::Verbose<<"with no endian swapping.";
 	#else
 	daeEH::Verbose<<"with big endian swapping.";
@@ -75,7 +75,7 @@ RT::Texture * /*C4138*//*RT::*/LoadTargaFromMemory(const void *buf, size_t size,
 
 	//2017: "FORCE_RGB_TO_RGBA" was making glTexImage2D's 
 	//4-byte alignment a non-issue.
-	int tga_Width = ih*(alpha?4:3)/**(CHAR_BIT/8)*/;
+	int tga_Width = iw*(alpha?4:3)/**(CHAR_BIT/8)*/;
 	int gl_Width = tga_Width;
 	while(0!=(gl_Width&3)) gl_Width++;
 
@@ -92,14 +92,16 @@ RT::Texture * /*C4138*//*RT::*/LoadTargaFromMemory(const void *buf, size_t size,
 
 	//2017: There had been a bunch of maddening code here.
 	char *d = COLLADA_RT_array_new(char,gl_Width*ih);
+	//2019: FLIPPING SEEMS UNNECESSARY
 	//Flipping the Tga data before passing to OpenGL.
-	for(int i=ih;i-->0;p+=tga_Width)
+	//for(int i=ih;i-->0;p+=tga_Width)
+	for(int i=0;i<ih;i++,p+=tga_Width)
 	memcpy(d+i*gl_Width,p,tga_Width);
 
 	if(out==nullptr) out = COLLADA_RT_new(RT::Texture);
 	else COLLADA_RT_array_delete(out->Data);
 	
-	out->Data = d; out->Format = alpha?GL_RGBA:GL_RGB;
+	out->Data = d; out->Format = alpha?GL_BGRA:GL_BGR;
 
 	out->Width = iw; out->Height = ih; return out;
 }

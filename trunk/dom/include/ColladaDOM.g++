@@ -1,4 +1,10 @@
-		
+
+/*
+#WORK-IN-PROGRESS 
+#Trying to suppress GCC's warnings but nothing seems to 
+#ever do the trick :(
+*/
+
 //This file quiets warnings that are deemed unwarranted
 //so that -Wall can be used.
 //NOTE: It only applies to GCC because it can't spotfix
@@ -16,6 +22,12 @@
 #else //"push"
 #define __COLLADA_DOM__WARNING_HPP__
 #ifdef __GNUC__
+
+  //REMINDER: WARNING.HPP can't work with g++:
+  //https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
+
+	#warning "COLLADA-DOM: Attempting to suppress multiple GCC warnings..."
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winit-self" //useful
 #pragma GCC diagnostic ignored "-Wparentheses" //bad advice

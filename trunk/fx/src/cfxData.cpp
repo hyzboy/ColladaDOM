@@ -43,7 +43,7 @@ template<CGtype E, class T>
 struct cfxData_copier<FX::Sampler,5,E,T>
 {	 
 	//COLLADA's schemas do not define these.				
-	GLenum _wrap_GLenum(Collada05_XSD::fx_sampler_wrap_common e)
+	GLenum _wrap_GLenum(Collada05_xsd::fx_sampler_wrap_common e)
 	{
 		switch(e)
 		{
@@ -56,7 +56,7 @@ struct cfxData_copier<FX::Sampler,5,E,T>
 		case e.MIRROR: return GL_MIRRORED_REPEAT; 
 		}
 	}
-	GLenum _wrap_GLenum(Collada08_XSD::fx_sampler_wrap_enum e)
+	GLenum _wrap_GLenum(Collada08_xsd::fx_sampler_wrap_enum e)
 	{
 		switch(e)
 		{
@@ -69,7 +69,7 @@ struct cfxData_copier<FX::Sampler,5,E,T>
 		case e.MIRROR_ONCE: return GL_MIRROR_CLAMP_TO_EDGE; 
 		}
 	}
-	GLenum _filter_GLenum(Collada05_XSD::fx_sampler_filter_common e)
+	GLenum _filter_GLenum(Collada05_xsd::fx_sampler_filter_common e)
 	{
 		switch(e)
 		{	
@@ -196,7 +196,7 @@ struct cfxData_copier<FX::Sampler,8,E,T> : cfxData_copier<FX::Sampler,5,E,T>
 	using base::Data;
 	using base::_set;
 
-	GLenum _minfilter_GLenum(Collada08_XSD::fx_sampler_min_filter_enum e)
+	GLenum _minfilter_GLenum(Collada08_xsd::fx_sampler_min_filter_enum e)
 	{
 		switch(e) //Do the 1.5.0 enumerants make sense?
 		{	
@@ -206,7 +206,7 @@ struct cfxData_copier<FX::Sampler,8,E,T> : cfxData_copier<FX::Sampler,5,E,T>
 		default: return GL_NEAREST;
 		}		
 	}
-	GLenum _mipfilter_GLenum(Collada08_XSD::fx_sampler_mip_filter_enum e)
+	GLenum _mipfilter_GLenum(Collada08_xsd::fx_sampler_mip_filter_enum e)
 	{
 		switch(e) //Do the 1.5.0 enumerants make sense?
 		{	
@@ -217,7 +217,7 @@ struct cfxData_copier<FX::Sampler,8,E,T> : cfxData_copier<FX::Sampler,5,E,T>
 		default: return GL_NEAREST;
 		}		
 	}
-	GLenum _magfilter_GLenum(Collada08_XSD::fx_sampler_mag_filter_enum e)
+	GLenum _magfilter_GLenum(Collada08_xsd::fx_sampler_mag_filter_enum e)
 	{
 		switch(e) //Do the 1.5.0 enumerants make sense?
 		{	
@@ -346,12 +346,12 @@ template<int YY> struct cfxData_MakeData
 	}
 
 	COLLADA_NOINLINE
-	void operator()(const const_daeChildRef &e)
+	void operator()(const xs::element &e)
 	{
 		//GCC/C++ don't allow explicit specialization.
 		_foreach(daeFig<YY>(),e);
 	}	
-	void _foreach(daeFig<5>,const const_daeChildRef &e)
+	void _foreach(daeFig<5>,const xs::element &e)
 	{	
 		//This ensures genus cannot be mistaken.		
 		if(1!=e.name()) switch(e->getElementType())
@@ -407,7 +407,7 @@ template<int YY> struct cfxData_MakeData
 		default: assert(0);
 		}
 	}
-	void _foreach(daeFig<8>, const const_daeChildRef &e)
+	void _foreach(daeFig<8>, const xs::element &e)
 	{	
 		//This ensures genus cannot be mistaken.		
 		if(1!=e.name()) switch(e->getElementType())

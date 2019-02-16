@@ -60,7 +60,7 @@ global $COLLADA_DOM_GENERATION;
 global $root_xmlns, $root_version;
 echoCode("
 #ifndef COLLADA_DOM_LITE
-inline ::COLLADA::XS::Schema &__XS__()
+inline ::COLLADA::XS::Schema &__XS__Schema__()
 {
 	static struct schema : XS::Schema
 	{
@@ -70,9 +70,21 @@ inline ::COLLADA::XS::Schema &__XS__()
 	assert($COLLADA_DOM_GENERATION==getGeneration());		
 	setAgent(::ColladaAgent);
 	");
+
+global $root_xmlns2; //NEW
+$nl = '';
+foreach($root_xmlns2 as $k=>$ea) if(!empty($ea))
+{
+	$nl = "\n";
+	if(!empty($k))
+	echo  
+"	addXMLNS(\"$k\",\"$ea\");\n";
+	else echo 
+"	addXMLNS(\"$ea\");\n";
+}echo $nl;
+
 	echo 
 "	XS::Restriction *r;";
-
 //NOTE: ADDING PREFIXES TO MATCH tpl-classes-cpp
 //(AND ALSO FOR FUTURE MIXED NAMESPACE SCENARIOS)
 foreach($typemeta as $type=>$meta)	

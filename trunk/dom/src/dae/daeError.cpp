@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 COLLADA_(namespace)
 {//-.

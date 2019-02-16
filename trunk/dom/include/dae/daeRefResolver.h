@@ -10,7 +10,7 @@
 #define __COLLADA_DOM__DAE_REF_RESOLVER_H__
 
 #include "daeSmartRef.h"
-#include "daeStringRef.h"
+#include "daeAtomicType.h"
 #include "daeErrorHandler.h"
 
 COLLADA_(namespace)
@@ -104,18 +104,20 @@ COLLADA_(public) //THIS CLASS IS STRUCT-LIKE
 	}
 
 	/**
-	 * @c type can be an array, value, or @c nullptr. It's a minefield.
-	 * This API returns the @c daeAtomicType of @c typeInstance.
-	 * @return Returns @c daeAtomicType::EXTENSION if @c type==nullptr.
+	 * Tells if @c typeInstance is a nonzero @c daeOpaque object.
 	 */
-	inline int getAtomicType()const
-	{
-		return &typeInstance==nullptr?0:type->where<daeAtom>().getAtomicType();
-	}
+	inline bool hasValue()const{ return &typeInstance!=nullptr; }
+
 	/**
-	 * @return Returns @c daeAtomicType::EXTENSION!=getAtomicType().
+	 * Formerly "getAtomicType."
+	 * Gets the atom's typewriter/typeinfo. 
+	 * This API returns the @c daeTypewriter of @c typeInstance.
+	 * @return Returns @c daeAtomicType_void if @c type==nullptr.
 	 */
-	inline bool hasAtomicType()const{ return daeAtomicType::EXTENSION!=getAtomicType(); }
+	inline daeTypewriter &getValueType()const
+	{
+		return &typeInstance==nullptr?daeAtomicType_void:type->where<daeAtom>();
+	}
 			
 COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 
@@ -143,7 +145,7 @@ COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 	#error This could support cross-module types by not using daeAtomicType.
 	#endif
 	template<typename T> COLLADA_NOINLINE
-	/**UNUSED
+	/**UNUSED, EXPERIMENTAL
 	 * Formerly "getVector."
 	 * This operation is provided because the COLLADA user manual seems
 	 * to suggest that values are to be "cast" or "directly cast" given
@@ -157,20 +159,20 @@ COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 		//REMINDER: these can be equal, in which case switch won't work.
 		//This can be done somewhat better, but the order is roughly in
 		//the likelihood that a type is used, in case it matters at all.
-		int at = getAtomicType();
-		if(at==daeAtomicType::DOUBLE)		
+		int at = getValueType().getAtomicType();
+		if(at==daeAtom::DOUBLE) //COLLADA_DOM_ATOMIC_FLOAT(double)?
 		_copy<daeDouble>(o,vN);
-		else if(at==daeAtomicType::FLOAT)		
+		else if(at==daeAtom::FLOAT) //COLLADA_DOM_ATOMIC_FLOAT(float)?
 		_copy<daeFloat>(o,vN);			
-		else if(at==daeAtomicType::INT)		
+		else if(at==daeAtom::INT)		
 		_copy<daeInt>(o,vN);
-		else if(at==daeAtomicType::UINT)		
+		else if(at==daeAtom::UINT)		
 		_copy<daeUInt>(o,vN);
-		else if(at==daeAtomicType::LONG)		
+		else if(at==daeAtom::LONG)		
 		_copy<daeLong>(o,vN);
-		else if(at==daeAtomicType::ULONG)		
+		else if(at==daeAtom::ULONG)		
 		_copy<daeULong>(o,vN);					
-		else if(at==daeAtomicType::TOKEN||at==daeAtomicType::STRING)
+		else if(at>=daeAtom::STRING)
 		{
 			//This is here to support anySimpleType (domAny) or union
 			//data. An array of strings is typed, and won't be casted.
@@ -189,118 +191,21 @@ COLLADA_(public) //UNUSED (non COLLADA applications can have at it.)
 			}
 			else o = 0; //A string list?
 		}
-		else if(at==daeAtomicType::BYTE)		
+		else if(at==daeAtom::BYTE)		
 		_copy<daeByte>(o,vN);
-		else if(at==daeAtomicType::UBYTE)		
+		else if(at==daeAtom::UBYTE)		
 		_copy<daeUByte>(o,vN);
-		else if(at==daeAtomicType::SHORT)		
+		else if(at==daeAtom::SHORT)		
 		_copy<daeShort>(o,vN);
-		else if(at==daeAtomicType::USHORT)		
+		else if(at==daeAtom::USHORT)		
 		_copy<daeUShort>(o,vN);
-		else if(at==daeAtomicType::BOOLEAN)		
+		else if(at==daeAtom::BOOLEAN)		
 		_copy<daeBoolean>(o,vN);	
+		else if(at==daeAtom::UBOOLEAN)		
+		_copy<bool>(o,vN);
 		else o = 0; for(daeOffset i=o;i<N;i++) vN[i] = def; return o;
 	}	
 };					
-
-/**HELPER
- * COLLADA C++ lightweight string-view, for use with parsing APIs.
- * This class is to be used with @c daeURI::getURI_protocol() and
- * so on. (There is an API of this type for each part of the URL).
- * The APIs at their base are designed to fill array-like classes.
- * @remark At first this class was more like an adaptor, but it's
- * thought useful to accommodate append_and_0_terminate/dae_clear.
- */
-struct daeRefView : public daeString_support<daeRefView>
-{
-	daeString view; size_t extent;
-								
-COLLADA_(public) //Standard Library compatibility layer	
-	/**
-	 * @c daeString_support requires this.
-	 */
-	inline size_t size()const{ return extent; }	
-	/**WARNING
-	 * @warning NOT-0-TERMINATED!
-	 * @c daeString_support requires this.
-	 */
-	inline daeString data()const{ return view; }	
-	/**
-	 * This is practically unavoidable.
-	 */
-	inline bool empty()const{ return 0==extent; }		
-
-COLLADA_(public) //NON-COMPARISON OPERATORS
-
-	/** @c daeURI::operator+() does this. */
-	inline daeString operator+(size_t i)const
-	{
-		//To not assert(), use view+i or end().
-		assert(i<extent); return view+i; 
-	}
-	/** Implements operator[] like behavior, etc. */
-	inline const daeStringCP &operator[](size_t i)const
-	{
-		//To not assert(), use view[i] or *end().
-		assert(i<extent); return view[i]; 
-	}	
-
-COLLADA_(public) //WORRIED THIS CONVERTS IN UNEXPECTED PLACES.	
-
-	typedef std::basic_string<daeStringCP> _std_string;	
-	/**LEGACY?
-	 * Helps std::set<std::string>::find(). (For example.) 
-	 * @remarks There was an "append_to" and "assign_to" API. 
-	 * But as long as this is here, for now it seems better to 
-	 * leave it at that. This kind of covers the legacy patterns
-	 * used by the pre-2.5 version of @c daeURI.
-	 */
-	inline operator _std_string()const{ return _std_string(view,extent); }
-
-	/**LEGACY-SUPPORT, NOT-RECOMMEND
-	 * This supports pre-2.5 @c daeURI patterns.
-	 */
-	inline daeString c_str(const daeArray<daeStringCP> &def=daeArray<daeStringCP,60>())const
-	{
-		return const_cast<daeArray<daeStringCP>&>(def).assign_and_0_terminate(view,extent).data();
-	}
-};
-/**HELPER
- * This marks a 0-terminated @c daeRefView. 
- * It's added to extend @c daeURI::getURI().
- * It has nome notable operators and shadows.
- * @remarks
- * This converts to @c daeBoundaryStringIn for library
- * APIs. It can't convert to @c getURI()'s @c daeString
- * as @c std::string methods don't know which one to use.
- * Array-like containers (e.g. std::vector) don't readily
- * convert to pointers; so perhaps this is best?
- * ANYWAY. 
- * To get @c daeString, using the built-in unary + operator
- * is an option. @c daeBoundaryStringIn converts to it. It's
- * possible to define @c operator+() explicitly, but it seems
- * more like a "clever" shortcut. Unary + is not often defined.
- * MORE PROSAIC is writing ".view."
- * ".data()" or ".c_str()" work equally well. @c &operator[]()
- * might @c assert().
- */
-struct daeRefView_0 : daeRefView
-{	
-	/**LEGACY-SUPPORT, NOT-RECOMMEND
-	 * This supports pre-2.5 @c daeURI patterns.
-	 * @note No temporary buffer required.
-	 */
-	inline daeString c_str()const{ return data(); }
-
-	//INVIABLE?
-	//std::string::append() sees this ambiguously.
-	//+ becomes daeString via daeBoundaryStringIn.
-	/** Since changing getURI() to daeRefView. */
-	//inline operator daeString()const{ return view; }
-
-	/** Resolves @c daeURI construction/assignment issues. */
-	inline operator daeBoundaryStringIn()const{ return view; }
-};
 
 /**SCOPED-ENUM
  * These enums indicate types of class @c daeRef.
@@ -401,23 +306,23 @@ COLLADA_(public) //LEGACY QUERY API
 			//There are other ways to do this, but this is the safest
 			//way, and eventually it will be desirable to extract the
 			//binary-compatibility identifier.
-			if(nullptr==req.object||_unsafe(dae(*(type*)&req.object)))
+			if(nullptr==req.object||_unsafe(*dae(*(type*)&req.object)))
 			const_cast<daeObjectRef&>(req.object) = dae(def);
 			return *(type*)&req.object;
 		}
-		static bool _unsafe(const daeObject *o)
+		static bool _unsafe(const daeObject &o)
 		{
 			#ifdef COLLADA_dynamic_daeSafeCast
 			return dynamic_cast<type>(&*req.object)==nullptr
 			#else
-			return o->__DAEP__Object__v1__model()
+			return o.__DAEP__Object__v1__model()
 			!=typename T::__COLLADA__T().__DAEP__Object__v1__model()
 			#endif
-			?_true(*o):false;
+			?_true(o):false;
 		}
-		static bool _unsafe(const daeElement *e)
+		static bool _unsafe(const daeElement &e)
 		{
-			return daeUnsafe<T>(e)?_true(*e):false;
+			return daeUnsafe<T>(e)?_true(e):false;
 		}
 		static bool _true(const daeObject &o)
 		{
@@ -515,6 +420,10 @@ COLLADA_(public) //daeSafeCast() SHORTHANDS
 	/** Follows style of daeElement::a(). */
 	template<class T> T *a()
 	{
+		//This class is unlikely to be nullptr, however this
+		//family of short cast APIs normally does this check.
+		if(daeObject::_this__nullptr(this)) return nullptr;
+
 		//For this to work, T must have a static getRefType().
 		return T::getRefType()==getRefType()?(T*)this:nullptr;
 	}
@@ -547,14 +456,15 @@ COLLADA_(public) //ACCESSORS
 		if(c._isElement()) return (const daeElement*)&c; return nullptr;
 	}
 
-COLLADA_(protected) //daeRefView support
+COLLADA_(protected) //daeURI string-view implementation
 
 	//NEW: this adds dae_clear/dae_append support to _getT().
 	template<enum dae_clear clear, class T> 
 	/**HELPER
-	 * This is called by @c daeURI's parse APIs. It's defined in
-	 * @c daeRef because @c daeRefView::assign() is a @c private
-	 * API, and @c daeRef is the one-and-only @c friend.
+	 * This is called by @c daeURI's parse APIs. It's implemented
+	 * here in case another @c daeRef based class makes use of it.
+	 * @remark This code came from earlier days/attempts to carry
+	 * on legacy APIs. I don't know if it's still relevant or not.
 	 */
 	static inline void _getT(T &str, daeString pos, daeUShort len)
 	{
@@ -562,16 +472,10 @@ COLLADA_(protected) //daeRefView support
 	}
 	//Reminder: GCC/C++ can't reasonably do explicit-specialization.
 	template<enum dae_clear clear>
-	/**TEMPLATE-SPECIALIZATION @c daeRefView cannot be appended to. */
-	static inline void _getT(daeRefView &str, daeString pos, daeUShort len)
+	/**TEMPLATE-SPECIALIZATION @c daeName cannot be appended to. */
+	static inline void _getT(daeName &str, daeString pos, daeUShort len)
 	{
-		str.view = pos; str.extent = len-1; daeCTC<clear>();
-	}
-	template<enum dae_clear clear>
-	/**TEMPLATE-SPECIALIZATION @c daeRefView_0 cannot be appended to. */
-	static inline void _getT(daeRefView_0 &str, daeString pos, daeUShort len)
-	{
-		str.view = pos; str.extent = len-1; daeCTC<clear>();
+		str.string = pos; str.extent = len-1; daeCTC<clear>();
 	}
 	template<class T>
 	////////////////////////////////////////////////////////////////
@@ -625,12 +529,11 @@ template<class This>
  *
  * CUSTOMIZATION
  * @tparam This can override @c _eq(), @c _lt(), and @c _gt(), and must
- * implement @c operator==(daeString), and can reimplement @c operator<<()
- * and @c operator>>() if these defaults do not satisfy.
+ * implement @c operator==(daeString).
  */
 class daeRef_support : public daeRef
 {
-COLLADA_(public) //daeArray traits
+COLLADA_(public) //daeArray traits, etc.
 	/**
 	 * Refs sould NOT implement @c __COLLADA__move() nor 
 	 * @c __COLLADA__locate(), because objects cannot be 
@@ -643,7 +546,7 @@ COLLADA_(public) //daeArray traits
 	 * when it constructors a temporary reference object.
 	 */
 	typedef const DAEP::Object __COLLADA__Object;
-		
+															
 COLLADA_(protected) //MIRRORING OF daeRef CONSTRUCTORS
 	/**
 	 * Non-Constructor 
@@ -667,7 +570,7 @@ COLLADA_(public) //GENERIC COMPARISON-OPERATOR SUPPORT
 
 	///////////////////////////////////////////////////
 	//TODO? IT'S VERY TEMPTING TO REMOVE ALL OF THESE//
-	//Reminder: daeTypist::compare() depends on these//
+	//Reminder: daeTypist::collate() depends on these//
 	///////////////////////////////////////////////////		
 	
 	/** Implements @c operator==() without conversion. */
@@ -728,6 +631,10 @@ COLLADA_(public) //GENERIC COMPARISON-OPERATOR SUPPORT
 	inline bool operator<(Explicit &cmp)const{ return ((This*)this)->_lt(&cmp); }		
 };
 
+//NOTE: 1 is equivalent to 0 but used as a dummy because
+//IntelliSense cannot display whichever value is used by
+//daeURI.h.
+template<int size_on_stack=1>
 /**ADVANCED
  * COLLADA C++ class that houses 3 kinds of strings in 1.
  *
@@ -738,7 +645,7 @@ COLLADA_(public) //GENERIC COMPARISON-OPERATOR SUPPORT
  * This class must be encapsulated within an object that is
  * set up to supply a thunk via @c __DAEP__Object__v1__model().
  */
-template<int size_on_stack> class daeRefString
+class daeRefString
 {	
 COLLADA_(public) //daeRefString is an encapsulated class.
 
@@ -754,10 +661,10 @@ COLLADA_(public) //daeRefString is an encapsulated class.
 	 * @note It's not enough to use a pointer, because the 
 	 * thunk @c _offset must agree with the array's address.
 	 */
-	inline daeArray<daeStringCP> &_varrayToArray()
+	inline daeArray<> &_varrayToArray()
 	{	
 		_varray-=daeOffsetOf(daeAlloc<daeStringCP>,_varray);
-		return *(daeArray<daeStringCP>*)&_varray;
+		return *(daeArray<>*)&_varray;
 	}
 
 COLLADA_(public) //CONSTRUCTORS
@@ -812,7 +719,7 @@ COLLADA_(public) //Accessors & Mutators
 	 * Sets @a ref as the internal string. 
 	 * NOTE: @a ref IS NOT A @c daeStringRef. THE OUTER CLASS IS
 	 * RESPONSIBLE FOR MANAGING @a ref BY WAY OF @c isView().
-	 * NEITHER IS IT A @c daeRefView.
+	 * NEITHER IS IT A "daeRefView."
 	 */
 	inline void setView(daeString ref)
 	{
@@ -825,7 +732,7 @@ COLLADA_(public) //Accessors & Mutators
 	 */
 	inline void setString(const daeObject &c, daeString str)
 	{
-		if(str==nullptr) str = "";
+		if(str==nullptr) str = empty_daeString1;
 		((daeRefString<0>*)this)->_setString(c,str,strlen(str)+1);
 	}
 	/**OVERLOAD
@@ -870,7 +777,7 @@ COLLADA_(public) //Accessors & Mutators
 			_isAU = 1; //__DAEP__Object__v1__model() must have set up a thunk.
 			_varray = ((daeAlloc<daeStringCP>&)c[&_varray].getAllocThunk())._varray; 
 		case 1:
-			daeArray<daeStringCP> &a = _varrayToArray();
+			daeArray<> &a = _varrayToArray();
 			a.grow(size); _varray = a.getAU()->_varray;
 		}memcpy((void*)_varray,str,size);		
 	}
@@ -1051,13 +958,24 @@ COLLADA_(public) //OPERATORS
 
 	COLLADA_DOM_OBJECT_OPERATORS(daeContainedObject)
 
-COLLADA_(protected) //Various
-	/**MUTABLE?
+COLLADA_(public) //Various
+	/**MUTABLE
+	 * Code can freely set this if it knows the outermost type of
+	 * its object. It's just free memory to store a simple status.
+	 * Use @c getObjectTags().objectTag to retrieve the set value.
+	 */
+	inline void setObjectTag(unsigned char i)const
+	{
+		_getObjectTags().objectTag = i;
+	}
+
+	/**MUTABLE
 	 * Gets the container object containing @c this, or @c nullptr.
 	 */	
 	inline daeContainerObject<> *getContainer()const{ return _container; };
 
-	/**OVERLOAD, MUTABLE?
+COLLADA_(protected) //Internal	
+	/**OVERLOAD
 	 * Removes this object from its container. It's not exposed, so base
 	 * classes can define their own semantics.
 	 */
@@ -1066,7 +984,7 @@ COLLADA_(protected) //Various
 		if(_container!=nullptr)
 		_container->_contained.remove(this); _container = nullptr;
 	}
-	/**OVERLOAD, MUTABLE?
+	/**OVERLOAD
 	 * Removes this object from its container. It's not exposed, so base
 	 * classes can define their own semantics.
 	 */
@@ -1096,7 +1014,7 @@ COLLADA_(private) //Virtual method
 	 * @return Returns the resolved object, or null if resolving failed.
 	 * returns false otherwise.
 	 */
-	virtual daeOK _resolve(const daeRef &ref, daeRefRequest &req)const = 0;	
+	virtual daeError _resolve(const daeRef &ref, daeRefRequest &req)const = 0;	
 
 COLLADA_(private) //DATA-MEMBER
 	/**

@@ -60,12 +60,18 @@ COLLADA_(public)
 
 	xs::string URL;
 
+	xml::base XMLBase;
+
 	GLuint TexId;
 
 COLLADA_(public)
 
-	Image(xs::string URI=nullptr):URL(URI),TexId()
-	{}
+	Image(xs::string URL=nullptr):URL(URL),TexId()
+	{
+		//May change xml::base back to an object.
+		daeCTC<sizeof(XMLBase)==sizeof(void*)>();
+	}
+
 	~Image(){ DeleteTexture(); }
 	
 	/**

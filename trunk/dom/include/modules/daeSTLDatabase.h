@@ -52,18 +52,16 @@ COLLADA_(public) //CONSTRUCTOR
 	}
 	
 COLLADA_(public)
-	/**
+	/**LEGACY, ILLUSTRATIVE
 	 * @c DataBase has to be constructed separately.
 	 */
 	struct DataBase
 	{
+		daeObject::userptr userptr;
+
 		template<class T>
 		//Assuming T matches!
-		DataBase(T*):userptr()
-		{
-			daeDBaseOK(T,object);
-		}
-		daeObject::userptr userptr;
+		DataBase(T*):userptr(){ daeDBaseOK(T,object); }		
 	};	
 	template<class T> 
 	/**VARIABLE-LENGTH 
@@ -161,14 +159,15 @@ COLLADA_(public) //daeDB methods
 	}	
 	bool _atomize_on_noting(daeContainedObject &cache_object)
 	{
-		_cache._getClassTag() = 1; _cache.contain(cache_object); return true;
+		_cache.setObjectTag(1); 
+		_cache.contain(cache_object); return true;
 	}
 	void _noting(const Element &elem, const DAEP::Change &note, daeData *attrib)
 	{	
 		//SEE _atomize_on_noting().
-		if(0!=_cache._getClassTag()) //NOT THREAD-SAFE
+		if(0!=_cache.getObjectTags().objectTag) //NOT THREAD-SAFE
 		{
-			_cache._getClassTag() = 0; _cache.atomizeContained();			
+			_cache.setObjectTag(0); _cache.atomizeContained();			
 		}
 
 	  ///////////////////////////////////////////////////////////////////////////////////
@@ -176,15 +175,21 @@ COLLADA_(public) //daeDB methods
 	  //THAT SEPARATE, MAINLY BECAUSE IT SHOULD WORK WITH OR WITHOUT THE CHANGE-NOTICES//
 	  ///////////////////////////////////////////////////////////////////////////////////
 
-		_migrate_operation op; //C++98/03 support
+		_migrate_operation_base op; //C++98/03 support
 
 		op.first = elem.object.getDocument(); //source
 
 		if(DAEP::ATTRIBUTE==note.kind_of_change)
 		{
-			if(attrib->getIsID()&&op.first!=nullptr)			
-			if("id"==attrib->getName()||"sid"==attrib->getName())
-			op.first->_carry_out_change_of_ID_or_SID(note,attrib);			
+			//Adding nonstatic IDs that are technically nonschema.
+			//Not relying on getIsID being set up.			
+			//if(attrib->getIsID()&&op.first!=nullptr)			
+			//if("id"==attrib->getName()||"sid"==attrib->getName())
+			if(op.first&&_ID_or_SID(attrib->getName()))
+			{
+				op.first->_carry_out_change_of_ID_or_SID(note,attrib);			
+			}
+
 			return;
 		}
 
@@ -193,35 +198,121 @@ COLLADA_(public) //daeDB methods
 		if(DAEP::ELEMENT==note.kind_of_change)
 		{
 			op.second = elem.object.getDocument(); //destination
+			
+			#ifdef NDEBUG //GCC wants quotes.
+			#error "Ensure elements aren't their own parent?"
+			#endif
 
-			//If both documents are the same, it shouldn't effect the legacy lookups.
-			//(Note, much more likely is inserting from "no" document and vice-versa.)
-			if(op.first!=op.second)	op(elem.object);
+			//THIS GETS REALLY COMPLICATED. I WORRY IT'S TOO MUCH TO
+			//ASK OF USERS TO IMPLEMENT THIS WITHOUT ADDITIONAL HELP.
+
+			if(op.second==nullptr) 
+			{
+				//If removing, avoiding namespace resolution because
+				//it has the effect of injecting the xmlns attribute
+				//indiscriminately.
+
+				if(op.first!=nullptr)
+				{
+					static_cast<_migrate_operation<dae3ool::is_not>&>
+					(op)(elem.object);				
+				}
+			}
+			else
+			{	
+				//If inserting, resolving namespace. op is unable to
+				//to resolve xmlns attributes for elem.object itself.
+				//op interleaves document-transition code with xmlns
+				//resolution calls.
+
+				elem.object.migrateNamespace(); 
+
+				if(0!=elem.object.getMigrationByte()) //OPTIMIZATION
+				{
+					//If not doing document transition, just resolve
+					//the xmlns attributes.
+
+					if(op.first!=op.second)
+					{
+						static_cast<_migrate_operation<dae3ool::is_neither>&>
+						(op)(elem.object);		
+					}
+					else daeElement::resolveNamespace_g(elem.object);
+				}
+			}
 		}
+	}	
+	static bool _ID_or_SID(daeString p)
+	{
+		if('s'==*p) p++; return 'i'==*p&&'d'==p[1]&&'\0'==p[2];
 	}
-	struct _migrate_operation //C++98/03 support
+	struct _migrate_operation_base
 	:
 	std::pair<const daeDocument*,const daeDocument*>
 	{
-		void operator()(const daeElement *ch)
+					COLLADA_NOINLINE
+
+		void document_transition(const daeElement &ch, daeMigrationByte mb)
 		{
-			if(ch->getOptimizationBit_has_registered_ID_attribute())
+			if(mb.has_static_ID_attribute()) //2
 			{
-				#ifdef NDEBUG
-				#error What about <xs:anyAttribute>?
-				#endif
 				daeAttribute *ID;
-				ID = ch->getMeta()->getFirstID();
+				ID = ch.getMeta().getFirstID();
 				for(;ID!=nullptr;ID=ID->getNextID())
+				//if("id"==ID->getName()
+				//||"sid"==ID->getName())
+				if(_ID_or_SID(ID->getName()))
+				first->_migrate_ID_or_SID(second,&ch,ID); 
+			}
+			if(mb.has_nonstatic_attribute()) //4
+			{
+				daeAA &aa = ch.getAttributes();				
+				daeAA::iterator itt,it = aa.cbegin()+aa.getAnyExtraPart().first;
+				for(itt=aa.cend();it<itt;it++) 
 				{
-					if("id"==ID->getName()
-					||"sid"==ID->getName())
-					first->_migrate_ID_or_SID(second,ch,ID); //source->destination
+					//Not relying on getIsID being set up.
+					//if(it->getIsID())					
+					if(_ID_or_SID((*it)->getName()))
+					first->_migrate_ID_or_SID(second,&ch,*it);
+				}
+			}			
+
+			#ifdef NDEBUG
+			#error Maybe just OR mb into a member, and set "second" after?
+			#endif				
+			if(mb.hasAttribute_xml_base()) //32
+			{
+				*(char*)&second->getPseudoElement().getMigrationByte()
+				|=mb.XML_BASE;
+				assert(second->getPseudoElement().hasAttribute_xml_base());
+			}
+		}
+	};
+	template<dae3ool::State namespace_resolution>
+	struct _migrate_operation:_migrate_operation_base
+	{	
+		static void f(const daeElement &ch)
+		{
+			ch.migrateNamespace(namespace_resolution);
+		}
+		inline void operator()(const daeElement &ch)
+		{	
+			daeMigrationByte mb = ch.getMigrationByte();
+				 
+			if(0!=mb) if(mb!=mb.CONTENT_ALLOCATION_UNIT) //1
+			{
+					
+					document_transition(ch,mb);
+
+				 
+				if(!mb.definitely_is_childless()) //1
+				{
+					goto recurse;
 				}
 			}
-			if(!ch->getOptimizationBit_is_definitely_not_a_graph()) //Recurse?
+			else recurse:
 			{
-				ch->getContents().for_each_child(*this);
+				ch.getContents().for_each(f,*this);
 			}
 		}
 	};

@@ -63,6 +63,9 @@
 #ifndef COLLADA_DOM_DOUBLE
 #define COLLADA_DOM_DOUBLE float
 #endif
+#ifdef SN_TARGET_PS3
+#define COLLADA_BIG_ENDIAN
+#endif
 #if !defined(BUILDING_COLLADA_DOM) && !defined(IMPORTING_COLLADA_DOM)
 #define IMPORTING_COLLADA_DOM
 #endif
@@ -78,7 +81,16 @@
 #include <ColladaDOM.inl>
 #include "../../xmlns/http_www_collada_org_2005_11_COLLADASchema/config.h"
 #include "../../xmlns/http_www_collada_org_2008_03_COLLADASchema/config.h"
-   
+
+//Not including in this revision.
+#if 0
+//EXPERIMENTAL
+//lab, lab::vector & lab::matrix
+//This is a new 3-D math library.
+//It appears as lab in the files.
+#include <ColladaLAB.inl>
+#endif
+
 #define COLLADA_DOM_LITE
 #ifdef PRECOMPILING_COLLADA_FX
 #if COLLADA_DOM_GENERATION!=1
@@ -120,10 +132,13 @@ COLLADA_(namespace)
 
 	namespace FX
 	{
+		//SCHEDULE FOR REMOVAL?
 		namespace xs = ::COLLADA::DAEP::xs;
-		namespace Collada05_XSD = ::COLLADA::http_www_collada_org_2005_11_COLLADASchema;
+		namespace xml = ::COLLADA::DAEP::xml;
+
+		namespace Collada05_xsd = ::COLLADA::http_www_collada_org_2005_11_COLLADASchema;
 		namespace Collada05 = ::COLLADA::DAEP::http_www_collada_org_2005_11_COLLADASchema;
-		namespace Collada08_XSD = ::COLLADA::http_www_collada_org_2008_03_COLLADASchema;
+		namespace Collada08_xsd = ::COLLADA::http_www_collada_org_2008_03_COLLADASchema;
 		namespace Collada08 = ::COLLADA::DAEP::http_www_collada_org_2008_03_COLLADASchema;
 	}
 
