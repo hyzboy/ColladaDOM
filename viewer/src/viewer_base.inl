@@ -5,9 +5,11 @@
  * http://www.opensource.org/licenses/mit-license.php
  *
  */
-#include "viewer_base.pch.h" //IntelliSense
+#include "viewer_base.pch.h"
 
-#include "../../dom/include/WARNING.HPP" //STFU (GCC)
+//GCC precompiled headers cannot remember
+//#pragma diagnostics; so bring them back.
+#include <ColladaDOM.g++>
 
 //demo.dae floods the console.
 //See Silencer implemented below.
@@ -459,7 +461,9 @@ static void COLLADA_viewer_main2(const char *dae, const void *default_dae)
 		if(word=="lerp") lerp = true;
 	}				
 
-	//This is already set if in the first 4096 characters.
+	#ifdef NDEBUG
+	#error glIsEnabled crashes Xming (free?) except for cad.dae?
+	#endif	
 	if(sRGB!=(1==glIsEnabled(GL_FRAMEBUFFER_SRGB))) 
 	ProcessInput('y');
 	//These are for problem documents only.
@@ -633,11 +637,11 @@ struct TestIO : daeIO //QUICK & DIRTY
 		if(URI==nullptr||"file"!=URI->getURI_protocol())
 		return false;
 		#ifdef _WIN32
-		daeRefView v = URI->getURI_upto<'?'>(); int UNC = v[7]=='/'?8:5;
+		daeName v = URI->getURI_upto<'?'>(); int UNC = v[7]=='/'?8:5;
 		maxpath[MultiByteToWideChar(CP_UTF8,0,v+UNC,v.extent-UNC,maxpath,MAX_PATH-1)] = 0;
 		#else
 		//ASSUMING NOT REMOTE FOR NOW
-		daeRefView v = URI->getURI_path();
+		daeName v = URI->getURI_path();
 		if(v.extent+sizeof("/cygdrive")>=sizeof(maxpath))
 		return false;
 		int cygdrive = 0;
@@ -645,10 +649,10 @@ struct TestIO : daeIO //QUICK & DIRTY
 		if(v[0]=='/'&&v[2]==':') //Open command line from outside Cygwin?
 		{
 			cygdrive = strlen(strcpy(maxpath,"/cygdrive/c/"));
-			maxpath[sizeof("/cygdrive")] = v.view[1]; v.view+=3; v.extent-=3;
+			maxpath[sizeof("/cygdrive")] = v.string[1]; v.string+=3; v.extent-=3;
 		}
 		#endif
-		memcpy(maxpath+cygdrive,v.view,v.extent); maxpath[cygdrive+v.extent] = '\0';
+		memcpy(maxpath+cygdrive,v.string,v.extent); maxpath[cygdrive+v.extent] = '\0';
 		#endif
 		return true;
 	}
@@ -774,17 +778,27 @@ static struct TestPlatform : daePlatform //SINGLETON
 				if(index!=nullptr)
 				{
 					zae->setDocument(index);
-					daeRefView fragment = req.localURI->getURI_fragment();
+					daeName fragment = req.localURI->getURI_fragment();
 					if(fragment.empty()) fragment = URI.getURI_fragment();
 					index->getFragment() = fragment;
 				}
 			}
 			goto zip;			
 		}
+		/*daePlatform::introduceToDocument/namespaces makes peeking unnecessary.
 		extern daeMeta *InitSchemas(int);
-		daeMeta *meta = InitSchemas(Peek_xmlns(req)=="http://www.collada.org/2005/11/COLLADASchema"?5:8);
+		daeMeta *meta = InitSchemas(Peek_xmlns(req)=="http://www.collada.org/2005/11/COLLADASchema"?5:8);*/
+		daeMeta *meta = nullptr;
 		req.fulfillRequestI(meta,I,doc); 
 zip:	if(doc==DAE_OK) URI = &doc->getDocURI(); return doc; 
+	}
+	virtual void introduceToDocument(const daeDocument&, daeTags et, const XS::Schema* &xsd)
+	{
+		extern daeMeta *InitSchemas(int);
+		static xmlns collada05("http://www.collada.org/2005/11/COLLADASchema");
+		static xmlns collada08("http://www.collada.org/2008/03/COLLADASchema");
+		if(collada05.namespaceTag==et.namespaceTag) xsd = &InitSchemas(5)->getSchema(); 
+		if(collada08.namespaceTag==et.namespaceTag) xsd = &InitSchemas(8)->getSchema(); 
 	}
 	virtual daeIO *openIO(daeIOPlugin &I, daeIOPlugin &O)
 	{
@@ -803,6 +817,7 @@ zip:	if(doc==DAE_OK) URI = &doc->getDocURI(); return doc;
 		LEGACY_SIDREF_RESOLVER|LEGACY_IDREF_RESOLVER|LEGACY_URI_RESOLVER;
 	}
 
+	/*daePlatform::introduceToDocument/namespaces makes peeking unnecessary.
 	daeName Peek_xmlns(const daeIORequest &req)
 	{
 		static std::string out; out.clear();
@@ -857,7 +872,7 @@ zip:	if(doc==DAE_OK) URI = &doc->getDocURI(); return doc;
 
 		out.erase(std::min(out.find('"'),out.size()),-1); 	
 		return out; 
-	}
+	}*/
 
 	TestPlatform(){ daeDOM::setGlobalPlatform(this); }
 

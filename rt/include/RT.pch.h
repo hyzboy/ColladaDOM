@@ -24,15 +24,6 @@
 #endif
 #endif //PRECOMPILING_COLLADA_RT
 
-//Not including in this revision.
-#if 0
-//EXPERIMENTAL
-//lab, lab::vector & lab::matrix
-//This is a new 3-D math library.
-//It appears as lab in the files.
-#include <ColladaLAB.inl>
-#endif
-
 //HACK: cfxLoader.h defines stuff this file would
 //have to otherwise.
 #include "../../fx/include/cfxLoader.h"
@@ -72,10 +63,14 @@ COLLADA_(namespace)
 		#ifdef __COLLADA_LAB_INL__ //Not including in this revision.
 		typedef COLLADA::LAB lab;
 		#endif
+		
+		//SCHEDULED FOR REMOVAL?
 		namespace xs = ::COLLADA::DAEP::xs;
-		namespace Collada05_XSD = ::COLLADA::http_www_collada_org_2005_11_COLLADASchema;
+		namespace xml = ::COLLADA::DAEP::xml;
+
+		namespace Collada05_xsd = ::COLLADA::http_www_collada_org_2005_11_COLLADASchema;
 		namespace Collada05 = ::COLLADA::DAEP::http_www_collada_org_2005_11_COLLADASchema;
-		namespace Collada08_XSD = ::COLLADA::http_www_collada_org_2008_03_COLLADASchema;
+		namespace Collada08_xsd = ::COLLADA::http_www_collada_org_2008_03_COLLADASchema;
 		namespace Collada08 = ::COLLADA::DAEP::http_www_collada_org_2008_03_COLLADASchema;
 	}
 }

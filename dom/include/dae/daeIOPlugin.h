@@ -10,6 +10,7 @@
 #define __COLLADA_DOM__DAE_IOPLUGIN_H__
 
 #include "daeURI.h"
+#include "daeElement.h"
   
 COLLADA_(namespace)
 {//-.
@@ -79,15 +80,16 @@ static struct daeCRT
 		/**OVERLOAD Allows overload of @c stat(). */
 		inline int stat(::FILE *f, stats *p){ return _stat(f,p); }
 		/**OVERLOAD Simplifies calling @c stat(). */
-		inline const stats &stat(::FILE *f, const stats &st=stats())const
+		inline const stats &stat(::FILE*f,const stats &st=stats())const
 		{
 			_stat(f,&const_cast<stats&>(st)); return st;
 		}
 
 		void *_reserved;
 
-		FILE():fopen(dae_fopen),tmpfile(::tmpfile),fclose(::fclose),fread(::fread),fwrite(::fwrite)
-		,_stat(_stat_f),_reserved(){}
+		COLLADA_SUPPRESS_C(4996) //Wants tmpfile_s.
+		FILE():fopen(dae_fopen),tmpfile(::tmpfile),fclose(::fclose),
+		fread(::fread),fwrite(::fwrite),_stat(_stat_f),_reserved(){}
 
 	private:
 		/**
@@ -418,7 +420,11 @@ COLLADA_(public) //daePlatform::openURI() support
 		return fulfillRequestI(daeGetMeta<ROOT>(),I,doc,IO);
 	}
 	template<class LAZY>
-	/**HELPER Helps @c daePlatform::openURI(). */
+	/**HELPER Helps @c daePlatform::openURI(). 
+	 * @param meta If @c nullptr a plugin can rely on the
+	 * @c daePlatform::introduceToDocument() interface to
+	 * provide a suitable @c daeMeta for the root element.
+	 */
 	inline void fulfillRequestI(daeMeta *meta, daeIOPlugin *I, daeDocRoot<LAZY> &doc, daeIO*IO=nullptr)const 
 	{
 		const COLLADA_INCOMPLETE(LAZY) daeArchive *a = scope; assert(!isEmptyRequest());
@@ -692,7 +698,7 @@ COLLADA_(public) //UTILITIES (use if you want)
 	static T &BigEndian(void *inout)
 	{
 		daeCTC<BITS==CHAR_BIT*sizeof(T)>();
-		#if __BYTE_ORDER__==__ORDER_BIG_ENDIAN__		
+		#ifdef COLLADA_BIG_ENDIAN		
 		char *inout_LE = (char*)inout;
 		for(int k=0;k<sizeof(T);k++)
 		std::swap(inout_LE[k],inout_LE[sizeof(T)-k-1]); 		
@@ -808,7 +814,7 @@ COLLADA_(public)
 	 *
 	 * @b and @c are mainly a courtesy since @c narrow() knows about them.
 	 */
-	virtual void narrowURI(daeRefView b, daeIORequest &a, daeRefView c)
+	virtual void narrowURI(daeName b, daeIORequest &a, daeName c)
 	#ifdef COLLADA_DOM_OMIT_ZAE
 	= 0;
 	#else
@@ -828,6 +834,10 @@ COLLADA_(public)
 	 *
 	 * When @a req.allowsAny()==true, the <domAny> specialization can
 	 * be used, but only as a last resort.
+	 *
+	 * UPDATE: @c introduceToDocument() lets @c nullptr be a wildcard
+	 * so that it's unnecessary to peek into files/compressed-entries
+	 * to assign a metadata to the XML document's root.
 	 *
 	 * If the request is not fulfilled, call @c req.unfulfillRequest().
 	 * This tells the caller that a pre-existing doc was not considered.
@@ -904,7 +914,64 @@ COLLADA_(public)
 	 * purpose is to somehow repurpose the API. This is your platforms opportunity to
 	 * act upon a document before it's loaded with content.
 	 */
-	virtual void personalizeDocument(const daeDocument&){ /*(void)doc;*C2027??? NOP*/ }
+	virtual void personalizeDocument(const daeDocument &doc){ (void)&doc; }
+
+	/**EXPERIMENTAL
+	 * This is called once, when a child's namespace is different from
+	 * its new parent's in order to instantiate and/or place the child.
+	 *
+	 * @return Returns a suitable schema to add to the document's list.
+	 * Failure to do so prevents all future children of that namespace
+	 * from being placed in the correct positions in the content-model.
+	 * @see @c daeElementTags
+	 *
+	 * HINT: @c daeGetMeta<COLLADA>().getSchema() is one way to get at
+	 * a schema. I'm not sure if the generator exposes a better way to.
+	 */
+	virtual void introduceToDocument(const daeDocument&,daeTags,const XS::Schema*&) = 0;
+
+	/**EXPERIMENTAL
+	 * @return Returns @c false to request the XMLNS be added to @a el.
+	 * This default algorithm just detects cases where it can move the
+	 * xmlns attribute into the parent's attributes to try not to have
+	 * a situation where multiple children declare the same namespaces.
+	 *
+	 * @param d is @c nullptr if @a el is not document content.
+	 * @param pe is @c nullptr if @a el does not have a parent. If the
+	 * document is the parent, @a pe is @c d->getPseudoElement().
+	 */
+	virtual bool resolveXMLNS(const daeDocument *d, const daePseudoElement *pe, daeElement &el)
+	{
+		if(pe==nullptr) return false;
+
+		#ifdef NDEBUG
+		#error Use for_each_child here. And move this out of daeIOPlugin.h.
+		#endif
+		daeTags et = el.getElementTags();
+		daeElement::matchQNamePrefix m(et);
+		daeArray<daeElementRef,16> siblings;
+		daeElement &p = const_cast<daeElement&>(*pe);
+		if(p.getChildrenBy(m,siblings).size()>1&&p.getQNamePrefix()!=et.second())
+		{
+			//NOTE: Assuming if the prefix overrules another that those prefixes
+			//will get processed downstream. Hopefully they won't be fought over.
+
+			if((void*)d!=&el.getParentObject()) //INCOMPLETE
+			{	
+				//This is to reject the same prefix having a different namespace.
+				for(size_t i=0;i<siblings.size();i++)
+				if(!siblings[i]->hasNamespaceTag(et))
+				return false;
+
+				for(size_t i=0;i<siblings.size();i++)			
+				if(siblings[i]->hasAttribute_xmlns())			
+				siblings[i]->setAttribute_xmlns(et.second());
+				p.setAttribute_xmlns(et.second(),et.first());
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/**BITWISE-FLAGS, ENUM
 	 * This @c enum corresponds to @c getLegacyProfile() and @c setLegacyProfile().
@@ -935,18 +1002,8 @@ COLLADA_(public)
 		LEGACY_SIDREF_RESOLVER=32,
 		/**Use daeLibXMLPlugin::option_to_use_codec_Latin1(). (Avoid if possible.) */
 		LEGACY_EXTENDED_LATIN1=64,
-		
-	  ////THESE ARE UNLIKELY TO BE IMPLEMENTED///////////////////////////
-	  //Use daeURI::refresh() to ensure freshness. Or getURI_baseless.//
-	  //The default database faciliates daeDocument::idLookup(), etc.//
-	  //The daeDocument::typeLookup() facility is automatic, and can//
-	  //be accelerated by personalizeDocument()./////////////////////
-	  ///////////////////////////////////////////
-
-		/**Keep @daeURI up-to-date as elements and documents are moved around. */
-		//LEGACY_KEEP_URIS_FRESH=128,
-		/**@c daeDocument indexes are front-loaded. (They'll work regardless.) */
-		//LEGACY_INDEXING_SERVICES=256,
+		/**Use daeIOPluginCommon::option_to_not_retain_default_attributes(). */
+		LEGACY_ATTRIBUTE_MASKS=128,
 	};
 	/**
 	 * The @c daeDOM constructor calls @c getLegacyProfile()

@@ -42,7 +42,7 @@ COLLADA_(namespace)
     COLLADA_($1,namespace)
     {//-.
 //<-----'
-namespace __namespace__ = $1;
+namespace __ = $1;
 
 union __NB__ //\"NOTEBOOK\"
 {",$target_namespace);
@@ -164,13 +164,22 @@ template<int> struct __NS__:DAEP::Note<> //\"NOTESPACE\"
 //-------.
 	}//<-'
 	namespace DAEP
-	{
+	{	
 		template<int M, int N> 
 		/**PARTIAL-TEMPLATE-SPECIALIZATION */
-		class Note<::COLLADA::$target_namespace::__NS__<M>,N>
+		class Note<xmlns::$target_namespace::__NS__<M>,N>
 		: 
-		public ::COLLADA::$target_namespace::__NS__<M+N>
+		public xmlns::$target_namespace::__NS__<M+N>
 		{};
+		
+		COLLADA_($target_namespace,namespace)
+		{
+			namespace __ = xmlns::$target_namespace;			
+			using xmlns::xmlns;
+			#ifndef COLLADA_DOM_LITE
+			using __::__XS__Schema__;
+			#endif			
+		}		
 	}
 }
 ";

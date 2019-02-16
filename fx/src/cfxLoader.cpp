@@ -19,7 +19,7 @@ COLLADA_(namespace)
 	#ifndef YY
 	#define YY 5 //MSVC2015 wants FX::??
 	namespace ColladaYY = FX::Collada05;
-	namespace ColladaYY_XSD = Collada05_XSD;
+	namespace ColladaYY_xsd = Collada05_xsd;
 	#define _if_YY(x,y) x
 	#endif //-.
 //<-----------'
@@ -93,7 +93,7 @@ struct FX::Loader::Load
 
 		for(size_t i=0;i<newparam.size();i++)
 		{
-			typename T::const_reference newparam_i = *newparam[i];
+			const typename T::element_type &newparam_i = *newparam[i];
 
 			#if YY==5
 			if(!newparam_i.surface.empty())
@@ -134,7 +134,7 @@ struct FX::Loader::Load
 	template<class T> 
 	FX::Param *_try_connect_param(const T&,FX::Paramable*){ return nullptr; }
 	#if YY==5 //1.5.0 appears to limit <connect_param> to IK (kinematics.)
-	FX::Param *_try_connect_param(const Collada05_XSD::cg_setparam &e, FX::Paramable *c)
+	FX::Param *_try_connect_param(const Collada05_xsd::cg_setparam &e, FX::Paramable *c)
 	{
 		return e.connect_param.empty()?nullptr
 		#ifdef NDEBUG
@@ -145,7 +145,7 @@ struct FX::Loader::Load
 	#else //8
 	template<class T> 
 	bool _try_sampler_image(const T&,FX::Paramable*){ return false; }
-	bool _try_sampler_image(const Collada08_XSD::instance_effect_type::local__setparam &e, FX::Paramable *c)
+	bool _try_sampler_image(const Collada08_xsd::instance_effect_type::local__setparam &e, FX::Paramable *c)
 	{
 		if(e.sampler_image.empty()) return false;
 
@@ -160,7 +160,7 @@ struct FX::Loader::Load
 	{		  
 		for(size_t i=0;i<setparam.size();i++)
 		{
-			typename T::const_reference setparam_i = *setparam[i];
+			const typename T::element_type &setparam_i = *setparam[i];
 
 			#ifdef NDEBUG
 			#error And setparam_i.program? (Not in <instance_effect>.)
@@ -228,7 +228,7 @@ struct FX::Loader::Load
 		//float_or_param(constant.reflectivity,FX::Profile_COMMON.Reflectivity,c);			
 		//float_or_param(constant.index_of_refraction,FX::Profile_COMMON.RefractiveIndex,c);
 	}
-	void float_or_param(const ColladaYY_XSD::
+	void float_or_param(const ColladaYY_xsd::
 	_if_YY(common_float_or_param_type,fx_common_float_or_param_type) *in, 
 	FX::Profile_COMMON::Float &o, FX::Technique *c)
 	{
@@ -249,7 +249,7 @@ struct FX::Loader::Load
 	{	
 		if(child.empty()) return 0; 
 	
-		typename T::const_reference in = *child;				
+		const typename T::element_type &in = *child;				
 		
 		if(!in.texture.empty())
 		{	
@@ -355,7 +355,7 @@ struct FX::Loader::Load::Loading
 	{
 		*o = &((FX::DataFloat1*)_param)->Value.f0;
 	}
-	void Get_value(int,const ColladaYY_XSD::_if_YY(float4x4,float4x4_type) &m, float **o)
+	void Get_value(int,const ColladaYY_xsd::_if_YY(float4x4,float4x4_type) &m, float **o)
 	{
 		#if 1==COLLADA_DOM_PRECISION
 		*o = const_cast<float*>(m.data()); }//#if
@@ -471,12 +471,12 @@ struct FX::Loader::Load::Loading_gl_pipeline_setting : public Load::Loading
 	}
 
 	//This is for use with daeContents::for_each_child().
-	void operator()(const const_daeChildRef &maybe__gl_pipeline_setting)
+	void operator()(const xs::element &maybe__gl_pipeline_setting)
 	{
 		_for_each_yy<YY>(maybe__gl_pipeline_setting);
 	}
 	template<int>
-	void _for_each_yy(const const_daeChildRef &maybe__gl_pipeline_setting)
+	void _for_each_yy(const xs::element &maybe__gl_pipeline_setting)
 	{
 		//This ensures genus cannot be mistaken.		
 		if(1==maybe__gl_pipeline_setting.name())
@@ -967,7 +967,7 @@ COLLADA_(public) //Previously FX::Technique
 	/**C++98/03 SUPPORT
 	 * This is used to fill out @c code in strict order.
 	 */ 
-	void operator()(const daeElement *e)
+	void operator()(const xs::element_type *e)
 	{
 		if(!script.empty()) script.pop_back();
 

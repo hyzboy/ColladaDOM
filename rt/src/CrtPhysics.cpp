@@ -208,7 +208,7 @@ namespace CrtPhysics //EXPERIMENTAL
 
 			RT::MatrixToBulletPhysicsOrViceVersa((RT::Float*)this);
 		}
-		void operator()(const const_daeChildRef &e)
+		void operator()(const xs::element &e)
 		{
 			RT::Matrix &m = thisMatrix(); RT::Float x,y,z,a;
 			
@@ -713,8 +713,8 @@ daeOK RT::Physics::Snapshot(const xs::anyURI &remote_directory)
 		if(body==nullptr) continue;
 
 		//SCHEDULED FOR REMOVAL
-		Collada05_XSD::node *node = 
-		(Collada05_XSD::node*)data.Node->Fragment;
+		Collada05_xsd::node *node = 
+		(Collada05_xsd::node*)data.Node->Fragment;
 		daeMeta &meta = dae(node)->getMeta();
 		for(size_t i=0;i<data.Node->Transforms.size();i++)
 		{
@@ -811,8 +811,8 @@ daeOK RT::Physics::Snapshot(const xs::anyURI &remote_directory)
 		if(data.Physics==nullptr) continue;
 
 		//SCHEDULED FOR REMOVAL
-		Collada05_XSD::node *node = 
-		(Collada05_XSD::node*)data.Node->Fragment;
+		Collada05_xsd::node *node = 
+		(Collada05_xsd::node*)data.Node->Fragment;
 		node->translate = ""; 
 		node->rotate = "";
 		daeMeta &meta = dae(node)->getMeta();

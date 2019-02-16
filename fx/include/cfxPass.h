@@ -17,11 +17,11 @@ COLLADA_(namespace)
 //<-----'
 
 //These are limited to vertex/fragment shaders.
-typedef Collada05_XSD::cg_pipeline_stage Cg_Stage;
-typedef Collada05_XSD::glsl_pipeline_stage GLSL_Stage;
+typedef Collada05_xsd::cg_pipeline_stage Cg_Stage;
+typedef Collada05_xsd::glsl_pipeline_stage GLSL_Stage;
 //1.5.0 has more shader types and does not differentiate.
 //(Possibly the existence of the Cg handles could be used.)
-typedef Collada08_XSD::fx_pipeline_stage_enum FX_Stage08;
+typedef Collada08_xsd::fx_pipeline_stage_enum FX_Stage08;
 
 class Shader : public FX::Annotatable
 {

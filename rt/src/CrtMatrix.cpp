@@ -126,6 +126,7 @@ void RT::MatrixMult(const RT::Matrix &LSrcMtx, RT::Matrix &LDestMtx)
 	LDestMtx[M33] = LSrcMtx[M30]*L03+LSrcMtx[M31]*L13+LSrcMtx[M32]*L23+LSrcMtx[M33]*L33;
 }
 
+//UNUSED
 void RT::QuaternionToMatrix(const RT::Quaternion &LQ, RT::Matrix &LMatrix)
 {
 	RT::Float LS,LXS,LYS,LZS,LWX,LWY,LWZ,LXX,LXY,LXZ,LYY,LYZ,LZZ;

@@ -74,6 +74,7 @@ $any = $meta['flags']&ElementMeta::hasAny;
 if($value) $schema = 1; //simple
 if(!empty($meta['elements'])||$any) $schema = 2; //complex
 if($meta['mixed']) $schema = 3; //mixed
+$cm = $Content[$schema];
 if($meta['parent_meta']!=NULL) $schema|=4; //inline
 $schema|=$meta['flags'];
 $baseclass = ($COLLADA_DOM==2?'dae':'DAEP::').'Elemental';
@@ -129,7 +130,7 @@ echoCode("
 public: //Parameters
 
 	typedef struct:Elemental
-	{   DAEP::Value<0,$1nyAttribute>",2===$COLLADA_DOM?'xsA':'xs::a');
+	{   COLLADA_DOM_0");
 echo $indent,
 "	_0; ";
 $i = 1;
@@ -137,15 +138,17 @@ foreach($meta['attributes'] as $ea)
 {
 	$at = getGlobalType($meta,$ea['type']);
 echo	
-"DAEP::Value<$i,$at>\n",$indent,
+"DAEP::Value<sizeof($i),$at>\n",$indent,
 "	_$i; "; $i++;
 }
 if($value)
 {
 	$value = getGlobalType($meta,$meta['content_type']);
 echo
-"DAEP::Value<$i,$value>\n",$indent,
-"	_$i; "; $i++;
+//"DAEP::Value<$i,$value>\n",$indent,
+//"	_$i; "; $i++;
+"DAEP::Value<sizeof($i),$value> value;\n",$indent,
+"		"; $i++;
 }
 
 //TODO: EVENTUALLY THIS SHOULD BE REPLACED
@@ -161,7 +164,7 @@ foreach($lo as $k=>$ea)
 {
 	if($k<=1) break;
 echo
-"DAEP::Child<$k,$ea->type>\n",$indent, 
+"DAEP::Child<sizeof($k)> //$ea->type\n",$indent, 
 "	_$i; "; $i++;
 }
 $i-=$extent_of_values;
@@ -184,8 +187,8 @@ $elementPtoMs = $extent_of_values;
 //dae_Array<> has pointer alignment logic 
 //which COLLADA_DOM_PRECURSOR understands
 echoCode("
-	DAEP::Value<$_No,dae_Array<$1_Z; enum{ _No=$_No };
-	DAEP::Value<$i,daeContents> content; typedef __NS__<$notes> notestart;
+	DAEP::Value<sizeof($_No),dae_Array<$1_Z; enum{ _No=$_No };
+	DAEP::Value<sizeof($i),daeContents> content; typedef __NS__<$notes> notestart;
 	}_;
 ",$_globals['>> ']); //support C++98/03 double-angle-bracket rules
 $notes+=$i+1;
@@ -194,7 +197,8 @@ $notes+=$i+1;
 if(2!==$COLLADA_DOM) 
 $nc = $meta['elements']; else $nc = array();
 echoCode("
-public: //Attributes");
+public: //Attributes
+");
 	//TODO: will need a union{} here to implement
 	//attributeGroup or to prioritize low likelihood 
 	//attributes where there are large/sparse attributes
@@ -209,13 +213,29 @@ if(!empty($meta['attributes']))
 	foreach($meta['attributes'] as $k=>$ea)
 	{
 		$type = $ea['type'];
-		$preType = getGlobalType($meta,$type); 		
-		echoDoxygen(@$ea['documentation'],"\t",getFriendlyType($type));
+		$preType = getGlobalType($meta,$type); 	
+		$type = getFriendlyType($type);
+		echoDoxygen(@$ea['documentation'],"\t",$type);
 		$clash = getNameClash($nc,$k,'__ATTRIBUTE');
 		$name = $_attr.getFriendlyName($k.$clash);		
+		
+		//TODO: Children require "class" to be added sometimes.
+		//I think values probably do also. See echoElementsCPP.
+		
 		echoCode("
 	DAEP::Value<$i,$preType,_,(_::_)&_::_$i> $name;"); 
 		$i++;
+				
+		//OVERLOAD MACROS
+		if(empty($clash)) continue;	
+		$name = substr($name,0,-11);
+		$clash = $_attr.getFriendlyName($k);
+		if($name!==$clash)
+		$clash = ','.substr($clash,strlen($name));
+		else $clash = '';
+		echoDoxygen(@$ea['documentation'],"\t",$type,"\t/**OVERLOADED");		
+		echoCode("
+	COLLADA_DOM_ATTRIBUTE($1,$preType,$name$clash)",$i-1);
 	}
 }
 else $nc2 = array();
@@ -223,7 +243,8 @@ else $nc2 = array();
 
 if($el_less=$count_lo==0&&!$any)
 echoCode("
-public: //Content");
+public: //$cm Content Model
+");
 //CONTENT (VALUE)
 if(!empty($value))
 {
@@ -232,7 +253,16 @@ if(!empty($value))
 	/**
 	 * The $value value of the text data of this element. 
 	 */
-	DAEP::Value<$1,$value,_,(_::_)&_::_$1> value;"
+	DAEP::Value<$1,$value,_,(_::_)&_::value> value;"
+	,$extent_of_values-1);
+	
+	//OVERLOAD MACROS
+	if(!empty($clash))
+	echoCode("
+	/**OVERLOADED
+	 * The $value value of the text data of this element. 
+	 */
+	COLLADA_DOM_CONTENT($1,$value,value)"
 	,$extent_of_values-1);
 }
 //ELEMENTS
@@ -246,13 +276,23 @@ echoElementsCPP($meta,$elementPtoMs,$N,$any);
 //CONTENT
 if(!$el_less) 
 echoCode("
-public: //Content");
+public: //$cm Content Model
+");
 $clash = getNameClash($nc,'content','__CONTENT',$nc2);
 echoCode("
 	/**
 	 * Children, mixed-text, comments & processing-instructions.
 	 */
 	DAEP::Value<$1,daeContents,_,(_::_)&_::content> content$clash;"
+,$contentID);
+
+//OVERLOAD MACROS
+if(!empty($clash))
+echoCode("
+	/**OVERLOADED
+	 * Children, mixed-text, comments & processing-instructions.
+	 */
+	COLLADA_DOM_CONTENT($1,daeContents,content)"
 ,$contentID);
 	
 //get/setX methods

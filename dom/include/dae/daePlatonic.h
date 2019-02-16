@@ -46,6 +46,11 @@ struct daePlatonic_base::_unwrap<S*>
 	typedef S type, **ptr; static S *s(ptr p){ return *p; }
 };
 template<class S>
+struct daePlatonic_base::_unwrap<const S*>
+{
+	typedef S type, **ptr; static S *s(ptr p){ return *p; }
+};
+template<class S>
 struct daePlatonic_base::_unwrap<daeSmartRef<S>>
 {
 	typedef S type, **ptr; static S *s(ptr p){ return *p; }
@@ -219,37 +224,47 @@ COLLADA_(private)
 
 	friend class daeModel;
 	friend class XS::Schema;
+	friend class daeDocument;
 	friend class daeMetaObject;	
 	friend class daeProcessShare_base;
 
-	daeOffset _offset;
-			 
-	daeAllocThunk *_localthunk;
-	daeTypewriter *_typewriter;
+	/**
+	 * This should be positive and bound by the object.
+	 */
+	unsigned int _offset;
 	/**ALIGNED
 	 */
 	struct Flags
 	{
-	unsigned 
+	unsigned int 
 	feature_1:1,
 	subobject:1,
 	atomizing:1,
 	unionized:1,
 	new_thunk:1;		
 	operator bool()const{ return (unsigned&)*this!=0; }
-	}_flags; 
-	unsigned _RESERVED_; //Padding on 64 bit systems.
-	
+	}_flags; 		
+
+	//TODO?
+	//Thinking about optionally pointing this at a
+	//"daePrototype" object, and marking that with
+	//a flag. In that case it might not make sense
+	//to have a typewriter pointer in both of them.
+	daeAllocThunk *_localthunk;
+	daeTypewriter *_typewriter;
+
 	//This should be added sometime.
 	//It should be a name, followed by whitespace, and words.
 	//daeClientString _name_explanation;
 
 COLLADA_(public) //OPERATORS
 
-	//It's becoming standard to access a daeTypewriter this way. 
-	inline operator daeTypewriter*()const{ return _typewriter; }
-	inline operator daeTypewriter&()const{ return *_typewriter; }
-	inline daeTypewriter *operator->()const{ return _typewriter; }	
+	//inline operator daeTypewriter*()const{ return _typewriter; }
+	//inline operator daeTypewriter&()const{ return *_typewriter; }
+	inline daeTypewriter *operator->()const//{ return _typewriter; }	
+	{
+		assert(_typewriter!=nullptr); return _typewriter;
+	}
 
 COLLADA_(public) //MODEL SETUP
 	/**OBSOLETE?
@@ -258,7 +273,7 @@ COLLADA_(public) //MODEL SETUP
 	 * Sets up the @c sizeof(char) offset from the top of the
 	 * object's @c this pointer.
 	 */
-	inline daeFeature &setOffset(daeOffset os){ _offset = os; return *this; }
+	inline daeFeature &setOffset(int os){ _offset = os; return *this; }
 
 	/**
 	 * Sets up the process-share local thunk.
@@ -296,14 +311,14 @@ COLLADA_(public) //MODEL SETUP
 
 COLLADA_(public) //CONST-ONLY ACCESSORS
 	/**
-	 * Gets the data member @c char offset.
-	 */
-	inline daeOffset getOffset()const{ return _offset; }
-
-	/**
 	 * Gets the various flags bitfield object.
 	 */
 	inline const Flags &getFlags()const{ return _flags; }
+	
+	/**
+	 * Gets the data member @c char offset.
+	 */
+	inline unsigned int getOffset()const{ return _offset; }
 
 	/**
 	 * Typewriters are not strictly required, as
@@ -311,8 +326,11 @@ COLLADA_(public) //CONST-ONLY ACCESSORS
 	 * opaque. The owning object knows what it's for.	  
 	 */
 	inline bool isVariant()const{ return nullptr==_typewriter; }
+
 	/**	 
-	 * @see operator->(). THIS CAN BE @c nullptr. 
+	 * @return Returns @c nullptr if @c this feature doesn't 
+	 * have a typewriter associated with it. 
+	 * @see @c isVariant()
 	 */
 	inline daeTypewriter *getTypewriter()const{ return _typewriter; }
 
@@ -438,7 +456,7 @@ COLLADA_(protected) //VISIBLE DATA-MEMBERS
 	 *
 	 * @note This must be the first member of this class.
 	 */	
-	daeProcessShare *_processShare; const XS::Schema *_schema;
+	daeProcessShare *_processShare; XS::Schema *_schema;
 	};
 
 	/**
@@ -461,7 +479,7 @@ COLLADA_(protected) //VISIBLE DATA-MEMBERS
 
 	/**
 	 * Negative value, marking the heighest @c daeFeatureID.
-	 * @c -_rendFeatureID is equal to their number.
+	 * @c -_finalFeatureID is equal to their number.
 	 */
 	daeFeatureID _finalFeatureID;
 
@@ -589,23 +607,29 @@ COLLADA_(protected)
 	}
 
 COLLADA_(protected) //INVISIBLE	
-
-	/**ALIGNED
+	/**
 	 * Bitmask corresponding to @c daeFeature::_flags.subobject
 	 * for the first 31 features. This establishes a firm limit.
 	 */
 	int _subobjectsMask;
-	/**ALIGNED, BIT-FIELD
+
+	friend class daeAnySimpleTypewriter;
+	/**BIT-FIELD
 	 * Bitwise flags/fields reserved for use by elements.
 	 */
-	unsigned _features_atomize:1;
-	/**ALIGNED, BIT-FIELD-CONTINUED
+	unsigned int _features_atomize:1;
+	/**BIT-FIELD CONTINUED
 	 * Signals @c daeFeature::deleteAllocThunk() is required.
 	 * This is a messy detail. Internally @c _destructor_ptr is
 	 * set if not @c nullptr. Otherwise this flag is all there is.
 	 * NOTE: THE FLAG IS ONLY VISIBLE IF THE LIBRARY ISN'T IMPORTED.
 	 */
-	unsigned _deleteAllocThunk:1;
+	unsigned int _deleteAllocThunk:1;
+	/**BIT-FIELD CONTINUED
+	 * This is used to mark presence of special attributes as
+	 * an optimization.
+	 */
+	unsigned int _systemAttribute:1;
 
 #endif //BUILDING_COLLADA_DOM
 };

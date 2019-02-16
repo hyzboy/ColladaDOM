@@ -51,19 +51,20 @@ template<class Type=void>
  *
  * DAEP Proto is also used by DAEP Elemental's default constructor.
  */
-class Proto : public Type
+class Proto : public Type , public Type::note
 {
 COLLADA_(public) COLLADA_SUPPRESS_C(4624) 
 
-	enum
-	{   
+	//Trying as base class?
+	//enum
+	//{   
 	/** 
 	 * These can't go in DAEP InnerChild and InnerValue respectively
 	 * because of C++ point-of-instantiation rules (ODR?) or because
-	 * of how some compilers (potentially older?) instantiation them.
+	 * of how some compilers (potentially older?) instantiate things.
 	 */
-	is_fixed=Type::note::is_fixed,has_default=Type::note::has_default,
-	};
+	//is_fixed=Type::note::is_fixed,has_default=Type::note::has_default,
+	//};
 };
 /**NOP @c note is undefined. */
 template<> class Proto<void>{};
@@ -85,8 +86,17 @@ class Object
 
 COLLADA_(public)
 	/**HACK
+	 * Using to convert strings to base URL in
+	 * @c daeURI::setURI().
+	 */
+	typedef void __COLLADA__T;
+
+	/**HACK
 	 * @c daeStringRef is using this to detect
 	 * if a constructor is object-based.
+	 *
+	 * @note @c daeDOM redefines as @c void to
+	 * implement @c daeDOM::_add2(...).
 	 */
 	typedef signed __DAEP__Object__signed;
 
@@ -124,18 +134,13 @@ COLLADA_(public) //VIRTUAL METHOD TABLE
 		//of base classes, so they have to be members/can't be casted.
 		assert(0); return *(DAEP::Model*)nullptr;
 	}
-								   		
-	/** 
-	 * "1" is the virtual table version. 
-	 * This needs to increase if builds add
-	 * to the virtual table here, or elsewhere.
-	 * 
-	 * @see @c daeElementTags::interfaceTag, which is
-	 * used to add methods to @c daeElement, and is the
-	 * same data member used by @c daeObject::_getExtTag().
+		
+	//QUESTIONABLE
+	/**
+	 * @note Now integrated into @c COLLADA::DOM_process_share.
+	 * "1" is the virtual table version.
 	 */
-	enum{ __DAEP__Object__vN__=1 };
-
+	enum{ __DAEP__Object__system_interfaceTag__=1 };
 	//The virtual table reserves these.	
 	//If added, @c daeObject::_getVersion() must be checked.
 	//(The working assumption is that these methods can be renamed without breaking the system.)
@@ -148,11 +153,12 @@ COLLADA_(public) //VIRTUAL METHOD TABLE
 
 COLLADA_(private) //DATA-MEMBERS
 
+	friend class COLLADA::daeDOM;
 	friend class COLLADA::daeDocument;
-	/**32bit--should align before _tags. */
+	/**32bit--should align before tags. */
 	mutable int __DAEP__Object__refs;	
-	/**32bit--should align behind _refs. */
-	int __DAEP__Object__tags;
+	/**32bit--should align behind refs. */
+	unsigned int __DAEP__Object__tags;
 	/**
 	 * This is circular for @c daeDOM and if @isUnparentedObject().
 	 * (In other words: Such objects are their own "parent.")
@@ -176,11 +182,12 @@ COLLADA_(private) //MISCELLANEOUS
 	
 COLLADA_(protected) //CONSTRUCTORS	
 	/**
-	 * Prototype Non-Constructor
+	 * Prototype/Non-Constructor
 	 * 
-	 * It does install the "vptr" even though it's not necessary.
+	 * It does install the "vptr" even though it's unnecessary.
+	 * (Maybe there is some way to defeat it?)
 	 */
-	explicit Object(const DAEP::Proto<>&){ /*NOP*/ }
+	explicit Object(enum dae_clear){ /*NOP*/ }
 
 COLLADA_(public) //CONSTRUCTORS (MUST BE PUBLIC)
 	/**
@@ -209,17 +216,12 @@ COLLADA_(public) //CONSTRUCTORS (MUST BE PUBLIC)
 	 */
 	explicit Object(const Object *c)
 	:__DAEP__Object__refs(__DAEP__Object__refs_embedding_threshold)
-	,__DAEP__Object__tags(__DAEP__Object__vN__<<2*sizeof(daeByte)*CHAR_BIT)
+	,__DAEP__Object__tags(COLLADA::DOM_process_share.tags)
 	,__DAEP__Object__parent(c)
 	{
-		assert(0!=COLLADA::DOM_process_share);
-		((daeTag*)&__DAEP__Object__tags)[3] = COLLADA::DOM_process_share;
+		assert(0!=COLLADA::DOM_process_share.tags);
 
 		if(c!=this) c->__DAEP__Object__refs++;
-		//If this does not hold, _tags must be larger on such systems.
-		daeCTC<sizeof(__DAEP__Object__tags)>=sizeof(daeTag)*4>();
-		//Visual Studio is showing 0 in tooltips.
-		assert(__DAEP__Object__tags>65535); 
 	}
 	/**
 	 * This is used to identify embedded objects. 
@@ -232,13 +234,14 @@ COLLADA_(public) //CONSTRUCTORS (MUST BE PUBLIC)
 	 * @c assert(__DAEP__Object__refs>=1) is triggered if the 
 	 * object doesn't have a reference holder prior to calling.
 	 */
-	inline void __DAEP__Object__unembed(daeTag data_bit=0)
+	inline void __DAEP__Object__unembed(unsigned int data_bit=0)
 	{
 		__DAEP__Object__refs-=__DAEP__Object__refs_embedding_threshold;
 		assert(__DAEP__Object__refs>=0);
+		
 		//While technically unrelated, there's no reason for two APIs.
-		assert(data_bit<=1&&((daeTag*)&__DAEP__Object__tags)[3]%2==0);
-		if(1==data_bit) ((daeTag*)&__DAEP__Object__tags)[3]|=data_bit;
+		assert(data_bit<=1);
+		((daeObjectTags*)&__DAEP__Object__tags)->moduleTag|=data_bit;
 	}
 	/**
 	 * This is marks an object as an internal structure. By
@@ -300,10 +303,30 @@ COLLADA_(public) //INTERNAL
 	 */
 	COLLADA_DOM_LINKAGE void __COLLADA__atomize();
 
+	/**INTERNAL
+	 * Supporting @c daeDefault @c assert checks.
+	 */
+	static bool __DAEP__Element__meta
+	(const daeElement *a, const daeElement *b)
+	{
+		if(((Element*)a)->__DAEP__Element__data.meta
+		 ==((Element*)b)->__DAEP__Element__data.meta)
+		return true; return false;
+	}
+
 COLLADA_(public) //OPERATORS
+
+	/**EXPERIMENTAL 
+	 * @c daeSmartRef uses this to convert to @c xs::any.
+	 * 25 is version 2.5, but really it just has to be 1
+	 * more than @c daeElement::__DAEP__Legacy.
+	 */
+	enum{ __DAEP__Legacy=25 };
 
 	//Unfortunately DAEP Element is no longer inherited.
 	//ON-THE-ODD-SIDE: Operator-> is exposing daeElement.
+
+	//REMINDER: These are fairly necessary.
 	COLLADA_DOM_OBJECT_OPERATORS(daeElement)
 	/**
 	 * This is to avoid writing @c dae() in many places.
@@ -316,14 +339,90 @@ COLLADA_(public) //OPERATORS
 
 COLLADA_(protected) //DATA-MEMBERS
 
-	friend class Change;
+	friend class COLLADA::daeData;
 	friend class COLLADA::daeElement;
-	friend union COLLADA::daeContent;
-	friend class COLLADA::daeDocument;
-	friend class COLLADA::daeContents_base; //GCC/C++
+	friend class COLLADA::daeDocument;			
+	friend class COLLADA::daeAnyAttribute;
+	friend union COLLADA::daeContent;	
+	friend class COLLADA::daeContents_base;
+	friend class COLLADA::daeSmartTag_base;
 	struct __DAEP__Element__Data
 	{
-		daePseudonym NCName;
+		  //FIRST-MEMBER
+		  //The first 8-bits here are of interest to the database 
+		  //when an element-tree is transplanted across documents
+		  //or from an undocumented status to a documented status.
+		  //If all 8-bits are 0 the transplanted element does not
+		  //require consideration.
+		 
+		/**MUTABLE
+		 * @see @c daeElement::getMigrationByte()
+		 */
+		inline unsigned char &element_migration_byte()const
+		{
+			#ifdef COLLADA_BIG_ENDIAN
+			return ((unsigned char*)this)[sizeof(int)-1];
+			#endif
+			return *(unsigned char*)this;
+		}
+		/**BITFIELD, FIRST-MEMBER
+		 * @see @c daeMigrationByte::CONTENT_ALLOCATION_UNIT
+		 *
+		 * This is for migration handling. Traversing a graph can
+		 * be painful. Typically elements are inserted without any
+		 * content in tow. Testing this flag can avoid digging deep
+		 * into the metadata, e.g. calling daeElement::getContents().		 
+		 *
+		 * @note THIS IS ONLY A HINT, AND DOESN'T CONTEMPLATE EMBEDDED
+		 * CONTENTS-ARRAYS. (As of now, embedding is not implemented.)
+		 */
+		mutable unsigned int daeContents_capacity_is_nonzero:1;		
+		/**BITFIELD-CONTINUED
+		 * @see @c daeMigrationByte::HAS_STATIC_ID_ATTRIBUTE
+		 *
+		 * This means the element metadata contains an "id" like attribute.
+		 * These are registered with @c XS::Schema::getIDs().
+		 */
+		mutable unsigned int getMeta_getFirstID_is_nonzero:1;		
+		/**BITFIELD-CONTINUED
+		 * @see @c daeMigrationByte::HAS_NONSTATIC_ATTRIBUTE
+		 *
+		 * @c daeAnyAttribute nonstatic attributes copy-on-write allocated.
+		 */
+		mutable unsigned int daeAnyAttribute_copy_on_write:1;		
+		/**BITFIELD-CONTINUED
+		 */
+		mutable unsigned int _reserved_migration_bit_:1;
+		/**BITFIELD-CONTINUED
+		 * @see @c daeMigrationByte::XML_ATTRIBUTE_NIBBLE
+		 *
+		 * 1: Set upon creation of xmlns qualified attributes; Never unset.
+		 * 2: xml:base
+		 * 4: xml:lang
+		 * 8: other (xml:space)
+		 */
+		mutable unsigned int xml_qualified_attribute_masks:4;
+		
+		  //These bits don't play a role in element-migration.
+
+		/**BITFIELD-CONTINUED
+		 * This means the element metadata contains an "id" like attribute.
+		 * These are registered with @c XS::Schema::getIDs().
+		 */
+		mutable unsigned int is_document_daePseudoElement:1;
+		/**BITFIELD-CONTINUED
+		 * Nonzero if element is part of a contents-array.
+		 * Note, this is independent of the assigned parent, since that is
+		 * assigned when the element is created, before it has been placed 
+		 * into a content-tree. In general, parent reassignment is delayed.
+		 */
+		mutable unsigned int is_content:1;
+		
+		/**
+		 * @see @c daeElement::getNCName().
+		 */
+		daeName NCName;
+
 		/**
 		 * These values are cached for the lifetime of
 		 * the object.
@@ -341,31 +440,9 @@ COLLADA_(protected) //DATA-MEMBERS
 		/** Change this if a @c daeChildID is added to this structure. */
 		enum{ _have_child_ID_onboard=0 };
 
-		//THESE ARE FLAGS. THEY MAY NEED TO BE OCCUPY 64-BITS?
-		/**BITFIELD
-		 * This is for migration handling. Traversing a graph can
-		 * be painful. Typically elements are inserted without any
-		 * content in tow. Testing this flag can avoid digging deep
-		 * into the metadata, e.g. calling daeElement::getContents().		 
-		 *
-		 * @note THIS IS ONLY A HINT, AND DOESN'T CONTEMPLATE EMBEDDED
-		 * CONTENTS-ARRAYS. (As of now, embedding is not implemented.)
-		 */
-		mutable unsigned daeContents_capacity_is_nonzero:1;		
-		/**BITFIELD-CONTINUED
-		 * This means the element metadata contains an "id" like attribute.
-		 * These are registered with @c XS::Schema::getIDs().
-		 */
-		mutable unsigned getMeta_getFirstID_is_nonzero:1;		
-		/**BITFIELD-CONTINUED
-		 * This means the element metadata contains an "id" like attribute.
-		 * These are registered with @c XS::Schema::getIDs().
-		 */
-		mutable unsigned is_document_daePseudoElement:1;
-
 	}__DAEP__Element__data; 	
 	char __DAEP__Element__data_reserved
-	[sizeof(void*)*12-sizeof(DAEP::Object)-sizeof(__DAEP__Element__Data)];
+	[sizeof(void*)*10-sizeof(DAEP::Object)-sizeof(__DAEP__Element__Data)];
 
 COLLADA_(protected) //CONSTRUCTORS
 
@@ -379,24 +456,11 @@ COLLADA_(protected) //CONSTRUCTORS
 	 */
 	Element(){ /*NOP*/ }
 	/**
-	 * Prototype Constructor
-	 *
-	 * This "NOP" differs slightly from @c Element::Element() in that
-	 * it doesn't even do @c __DAEP__Object_parent=this, because that
-	 * would make the outer constructor unable to locate its database.
+	 * Prototype/Instance-Constructor
+	 * 
+	 * @note daeMetaElement.cpp takes care of this for both cases.
 	 */
-	explicit Element(const DAEP::Proto<> &pt):Object(pt){ /*NOP*/ }
-	/**WARNING
-	 * Prototypes' Constructor
-	 *
-	 * This is following regular DAEP Object construction rules, even
-	 * though DAEP Elemental is its only caller.
-	 *
-	 * @remarks This must be @c inline to @c capture DOM_process_share.
-	 * Initialization is handled internally, so clients aren't calling
-	 * exported APIs for no real reason.
-	 */
-	explicit Element(const Object *_this):Object(_this){ __DAEP__Object__unembed(1); }
+	explicit Element(enum dae_clear):Object(dae_clear){ /*NOP*/ }	
 };
 
 /**ENUM, INTERNALS
@@ -410,12 +474,18 @@ COLLADA_(protected) //CONSTRUCTORS
  */
 enum VPTR{ VPTR=0 }; enum PTYPE{ PTYPE=0 };
 
+//FORWARD-DECLARATION
+template<int,class,class CC,typename CC::_> 
+class Child;
+template<int,class,class CC,typename CC::_> 
+class Value;
+
 //NEW: Trying to eliminate DAEP::Schema by merging
 //it into DAEP::Elemental, to get Visual Studio to
 //do Empty-Base-Optimization so daeAnyAttribute is
 //predictable (and to shave off 4/8 unused bytes.)
 template<class T, 
-//Previously DAEP::Schema
+//Formerly DAEP::Schema
 unsigned long long ULL=T::__DAEP__Schema,
 //NEW: Legacy is one of daeElement or DAEP Element.
 class Legacy=typename daeLegacyOf<T>::type>
@@ -444,7 +514,7 @@ class Legacy=typename daeLegacyOf<T>::type>
  *	}
  *
  *
- * Previously "COLLADA::DAEP::Schema."
+ * Formerly "COLLADA::DAEP::Schema."
  *
  * @tparam ULL 
  *
@@ -473,11 +543,14 @@ COLLADA_(public)
 	typedef char T::*_;
 
 	/**
-	 * @c Elemental::TOC is used inside @c __DAEP__Object__v1__model().
-	 * It's a pointer-to-nowhere that can be passed to setup templates.
+	 * daeMetaAttributes.h uses @c COLLADA_DOM_0 with a @c DAEP::Value.
+	 * specialization. It's inserted into the "Parameters" code blocks
+	 * to avoid passing the number of attributes by template parameter.
+	 * @note @c COLLADA_BIT_PTR is just in case it helps to have fewer
+	 * instances of @c daeAA_Value. Compile time/memory is big problem.
 	 */
-	typedef T *TOC;
-	
+	typedef daeAA_Value<COLLADA_BIT_PTR(0x3F&ULL>>32)> COLLADA_DOM_0; 		
+
 COLLADA_(public) //Elemental constructor
 	/**
 	 * Classic/Non-Constructor
@@ -501,7 +574,7 @@ COLLADA_(protected) //Embodied constructor
 	 * automatically generate a default for generated classes. Where
 	 * if it were not, generators would have to output a constructor.
 	 */
-	Elemental():COLLADA_SUPPRESS_C(4355)Legacy((const DAEP::Proto<>&)*this)
+	Elemental():Legacy(dae_clear)
 	{
 		/*NOP*/ daeCTC<!T::__DAEP__Schema__g1__is_abstract>();
 	}
@@ -514,9 +587,9 @@ COLLADA_(public) //One more for the road!
 	 * It can't use @c T::T() because that's the prototype constructor.
 	 * @c DAEP::Element is an abstract class. So it can't be constructed.
 	 */
-	explicit Elemental(enum DAEP::PTYPE):COLLADA_SUPPRESS_C(4355)Legacy(this){}
+	explicit Elemental(enum DAEP::PTYPE):Legacy(dae_clear){}
 
-COLLADA_(public) //Previously "DAEP::Schema<ULL>."
+COLLADA_(public) //Formerly "DAEP::Schema<ULL>."
 	/**
 	 * Enum of boolean-like traits.
 	 * These are nonzero if flagged.
@@ -570,12 +643,12 @@ COLLADA_(public) //Previously "DAEP::Schema<ULL>."
 	 * Value IDs greater-than-or-equal-to this value, are CONTENT.
 	 * @note This excludes the always present @c xs::anyAttribute.
 	 */
-	static const int __DAEP__Schema__extent_of_attributes = 0x3F&ULL>>32;
+	static const int __DAEP__Schema__extent_of_attributes = 0x3F&ULL>>32;	
 };
 
 //SCHEDULED FOR REMOVAL
 /**HELPER,
- * Previously "DAEP::Elemental::Essentials."
+ * Formerly "DAEP::Elemental::Essentials."
  * This doesn't really need to be part of the DAEP namespace
  * if at all. It's moved out in order to move @c DAEP::Schema
  * into @c DAEP::Elemental so Visual Studio will do Empty-Base
@@ -584,27 +657,28 @@ COLLADA_(public) //Previously "DAEP::Schema<ULL>."
  * All elements have these features, although names differ
  * according to how the generator is configured. Extracting
  * this information means generators don't have to ouptut it.
- *
- * @todo This could be implemented by @c XS::Schema and
- * @c daeMetaElement where it's used. It's slightly better
- * organized to have here. SFINAE might be required if <_> is
- * the name of one of some schema's children.
  */
 struct Parameters
 {
 	daeOffset content_offset;
 	daeFeatureID content_feature,union_feature;
-	template<class CC> 
-	Parameters(CC*&,typename CC::_*_=nullptr)
+	template<class TOC> 
+	Parameters(TOC*&C4700/*,typename TOC::_*_=nullptr*/)
 	{
+		/*OPTIMIZING: Using sizeof() for Parameters.
 		//Clang won't use . (but it sets _MSC_VER.)
 		//Doing this santity test on VS builds only.
 		#ifdef _MSC_VER
-		daeCTC<(CC::_::_No==_->_Z.name)>();
+		daeCTC<(TOC::_::_No==_->_Z.name)>();
 		#endif
 		union_feature = _->_Z.feature();
 		content_feature = _->content.feature();
-		content_offset = daeOffsetOf(typename CC::_,content);
+		*/
+		//Value::feature() is daeFeatureID(-ID-1);
+		//Where _No and ID seem to be equal always?		
+		content_offset = daeOffsetOf(TOC,content);
+		content_feature = C4700->content.feature();
+		union_feature = daeFeatureID(-TOC::_::_No-1);
 	}
 };
 
@@ -621,7 +695,7 @@ template<class SchemaType=class Undefined, int NoteID=-1>
  * the DAEP Child/Value template parameters list, which
  * are already very baroque because of how C++ template
  * member-pointers demand so many additional parameters.
- * @see @c COLLADA_NOTE().
+ * @see @c COLLADA_DOM_NOTE().
  */
 struct Note
 {
@@ -725,7 +799,10 @@ template<> class InnerGeneric<daeElement>
 COLLADA_(public)
 
 	/** The generated class, accessed via pointers. */
-	typedef daeElement type;
+	typedef daeElement type; 
+
+	typedef dae_Array<> content; /** @see xs::any_content */
+
 	/** This means this is a placeholder for one or more concrete types. */
 	static const bool is_abstract = true;	
 };
@@ -1054,7 +1131,7 @@ COLLADA_(public) Nil(){} enum notestart{ _No };
 
 	typedef char Nil::*_; typedef Nil __COLLADA__T;
 
-//Previously "DAEP::Schema<>."
+//Formerly "DAEP::Schema<>."
 
 	enum{ __DAEP__Schema__extent_of_attributes=0 };
 };
@@ -1065,57 +1142,45 @@ template<class Note, class Type=void>
  */
 struct NoConcern
 {
-	typedef char Yes; typedef long No;		
-	template<class>
-	static Yes Exists(...);
+	typedef char Yes, (&No)[2];		
+	template<class>static Yes Exists(...);
 	template<class Note2> //GCC won't shadow Note.
 	static No Exists(typename DAEP::Concern<Note2>::VOID*);
 	enum{ value=sizeof(No)==sizeof(Exists<Note>(nullptr)) };
 	typedef typename daeTypic<value,Type,const Type>::type type;
 };
 
-template<int,class,class CC,typename CC::_> class Child;
-template<int,class,class CC,typename CC::_> class Value;
-template<int ID, class T, class CC, typename CC::_ PtoM, class EBO=dae_Array<T,ID>>
+template<int ID, class T, class CC, typename CC::_ PtoM>
 /**
  * @class COLLADA::DAEP::InnerChild
  *
  * This class is an attempt to spare implementors of @c DAEP::Child
  * the torment and room for error in implementing their Child class.
- *
- * @note @a EBO must be a @c dae_Array and must be the same size as
- * @c dae_Array. "EBO" means Microsoft "empty base optimization" is
- * in effect. Not that the base is empty, but that it doesn't allow
- * multiple inheritance... or, @c InnerChild can't have other bases.
  */
-class InnerChild : public EBO
-{	
-	/**UNUSED?
-	 * Visual Studio won't use CC from the outer
-	 * scope or CC redefined (GCC won't override
-	 * template parameters at any level anyway.)
-	 */
-	template<int,class,class CCC,typename CCC::_>
-	friend class Child;	
+class InnerChild : public dae_Array<T,ID>
+{
+COLLADA_(protected)
+
+	using dae_Array<T,ID>::operator=;
 
 COLLADA_(public) //TEMPLATE-METAPROGRAMMING
+	/** 
+	 * Eases @c DAEP::Value specialization.
+	 */
+	typedef InnerChild inner_type;
 
 	typedef DAEP::Child<ID,T,CC,PtoM> type;
 	
-	/**COURTESY
-	 * Ways to refer to the types variously
-	 * returned by @c dae_Array<T>.
-	 * @note These are low-level underlying
-	 * types.
-	 */
-	typedef T __COLLADA__T, &reference, *pointer;
-	/**CONST-FORM, COURTESY
-	 * Ways to refer to the types variously
-	 * returned by @c dae_Array<T>.
-	 * @note These are low-level underlying
-	 * types.
-	 */
-	typedef const T &const_reference, *const_pointer;	
+	/*dae_Array defines these.
+	typedef Type element_type;	
+	typedef daeChildRef<Type> value_type, atom;  	
+	typedef daeSmartRef<Type> element;
+	typedef daeChildRef<Type> *pointer;
+	typedef daeChildRef<Type> &reference;	
+	typedef daeSmartRef<const Type> const_element;
+	typedef const daeChildRef<Type> *const_pointer;
+	typedef const daeChildRef<Type> &const_reference;
+	*/
 
 	static const int name = ID;		
 	static const bool is_element = true;
@@ -1123,16 +1188,10 @@ COLLADA_(public) //TEMPLATE-METAPROGRAMMING
 	static const bool is_child_nonplural = ID<0;
 	static const bool is_children_plural = ID>0;
 	typedef DAEP::Note<typename CC::notestart,CC::_No-ID+1> note;
-													
+														
 COLLADA_(public) //PUBLIC UTILITIES		
-	/** 
-	 * Gets @c this child's object. Same as DAEP Value.
-	 */
-	inline CC &object(){ return daeOpaque(this)[-offset()]; }
-	/**CONST-FORM
-	 * Gets @c this child's object. Same as DAEP Value. 
-	 */
-	inline const CC &object()const{ return daeOpaque(this)[-offset()]; }
+
+	typedef typename CC::__COLLADA__T object_class;
 
 	/**
 	 * Gets @c this child's offset. Same as DAEP Value.
@@ -1140,9 +1199,18 @@ COLLADA_(public) //PUBLIC UTILITIES
 	inline daeOffset offset()const
 	{
 		//2 is owing to GCC's "Token Pasting" practice.
-		return daeOffsetOf2(typename CC::__COLLADA__T,->*PtoM);
+		return daeOffsetOf2(object_class,->*PtoM);
 	}
 
+	/** 
+	 * Gets @c this child's object. Same as DAEP Value.
+	 */
+	inline object_class &object(){ return daeOpaque(this)[-offset()]; }
+	/**CONST-FORM
+	 * Gets @c this child's object. Same as DAEP Value. 
+	 */
+	inline const object_class &object()const{ return daeOpaque(this)[-offset()]; }
+			
 	/**
 	 * Extracts the model-feature identifier.
 	 * @remarks There is a hole around 0 ever since the "unnamed" array took
@@ -1158,13 +1226,26 @@ COLLADA_(public) //PUBLIC UTILITIES
 
 COLLADA_(public) //GENERIC PROGRAMMING GUARANTEES	
 	/** 
-	 * Guaranteed ELEMENT selector. 
+	 * Guaranteed @c DAEP::ELEMENT selector. 
 	 */
 	inline type &operator()(enum DAEP::ELEMENT){ return (type&)*this; } 
 	/**CONST-FORM
-	 * Guaranteed ELEMENT selector. 
+	 * Guaranteed @c DAEP::ELEMENT selector. 
 	 */
 	inline const type &operator()(enum DAEP::ELEMENT)const{ return (type&)*this; } 
+
+	/**C-PREPROCESSOR MACRO
+	 * @see @c COLLADA_DOM_ELEMENT @c COLLADA_DOM_CONTENT @c COLLADA_DOM_ATTRIBUTE 
+	 */
+	#define COLLADA_DOM_ELEMENT2(a,...) __VA_ARGS__ a const __VA_ARGS__ const a 
+	/**C-PREPROCESSOR MACRO
+	 * This macro generates methods to enable generic-programming when two or more
+	 * members have the same NCName or clash with the built-in "value" & "content"
+	 * members.
+	 * @see @c DAEP::ELEMENT
+	 */
+	#define COLLADA_DOM_ELEMENT(i,t,m,e,...) \
+	COLLADA_DOM_ELEMENT2({return e##__ELEMENT;},DAEP::Child<i,t,_,(_::_)&_::m>&e##__VA_ARGS__(enum DAEP::ELEMENT))
 };
 
 template<class NC> //Non-class
@@ -1263,25 +1344,23 @@ typename daeTypic<daeArrayAware<T>::is_class,T,DAEP::Class<T>>::type>
  */
 class InnerValue
 {
+COLLADA_(protected)
 	/**
-	 * This started out as a @c private base clase, but
-	 * conversion operators against base classes' types
-	 * had no influence.
+	 * This started out as a @c private base clase but
+	 * base-classes undermine the conversion operators.
 	 */
 	EBO value;
 
 COLLADA_(public)	
 	/** 
+	 * Eases @c DAEP::Value specialization.
+	 */
+	typedef InnerValue inner_type;
+
+	/** 
 	 * This should be the equivalent Value. 
 	 */
 	typedef DAEP::Value<ID,T,CC,PtoM> type;	
-	/**UNUSED?
-	 * Visual Studio won't use CC from the outer
-	 * scope or CC redefined (GCC won't override
-	 * template parameters at any level anyway.)
-	 */
-	template<int,class,class CCC,typename CCC::_>
-	friend class Value;
 			
 COLLADA_(public) //CONSTRUCTOR
 	/**
@@ -1329,14 +1408,8 @@ COLLADA_(public) //MAYBE PORTABLE
 	typedef typename daeTypic<is_content,enum DAEP::CONTENT,enum DAEP::ATTRIBUTE>::type selector;	
 
 COLLADA_(public) //PUBLIC UTILITIES
-	/** 
-	 * Gets @c this value's object. Same as DAEP Child.
-	 */
-	inline CC &object(){ return daeOpaque(this)[-offset()]; }
-	/**CONST-FORM
-	 * Gets @c this value's object. Same as DAEP Child. 
-	 */
-	inline const CC &object()const{ return daeOpaque(this)[-offset()]; }
+
+	typedef typename CC::__COLLADA__T object_class;
 
 	/**
 	 * Gets @c this value's offset. Same as DAEP Child.
@@ -1344,8 +1417,17 @@ COLLADA_(public) //PUBLIC UTILITIES
 	inline daeOffset offset()const
 	{
 		//2 is owing to GCC's "Token Pasting" practice.
-		return daeOffsetOf2(typename CC::__COLLADA__T,->*PtoM);
+		return daeOffsetOf2(object_class,->*PtoM);
 	}
+
+	/** 
+	 * Gets @c this value's object. Same as DAEP Child.
+	 */
+	inline object_class &object(){ return daeOpaque(this)[-offset()]; }
+	/**CONST-FORM
+	 * Gets @c this value's object. Same as DAEP Child. 
+	 */
+	inline const object_class &object()const{ return daeOpaque(this)[-offset()]; }
 
 	/**
 	 * Gets the model-feature identifier. 
@@ -1378,21 +1460,43 @@ COLLADA_(public) //PROTOTYPE CONSTRUCTOR SUPPORT
 
 COLLADA_(public) //GENERIC PROGRAMMING GUARANTEES
 	/**
-	 * Select one of: ATTRIBUTE or CONTENT. 
+	 * Select one of: @c DAEP::CONTENT or @c DAEP::ATTRIBUTE. 
 	 */
 	inline type &operator()(selector){ return (type&)*this; } 
 	/**CONST-FORM
-	 * Select one of: ATTRIBUTE or CONTENT. 
+	 * Select one of: @c DAEP::CONTENT or @c DAEP::ATTRIBUTE. 
 	 */
 	inline const type &operator()(selector)const{ return (type&)*this; } 
+
+	/**C-PREPROCESSOR MACRO
+	 * This macro generates methods to enable generic-programming when two or more
+	 * members have the same NCName or clash with the built-in "value" & "content"
+	 * members.
+	 * @see @c DAEP::CONTENT
+	 */
+	#define COLLADA_DOM_CONTENT(i,t,c) \
+	COLLADA_DOM_ELEMENT2({return c##__CONTENT;},DAEP::Value<i,t,_,(_::_)&_::_##i>&c(enum DAEP::CONTENT))
+	/**C-PREPROCESSOR MACRO
+	 * This macro generates methods to enable generic-programming when two or more
+	 * members have the same NCName or clash with the built-in "value" & "content"
+	 * members.
+	 * @see @c DAEP::ATTRIBUTE
+	 */
+	#define COLLADA_DOM_ATTRIBUTE(i,t,a,...) \
+	COLLADA_DOM_ELEMENT2({return a##__ATTRIBUTE;},DAEP::Value<i,t,_,(_::_)&_::_##i>&a##__VA_ARGS__(enum DAEP::ATTRIBUTE))
 
 COLLADA_(public) //CHANGE-NOTICE GUARANTEES	
 	
 	template<class,class> friend class InnerChange;	
-
+	
 	template<class S>
-	/** It seems these must all be separate. */
-	inline operator S()const{ return __to<S>(nullptr); } 	
+	/**
+	 * Converts value to non-reference object of type @a S.
+	 */
+	inline operator S()const
+	{
+		return __to<S>(nullptr); 
+	} 	
 	/** Implements @a S conversion operator. */
 	template<class S> S __to(typename S::__COLLADA__Object*)const
 	{
@@ -1404,16 +1508,39 @@ COLLADA_(public) //CHANGE-NOTICE GUARANTEES
 	template<class S> S __to(...)const{ return S((underlying_type&)value); }
 
 	/**CONST-FORM
-	 * This brings along with it non-assignment operators.
+	 * Converts value to const reference of @c underlying_type type.
+	 *
+	 * @remark Built-in types (e.g. @c int) appear to work with the
+	 * built-in operators... unfortunately classes are second-class
+	 * citizens in C++ (or so it seems) as their operator overloads
+	 * seem to not be considered. This limits xs:anySimpleType, but
+	 * maybe casting is appropriate in that case. I think the rules
+	 * are similar to double-conversion. If necessary as workaround
+	 * @c DAEP::Value can be specialized to add/forward an operator.
 	 */
 	inline operator const underlying_type&()const{ return value; } 		
 	/**
-	 * This brings along with it non-assignment operators.
+	 * Converts value to const reference of @c underlying_type type
+	 * if compile-time change-notices are enabled for @c this value.
+	 * If compile-time change-notices are not enabled the reference
+	 * is non-const. If @this is an attribute, and the reference is
+	 * so non-const, the attribute write-mask is set as-if assigned.
 	 */
-	inline operator typename DAEP::NoConcern<note,underlying_type>::type&(){ return value; } 		
+	inline operator typename DAEP::NoConcern<note,underlying_type>::type&()
+	{
+		if(DAEP::NoConcern<note,underlying_type>::value) __mask(); return value; 
+	}
+	/**INTERNAL
+	 * Speculative mask when non-const accessor is called.
+	 */
+	inline void __mask()
+	{
+		if(ID&&!is_content) ((CC&)object())._0.mask().bit(ID-1).set(); 
+	}	
 
-	/**
+	/**CONST-FORM
 	 * @return Returns a @c const pointer to @c this. Its type is of @c value.
+	 *
 	 * @note Using -> is not consistent with pointer semantics. The usage has
 	 * more to do with accessing methods and members the inner class may have.
 	 */
@@ -1422,13 +1549,18 @@ COLLADA_(public) //CHANGE-NOTICE GUARANTEES
 		return (underlying_type*)&value; //Removed operator &from DAEP::Class.
 	}
 	/**
-	 * @return Returns a @c const pointer if this value should not be changed
-	 * without notifice.
+	 * @return Returns a @c const pointer to @c this. Its type is of @c value
+	 * if compile-time change-notices are enabled for @c this value. If not a
+	 * non-const pointer is returned, and if it points to an attribute object
+	 * said attribute's write-mask is set, as-if dereferenced-and-assigned-to.
+	 *
 	 * @note Using -> is not consistent with pointer semantics. The usage has
 	 * more to do with accessing methods and members the inner class may have.
 	 */
 	inline typename DAEP::NoConcern<note,underlying_type>::type *operator->()
 	{
+		if(DAEP::NoConcern<note,underlying_type>::value) __mask(); 
+
 		return (underlying_type*)&value; //Removed operator &from DAEP::Class.
 	}
 
@@ -1502,7 +1634,8 @@ COLLADA_(public) //CHANGE-NOTICE GUARANTEES
 	 */
 	inline typename DAEP::NoConcern<note,atom>::type &operator[](const I &i)
 	{
-		return value[i]; 
+		//Ideally compiler notices it's setting the same mask bit.
+		if(DAEP::NoConcern<note,underlying_type>::value) __mask(); return value[i]; 
 	} 
 
 	template<class S> 
@@ -1516,14 +1649,77 @@ COLLADA_(public) //CHANGE-NOTICE GUARANTEES
 	 * @see @c COLLADA_DOM_GLOBAL_ASSIGNMENT_OPERATORS_NOT_INCLUDED &
 	 * ColladaDOM.inl -=,+=,/=,%=,*=,<<=,>>=,&=,|=,^=,++,-- operators.
 	 */
-	inline type &operator=(const S &rvalue)\
+	inline type &operator=(const S &rvalue)
 	{
+		__mask();
 		struct _{ static void f(underlying_type &lv,const S &rv){ lv = rv; } };
-		DAEP::InnerChange<type,S> cn(*(type*)this,_::f,rvalue); return *(type*)this;
+		DAEP::InnerChange<type,S> cn(*(type*)this,_::f,rvalue); 
+		return *(type*)this;
 	}
+
+	/**WARNING
+	 * @warning XML allows "" attributes. This however does not allow
+	 * them since it sets @c write_mask()=false. Here "" is a special
+	 * "magic" literal that reverts to an attribute's default. If you
+	 * require "" attributes from strings, then use a C-string, or an
+	 * other string format than the "" string-literal. 
+	 * FURTHER-REMARKS
+	 * @c "" could work differently for string types... however it is
+	 * probably best to use @c clear() to get the desired behavior. I
+	 * personally wish that "" was not a valid value for an attribute.
+	 * I don't believe HTML permits "" values.
+	 *
+	 * "" unassignment operator, assigns value to @c prototype(), and
+	 * unsets attribute mask. Currently only attributes are supported.
+	 *
+	 * @a empty_string_literal is the "" string-literal.
+	 */
+	inline daeString1 operator=(daeString1 empty_string_literal)
+	{	
+		//This is the one case where the mask is implicity unset.
+		if(ID&&!is_content) ((CC&)object())._0.mask().bit(ID-1).unset();
+
+		struct _{ static void f(underlying_type &lv,const EBO &rv){ lv = rv; } };
+		DAEP::InnerChange<type,EBO> cn(*(type*)this,_::f,prototype()); 		
+		assert(empty_string_literal[0]=='\0');
+		return empty_string_literal;
+	}	
+
+COLLADA_(public) //ATTRIBUTE UTILITIES
+	/**
+	 * Gets mutable attribute mask.
+	 * @return Treat returned object as-if @c bool type.
+	 * @see CONST-FORM of @c write_mask() Doxygentation.
+	 * @note Any nonconst accessor sets the mask bit. "" string-literal assignment
+	 * operations unset the mask bit.
+	 */
+	inline const daeBit write_mask()
+	{	
+		//#define COLLADA_DOM_COMPILE_VOID_WRITE_MASK to let write_mask compile if
+		//this value is not an attribute. That is one of the attribute or contents
+		//arrays, or the simple content-model value.
+		#ifndef COLLADA_DOM_COMPILE_VOID_WRITE_MASK
+		daeCTC<ID&&!is_content>();		
+		return ((CC&)object())._0.mask().bit(ID-1);
+		#else		
+		daeBit o = {}; 		
+		if(ID&&!is_content)
+		o = ((CC&)object())._0.mask().bit(ID-1); return o;
+		#endif		
+	}		
+	/**CONST-FORM
+	 * Gets attribute write-mask.
+	 * @return Returns @true if @c this attribute has been accessed via a nonconst
+	 * accessor, including assignmenet operations.
+	 * @note @true in principle indicates the attribute appeared inside a document.
+	 */
+	inline bool write_mask()const
+	{
+		return const_cast<InnerValue&>(*this).write_mask(); 
+	}	
 };
 
-template<int ID, class T, class CC=DAEP::Nil, typename CC::_ PtoM=typename CC::_()>
+template<int ID, class T=int, class CC=DAEP::Nil, typename CC::_ PtoM=typename CC::_()>
 /**
  * @class COLLADA::DAEP::Child
  *
@@ -1543,38 +1739,26 @@ template<int ID, class T, class CC=DAEP::Nil, typename CC::_ PtoM=typename CC::_
  * the same name. Names borne by more than one child have
  * lower IDs, because they are assigned physical addresses.
  */
-class Child : public DAEP::InnerChild<ID,T,CC,PtoM>
+class Child : public InnerChild<ID,T,CC,PtoM>
 {
-COLLADA_(public) //using InnerChild::operator=; //-C2679-C2622
-
-	/**C-PREPROCESSOR MACRO, C++98/03 SUPPORT
-	 * This macro is used by @c DAEP::Child to work around the C++03
-	 * restriction on @c operator= for members of unions. If clients 
-	 * specialize @c DAEP::Child they will require this macro if the
-	 * specialization is to be used by a C++98 compiler.
-	 * @note "using InnerChild::operator=;" should do it after C++11.
-	 */
-	#define COLLADA__DAEP__Child__union__assignment_operator(T,ID) \
-	template<class S>\
-	/**\
-	 * Assignment of smart-refs, arrays, and pointers.\
-	 */\
-	inline dae_Array<T,ID> &operator=(const S &cp)\
-	{\
-		this->template __assign<S>(cp,nullptr); return *this;\
-	}\
-	/**\
-	 * Removes this element from the contents-array by means\
-	 * of converting it to an empty text-node. This will not\
-	 * disrupt the array, and so is recommended. The removed\
-	 * nodes can be cleaned out en masse as a maintenance op.\
-	 */\
-	inline daeString1 operator=(daeString1 empty_string_literal)\
-	{\
-		return this->operator[](0) = empty_string_literal;\
-	}
-	COLLADA__DAEP__Child__union__assignment_operator(T,ID)
+public: using InnerChild<ID,T,CC,PtoM>::operator=;
 };
+template<>
+/**OPTIMIZATION
+ * Simplifying dummy Parameters placeholders in the
+ * hope it reduces build overhead on some compilers.
+ * @note Momentarily Parameters only list the array
+ * based children but not the single child elements.
+ */
+class Child<sizeof(1)>{ int sizer; /*daeCounter*/ };
+
+template<class T>
+/**C++
+ * This language leads me to doubt its sanity.
+ */
+struct Inner{ typedef typename T::inner_type type; };
+#define COLLADA_DOM_INNER_OPERATORS \
+public: using Inner<Value>::type::operator=;
 
 template<int ID, class T, class CC=DAEP::Nil, typename CC::_ PtoM=typename CC::_()>
 /**
@@ -1596,9 +1780,7 @@ template<int ID, class T, class CC=DAEP::Nil, typename CC::_ PtoM=typename CC::_
  */
 class Value : public DAEP::InnerValue<ID,T,CC,PtoM>
 {
-COLLADA_(public) //C2679 //GCC wants parameters.
-
-	using InnerValue<ID,T,CC,PtoM>::operator=;
+	COLLADA_DOM_INNER_OPERATORS //C2679
 };
 
 template<int ID, class CC, typename CC::_ PtoM>
@@ -1607,11 +1789,11 @@ template<int ID, class CC, typename CC::_ PtoM>
  * It might be more accommodating to specialize DAEP InnerValue instead,
  * -but it's hard to think of other uses for a plain C-string than this.
  */
-class Value<ID,daeString,CC,PtoM> : public DAEP::InnerValue<ID,daeString,CC,PtoM,daeStringRef>
+class Value<ID,daeString,CC,PtoM> 
+:
+public DAEP::InnerValue<ID,daeString,CC,PtoM,daeStringRef>
 {
-COLLADA_(public) //C2679 //GCC wants parameters.
-
-	using InnerValue<ID,daeString,CC,PtoM,daeStringRef>::operator=;
+	COLLADA_DOM_INNER_OPERATORS //C2679
 };
 
 template<class T>
@@ -1655,6 +1837,12 @@ COLLADA_(protected) //DATA-MEMBERS
 	 * responsible for the executable model originating this Make.
 	 */
 	daeClientString __DAEP__Make__maker;
+	/**
+	 * Implements @c XS::Import::getSchemaLocation(). You can set
+	 * this if you want. For @c XS::Schema it's opportunistically
+	 * set if the generator did not generate a canonical location.
+	 */
+	daeStringRef __DAEP__Make__location;
 
 COLLADA_(public) //VIRTUAL METHOD TABLE
 	/**
@@ -1670,7 +1858,14 @@ COLLADA_(public) //VIRTUAL METHOD TABLE
 	 */
 	Make():__DAEP__Make__maker(COLLADA::DOM_process_share._maker)
 	{}
-
+								 
+	//SCHEDULED FOR REMOVAL/REFACTOR
+	//There isn't a strong argument for calling client "new".
+	//It is helpful for daeProcessShare_base::_addModel, but
+	//that can be overcome.
+	#ifdef NDEBUG
+	#error XS::Schema replaces this. I think it needs thought.
+	#endif
 	/**SEALED INTERFACE
 	 * This is used to set up a DAEP Model. The models are
 	 * then deleted by @c daeProcessShare::~daeProcessShare().
@@ -1678,8 +1873,7 @@ COLLADA_(public) //VIRTUAL METHOD TABLE
 	virtual void *__DAEP__Make__v1__operator_new(size_t chars)const
 	{
 		return operator new(chars);
-	}
-	
+	}	
 	/**SEALED INTERFACE
 	 * Delete @a obj from its orginating translation-unit.
 	 * This is not supposed to happen at a high frequency.
@@ -1696,10 +1890,15 @@ COLLADA_(public) //VIRTUAL METHOD TABLE
 COLLADA_(public) //OPERATORS
 
 	/** Implicitly convert to "daeX" equivalents. */
-	inline operator const XS::Schema&()const{ return (XS::Schema&)*this; }
+	inline operator const XS::Schema&()const{ return *(XS::Schema*)this; }
 	/** Implicitly convert to "daeX" equivalents. */
-	inline operator daeProcessShare&()const{ return (daeProcessShare&)*this; }	
+	inline operator daeProcessShare&()const{ return *(daeProcessShare*)this; }	
 
+	/** @return Returns @c true if @a cmp is @c this make. */
+	inline bool operator==(const DAEP::Make &cmp)const{ return this==&cmp; }
+	/** @return Returns @c false if @a cmp is @c this make. */
+	inline bool operator!=(const DAEP::Make &cmp)const{ return this!=&cmp; }
+	
 COLLADA_(private) //INHERITED NON-CONSTRUCTORS
 	/**
 	 * Disabled Copy Constructor & Assignment Operator
@@ -1816,6 +2015,10 @@ COLLADA_(public) //DATA-MEMBERS
   //Char-size features are limited to IDs ranging 1 to UCHAR_MAX//
   ////////////////////////////////////////////////////////////////
 	
+	//SCHEDULED FOR REMOVAL
+	#ifdef NDEBUG //GCC wants quotes.
+	#error "I feel this isn't used enough to justify its existence."
+	#endif
 	template<class T>
 	/** Extracts RTTI about a model feature. */
 	inline const daeFeature &__DAEP__Model__feature(const DAEP::Object *object, const T *member)const

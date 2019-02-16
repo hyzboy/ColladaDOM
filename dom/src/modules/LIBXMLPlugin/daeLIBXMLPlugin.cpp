@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 //The user can choose whether or not to include libxml support in the DOM. Supporting libxml will
 //require linking against it. By default libxml support is included.
@@ -33,18 +34,16 @@ int daeLibXMLPlugin::_errorRow()
 	#endif
 }
 
-daeLibXMLPlugin::daeLibXMLPlugin(int legacy):_saveRawFile()
+daeLibXMLPlugin::daeLibXMLPlugin(int legacy)
+:daeIOPluginCommon(legacy),_saveRawFile()
 {
 	xmlInitParser(); 
 
-	if(legacy!=0)
-	{
-		if(0!=(legacy&daePlatform::LEGACY_LIBXML_RAW))
-		option_to_write_COLLADA_array_values_to_RAW_file_resource();
+	if(0!=(legacy&daePlatform::LEGACY_LIBXML_RAW))
+	option_to_write_COLLADA_array_values_to_RAW_file_resource();
 
-		if(0!=(legacy&daePlatform::LEGACY_EXTENDED_LATIN1))
-		option_to_use_codec_Latin1();
-	}
+	if(0!=(legacy&daePlatform::LEGACY_EXTENDED_LATIN1))
+	option_to_use_codec_Latin1();
 
 	//If this fails a default _encoder/_decoder is 
 	//required and the (xmlChar*) casts have to go.
@@ -63,7 +62,7 @@ void daeLibXMLPlugin::option_to_use_codec_Latin1()
 	daeCTC<sizeof(daeStringCP)==sizeof(xmlChar)>();
 	struct _ //SCOPING. THESE MAY NEED TO BE GLOBALS IN ORDER TO  DEBUG THEM.
 	{
-	static daeHashString UTF8ToLatin1(const daeHashString &UTF, daeArray<daeStringCP> &Latin)
+	static daeHashString UTF8ToLatin1(const daeHashString &UTF, daeArray<> &Latin)
 	{
 		int inLen = (int)UTF.extent;
 		int outLen = (inLen+1)*2; Latin.grow(outLen);
@@ -75,7 +74,7 @@ void daeLibXMLPlugin::option_to_use_codec_Latin1()
 		Latin.data()[numBytes] = '\0';
 		Latin.getAU()->setInternalCounter(numBytes); return Latin;
 	}
-	static daeHashString Latin1ToUTF8(daeArray<daeStringCP> &Latin, daeArray<daeStringCP> &UTF)
+	static daeHashString Latin1ToUTF8(daeArray<> &Latin, daeArray<> &UTF)
 	{
 		int inLen = (int)Latin.size();
 		int outLen = (inLen+1)*2; UTF.grow(outLen);
@@ -101,7 +100,7 @@ static void daeLibXMLPlugin_libxmlErrorHandler
 	else daeEH::Error<<msg<<" at line "<<xmlTextReaderLocatorLineNumber(locator);
 }
 
-//Previously ::xmlTextReaderHelper.
+//Formerly "xmlTextReaderHelper."
 //A simple structure to help alloc/free xmlTextReader objects
 struct daeLibXMLPlugin::Reader
 { 
@@ -216,26 +215,39 @@ bool daeLibXMLPlugin::_read(daeIO &IO, daeContents &content)
 	//THE RETURN CODES ARE COMPLETELY UNDOCUMENTED???
 	assert(0<=readRetVal); return true;
 }
-
+	 
 int daeLibXMLPlugin::_readElement(daePseudoElement &parent)
 {
+	daePseudoElement2 parent2 = parent;
+
 	//This was an argument. It should fetch better as a stack object.
 	xmlTextReader *reader = _reader; 
 
-	assert(xmlTextReaderNodeType(reader)==XML_READER_TYPE_ELEMENT);
-	daeString elementName = (daeString)xmlTextReaderConstName(reader);
+	assert(xmlTextReaderNodeType(reader)==XML_READER_TYPE_ELEMENT);	
+	daeString elementName = (daeString)xmlTextReaderConstLocalName(reader);	
 	
 	//Is this needed? It seems to need to be called before attributes.
 	int empty = xmlTextReaderIsEmptyElement(reader);
 
-	while(xmlTextReaderMoveToNextAttribute(reader)==1)
-	{
-		daeString xmlName = (daeString)xmlTextReaderConstName(reader);
-		daeString xmlValue = (daeString)xmlTextReaderConstValue(reader);
-		daeIOPluginCommon::_attribs.push_back(_attrPair(xmlName,xmlValue));
+	while(1==xmlTextReaderMoveToNextAttribute(reader))
+	{ 
+		daeString k = (daeString)xmlTextReaderConstName(reader);
+		daeString v = (daeString)xmlTextReaderConstValue(reader);
+		daeIOPluginCommon::_attribs.push_back(_attrPair(k,v));
+
+		//NAMESPACE LOGIC
+		//Chicken-and-egg scenario: Attributes determines class.
+		if(_cc.xmlnstr(k))
+		{	
+			//Using daeCreateContext if xmlns attributes present.
+			//TODO: Should xmlTextReaderConstPrefix be used here? 
+			//(Can't call xmlTextReaderMoveToNextAttribute if so.)
+			parent2 = &_cc; _cc.parent = &parent;
+		}
 	}
+
 	daeElement &element = 
-	daeIOPluginCommon::_beginReadElement(parent,elementName);		
+	daeIOPluginCommon::_beginReadElement(parent2,elementName);		
 	/*Post-2.5 all elements are accepted in order to prevent loss. This is not a validator.
 	if(element==nullptr)
 	{
@@ -436,12 +448,24 @@ void daeLibXMLPlugin::_writeElement(const daeElement &element)
 		}
 	}
 
-	xmlTextWriterStartElement(_writer,(xmlChar*)element.getNCName().string);
+	//HACK: Not ideal way to do this.
+	daeName q; if(element.hasQName())
+	{
+		//DEBUG ME
+		assert(0);
+		//Can't find documentation on writing QNames.
+		//The xmlTextWriterStartElementNS API doesn't look like a good fit.
+		//Don't know (will have to see) if xmlTextWriterStartElement will work or not.
+		_CD.assign(element.getQNamePrefix());
+		_CD.push_back(':');
+		_CD.assign_and_0_terminate(element.getNCName());
+		q = _CD.data();
+	}
+	else q = element.getNCName();
+	xmlTextWriterStartElement(_writer,(xmlChar*)q.string);
 	{
 		//Reminder: domAny is ambiguous with regard to value/content.
-		daeAnyAttribute &attrs = element.getAttributes();	
-		for(size_t i=0,iN=attrs.size();i<iN;i++) 
-		_writeAttribute(*attrs[i],element);
+		daeIOPluginCommon::_writeAttributes(element);
 		_writeContent2(content);
 		_writeValue(element);	
 	}
@@ -487,30 +511,8 @@ void daeLibXMLPlugin::_writeContent2(const daeContents &content)
 }
 
 void daeLibXMLPlugin::_writeAttribute(daeData &attr, const daeElement &element)
-{
-	attr.memoryToStringWRT(&element,_CD);
-
-	//REMINDER: TO SUPPORT LEGACY BEHAVIOR, <COLLADA> HAS
-	//BOTH-REQUIRED-AND-DEFAULT ON ITS version ATTRIBUTES.
-	//Don't write the attribute if
-	//  - The attribute isn't required AND
-	//     - The attribute has no default value and the current value is ""
-	//     - The attribute has a default value and the current value matches the default
-	daeValue *def = attr.findDefault();
-	if(_CD.empty())
-	{
-		if(attr.getIsRequired())
-		{	
-			//NEW: Empty/required attribute is probably illegal. So try to fill it out?
-			if(def!=nullptr) def->defaultToString(_CD);
-		}
-		else return;
-	}
-	else if(def!=nullptr)
-	{
-		if(def->compareIsDefaultWRT(&element))
-		return;
-	}
+{	
+	assert(!_CD.empty()); //HACK: Comes pre-filled.
 
 	xmlTextWriterStartAttribute(_writer,(xmlChar*)attr.getName().string);
 	
@@ -600,7 +602,7 @@ const daeElement &unused_array, const daeElement &unused_technique_common)
 			 
 	//TODO: pay attention to precision for the array.
 	i = 0;
-	#define _(x,y,z) if(atomic_type==daeAtomicType::z)\
+	#define _(x,y,z) if(atomic_type==daeAtom::z)\
 	{\
 		x tmp; _rawByteCount+=sizeof(x)*iN;\
 		for(const y&i0=valArray->getRaw();i<iN;i++)\
@@ -609,7 +611,7 @@ const daeElement &unused_array, const daeElement &unused_technique_common)
 	daeData &arrayCD = array->getCharData();
 	int atomic_type = 
 	arrayCD.getTypeWRT(array).where<daeAtom>().getAtomicType();	
-	const daeAlloc<> *valArray = (daeAlloc<>*const&)arrayCD.getWRT(array);
+	const daeAlloc<> *&valArray = arrayCD.getWRT(array);
 	COLLADA_SUPPRESS_C(4244) //possible loss of data
 	_(int,daeInt,INT)_(int,daeLong,LONG)_(float,daeFloat,FLOAT)_(float,daeDouble,DOUBLE)
 	{

@@ -12,10 +12,11 @@
 //really, as this isn't how it's included.
 #include "FX.pch.h"
 
+//WARNING: IMPORTANT DO NOT INCLUDE TWICE.
+#ifdef PRECOMPILING_COLLADA_FX
 //GCC precompiled headers cannot remember
 //#pragma diagnostics; so bring them back.
-#ifdef PRECOMPILING_COLLADA_FX
-#include "../../dom/include/WARNING.HPP"
+#include <ColladaDOM.g++> 
 #endif
 
 COLLADA_(namespace)

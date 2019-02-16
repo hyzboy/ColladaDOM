@@ -37,14 +37,13 @@ COLLADA_(public)
 	{}
 };
 
-template<int size_on_stack> class daeSIDREF_size;
-
+template<int size_on_stack> class daeSIDREF_size; 
 /**LEGACY
  * The daeSIDREF class is designed to resolve SID references within a COLLADA document.
  * The rules for SID resolution are set forth by the Addressing Syntax section in Chapter 3 of the
  * COLLADA specification which can be found at https: //www.khronos.org/collada .
  */
-typedef daeSIDREF_size<260> daeSIDREF;
+typedef daeSIDREF_size<COLLADA_MAX_PATH> daeSIDREF;
 typedef daeSmartRef<daeSIDREF> daeSIDREFRef;
 typedef daeSmartRef<const daeSIDREF> const_daeSIDREFRef;
 #ifndef COLLADA_NODEPRECATED
@@ -136,12 +135,8 @@ COLLADA_(public) //METHODS NAMED AFTER SIDREF
 	 * to. This API calls @c strlen(). Use @c data() to avoid it.
 	 * Optimization will likely eliminate the length if not used.
 	 */	
-	inline daeRefView_0 getSIDREF()const
-	{
-		daeRefView_0 o; o.view = _refString.getString();
-		o.extent = strlen(o.view); return o;
-	} 		  	
-
+	inline daeName getSIDREF()const{ return _refString.getString(); }
+	
 COLLADA_(public) //SIDREF HELP
 	/**
 	 * This is the first part of a SIDREF that begins with "./".
@@ -155,7 +150,7 @@ COLLADA_(public) //SIDREF HELP
 	 * documentation loosely defines this. 
 	 * @see @c getSIDREF_separated().
 	 */
-	struct Terminator : daeRefView
+	struct Terminator : daeName
 	{
 		/**
 		 * Default Constructor
@@ -212,7 +207,7 @@ COLLADA_(public) //SIDREF HELP
 				}; 
 				break;
 			}
-			view = p; extent = SIDREF+len-p;
+			string = p; extent = SIDREF+len-p;
 		}		
 
 		/**WARNING
@@ -227,11 +222,11 @@ COLLADA_(public) //SIDREF HELP
 		 * setup to trigger an @c assert if the string isn't
 		 * well-formed.
 		 */
-		size_t select(const daeName &NCName="")const
+		size_t select(const daeName &NCName=empty_daeString1)const
 		{
-			if('.'==view[0])
+			if('.'==string[0])
 			{
-				if(extent==2) switch(view[1])
+				if(extent==2) switch(string[1])
 				{
 				case 'X': case 'R': case 'U': case 'S': return 0;
 				case 'Y': case 'G': case 'V': case 'T': return 1;
@@ -243,10 +238,10 @@ COLLADA_(public) //SIDREF HELP
 					assert(*this==".ANGLE"); return 3;
 				}
 			}
-			else if('('==view[0])
+			else if('('==string[0])
 			{
 				daeStringCP *e;
-				size_t out = strtol(view+1,&e,10);
+				size_t out = strtol(string+1,&e,10);
 				if(*e==')')
 				{
 					if(e[1]!='(')
@@ -441,12 +436,12 @@ COLLADA_(public)
 
 COLLADA_(protected) //daeRefResolver::_resolve
 
-	virtual daeOK _resolve(const daeRef &ref, daeRefRequest &req)const
+	virtual daeError _resolve(const daeRef &ref, daeRefRequest &req)const
 	{
 		const_daeDocRef doc;
 		const daeSIDREF &sidref = (daeSIDREF&)ref;		
 
-		daeOK OK;
+		daeError err = DAE_OK;
 		//COLLADA_SUPPRESS_C(4144)
 		switch(req.object!=nullptr?1:0)
 		{
@@ -458,7 +453,7 @@ COLLADA_(protected) //daeRefResolver::_resolve
 				{
 					const daeDoc *cmp = ref.getDoc();
 
-					if(cmp!=nullptr&&doc!=cmp) OK = DAE_ERR_QUERY_SYNTAX;
+					if(cmp!=nullptr&&doc!=cmp) err = DAE_ERR_QUERY_SYNTAX;
 				}
 				break;
 			}
@@ -466,25 +461,25 @@ COLLADA_(protected) //daeRefResolver::_resolve
 
 		case 0:	doc = ref.getDoc();
 
-			if(doc==nullptr) OK = DAE_ERR_INVALID_CALL;
+			if(doc==nullptr) err = DAE_ERR_INVALID_CALL;
 		}		
 
-		if(OK==DAE_OK)
+		if(err==DAE_OK)
 		{
 			daeString SIDREF = sidref.data();
 			daeSIDREFCache::LesserKey key(daeStringRef(*doc,req),SIDREF);
 			daeElementRef hit = _cache.lookup(key);
 			if(SIDREF[0]=='.'&&hit!=&ref.getParentObject()) hit = nullptr;
-			OK = _resolve_exported(hit,doc,sidref,req);
+			err = _resolve_exported(hit,doc,sidref,req);
 			#ifdef NDEBUG
 			#error _cache is corrupting the heap atexit. Are SIDREFs ever worth caching?
 			#endif
 			/*if(OK==DAE_OK&&hit!=req.object) _cache.add(key,req.object);*/
 		}
 		
-		if(OK!=DAE_OK) _printError(OK,sidref.getSIDREF()); return OK;
+		if(err!=DAE_OK) _printError(err,sidref.getSIDREF()); return err;
 	}
-	static void _printError(daeError err, const daeRefView &sidref)
+	static void _printError(daeError err, const daeName &sidref)
 	{
 		daeEH::Warning<<"daeDefaultSIDREFResolver - Failed to resolve:\n"<<sidref;
 	}
@@ -496,7 +491,7 @@ COLLADA_(protected) //daeRefResolver::_resolve
 	 * -because the STL makes no ABI guarantees.
 	 * @see daeSIDResolver.cpp TU's implementation.
 	 */
-	daeOK _resolve_exported(const daeElementRef&,const const_daeDocRef&,const daeSIDREF&,daeRefRequest&)const;
+	daeError _resolve_exported(const daeElementRef&,const const_daeDocRef&,const daeSIDREF&,daeRefRequest&)const;
 
 COLLADA_(private) //DATA-MEMBER
 	//SUB-OBJECT

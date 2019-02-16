@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 #ifdef BUILDING_IN_TINYXML /////////////////////////////////////////////
 
@@ -30,8 +31,14 @@ T *daeTinyXMLPlugin::setValue(T *io, const daeHashString &v)
 	const_cast<TIXML_STRING&>(io->ValueTStr()).assign(v.string,v.extent);
 	return io;
 }
+template<class T>
+T *daeTinyXMLPlugin::setQName(T *io, daeName pf, const daeName &v)
+{
+	const_cast<TIXML_STRING&>(io->ValueTStr()).assign(pf.string,pf.extent)
+	.append(":",1).append(v.string,v.extent); return io;
+}
 
-daeTinyXMLPlugin::daeTinyXMLPlugin()
+daeTinyXMLPlugin::daeTinyXMLPlugin(int legacy):daeIOPluginCommon(legacy)
 {
 	//2/3 is to give US a heads up
 	daeCTC<(__combined_size_on_client_stack*2/3>=sizeof(*this))>();
@@ -129,17 +136,28 @@ bool daeTinyXMLPlugin::_read(daeIO &IO, daeContents &content)
 
 void daeTinyXMLPlugin::_readElement(TiXmlElement *tinyXmlElement, daePseudoElement &parent)
 {
+	daePseudoElement2 parent2 = parent;
+
 	_err = tinyXmlElement;
 
 	TiXmlAttribute *a;
 	for(a=tinyXmlElement->FirstAttribute();a!=nullptr;a=a->Next())
 	{
-		//TinyXML is a mess.
-		//Value(a) is not possible. NameTStr exists. ValueTStr does not. And vice versa.
-		daeIOPluginCommon::_attribs.push_back(_attrPair(a->Name(),a->Value()));
+		daeString k = a->Name(), v = a->Value();
+		daeIOPluginCommon::_attribs.push_back(_attrPair(k,v));
+
+		//NAMESPACE LOGIC
+		//Chicken-and-egg scenario: Attributes determines class.
+		if(_cc.xmlnstr(k))
+		{	
+			//Using daeCreateContext if xmlns attributes present.
+			//TODO: Should xmlTextReaderConstPrefix be used here? 
+			//(Can't call xmlTextReaderMoveToNextAttribute if so.)
+			parent2 = &_cc; _cc.parent = &parent;
+		}
 	}
 	daeElement &element = 
-	daeIOPluginCommon::_beginReadElement(parent,Value(tinyXmlElement));	
+	daeIOPluginCommon::_beginReadElement(parent2,Value(tinyXmlElement));	
 	/*Post-2.5 all elements are accepted in order to prevent loss. This is not a validator.
 	if(element==nullptr)
 	{
@@ -207,45 +225,30 @@ daeOK daeTinyXMLPlugin::writeContent(daeIO &IO, const daeContents &content)
 	return IO.writeOut(printer.CStr(),printer.Size());	
 }
 
+void daeTinyXMLPlugin::_writeAttribute(daeData &attr, const daeElement &element)
+{	
+	assert(!_CD.empty()); //HACK: Comes pre-filled.
+
+	((TiXmlElement*)_err)->SetAttribute(attr.getName(),_CD.data());
+}
+
 void daeTinyXMLPlugin::_writeElement(TiXmlNode *tinyXmlNode, const daeElement &element)
 {		
-	TiXmlElement *tiElm = setValue(new TiXmlElement(""),element.getElementName());
+	#ifdef NDEBUG
+	#error This is a quick fix for QNames.
+	#endif
+	TiXmlElement *tiElm = new TiXmlElement("");
+	if(element.hasQName())
+	setQName(tiElm,element.getQNamePrefix(),element.getNCName());	
+	else setValue(tiElm,element.getNCName());
 
 	//_err may or may not work in this context. It's UNTESTED.
+	//(Looks safe, going by tinyxml.cpp for _writeAttribute.)
 	_err = tinyXmlNode->LinkEndChild(tiElm);
-
-	daeAnyAttribute &attrs = element.getAttributes();
-	for(size_t i=0;i<attrs.size();i++)
-	{
-		//Previously _writeAttribute(attrs[i],element);
-		daeData *attr = attrs[i];
-		attr->memoryToStringWRT(&element,_CD);
-
-		//REMINDER: TO SUPPORT LEGACY BEHAVIOR, <COLLADA> HAS
-		//BOTH-REQUIRED-AND-DEFAULT ON ITS version ATTRIBUTES.
-		//Don't write the attribute if
-		//  - The attribute isn't required AND
-		//     - The attribute has no default value and the current value is ""
-		//     - The attribute has a default value and the current value matches the default
-		daeValue *def = attr->findDefault();
-		if(_CD.empty())
-		{
-			if(attr->getIsRequired())
-			{	
-				//NEW: Empty/required attribute is probably illegal. So try to fill it out?
-				if(def!=nullptr) def->defaultToString(_CD);
-			}
-			else continue;
-		}
-		else if(def!=nullptr)
-		{
-			if(def->compareIsDefaultWRT(&element))
-			continue;
-		}
-
-		tiElm->SetAttribute(attr->getName(),_CD.data());
-	}
-	
+	assert(_err==tiElm);
+	_err = tiElm;
+	daeIOPluginCommon::_writeAttributes(element);
+			   	
 	//Reminder: domAny is ambiguous with regard to value/content.
 	_writeContent2(tiElm,element.getContents());
 	if(!element->getCharData(_CD).empty())

@@ -26,7 +26,7 @@ COLLADA_(namespace)
  * Alternatively an <xs:any> part of a schema will be filled with @c domAny
  * elements as a last resort.
  *
- * @note The content-model is technically MIXED, but but in this case it is
+ * @note The content-model is technically MIXED, however in this case it is
  * ambiguous. In which case, the SIMPLE model is preferred, because it lets
  * there be a value, and mixed-content will still go in the contents-arrays.
  */
@@ -41,15 +41,16 @@ public: //COLLADA-DOM 2
 public: //Parameters
 
 	typedef struct:Elemental
-	{	DAEP::Value<0,xsAnyAttribute>
-	_0; DAEP::Value<1,xsAnySimpleType>
-	_1; COLLADA_WORD_ALIGN
+	{	COLLADA_DOM_0
+	_0; DAEP::Value<sizeof(1),xsAnySimpleType> value;
+		COLLADA_WORD_ALIGN
 		COLLADA_DOM_Z(0,0)
-	DAEP::Value<2,dae_Array<>> _Z; enum{ _No=2 };
-	DAEP::Value<3,daeContents> content; typedef void notestart;
+	DAEP::Value<sizeof(2),dae_Array<>> _Z; enum{ _No=2 };
+	DAEP::Value<sizeof(3),daeContents> content; typedef void notestart;
 	}_;
 
 public: //Attributes
+
 	/**NO-NAMES
 	 * These attributes are invalid according to the schema. They may be user- 
 	 * defined additions and substitutes.
@@ -60,7 +61,8 @@ public: //Attributes
 	 */
 	DAEP::Value<0,xsAnyAttribute,_,(_::_)&_::_0> attrAny_et_cetera__value;
 
-public: //Content
+public: //Simple Content Model
+
 	/**WARNING
 	 * The @c xsAnySimpleType value of the text data of this element. 
 	 * @warning Technically "domAny" should be using a mixed content
@@ -68,7 +70,7 @@ public: //Content
 	 * simple content-model, since handling of mixed-content is rare
 	 * and mixed-content is accepted even with simple-content models.
 	 */
-	DAEP::Value<1,xsAnySimpleType,_,(_::_)&_::_1> value;
+	DAEP::Value<1,xsAnySimpleType,_,(_::_)&_::value> value;
 
 	COLLADA_WORD_ALIGN
 	COLLADA_DOM_Z(0,0) 
@@ -132,8 +134,9 @@ COLLADA_(public) //INVISIBLE
 		 */
 		struct _Master
 		{
-			Elemental::TOC toc;
-			daeMeta &meta; DAEP::Model &model; _Master(XS::Schema&);
+			_Master(XS::Schema&); domAny *toc;
+
+			daeMeta &meta; DAEP::Model &model;
 		};
 		/**
 		 * This is an empty "meta" record, that is used to bridge
@@ -156,7 +159,7 @@ COLLADA_(private)
 	COLLADA_DOM_SNIPPET( return _master.model; )
 };
 
-namespace DAEP //GCC refuses to disable this (erroneous) warning
+namespace DAEP //GCC
 {
 	template<>
 	/**

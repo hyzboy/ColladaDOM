@@ -105,6 +105,7 @@ void MatrixTranslate(RT::Matrix &dst, RT::Float x, RT::Float y, RT::Float z);
 
 void MatrixScale(RT::Matrix &dst, RT::Float x, RT::Float y, RT::Float z);
 
+//UNUSED
 void QuaternionToMatrix(const RT::Quaternion &LQ, RT::Matrix &LMatrix);
 
 ////2017: These routines are old code, refactored to merge the many series classes

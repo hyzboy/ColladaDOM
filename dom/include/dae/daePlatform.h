@@ -9,6 +9,20 @@
 #ifndef __COLLADA_DOM__DAE_PLATFORM_H__
 #define __COLLADA_DOM__DAE_PLATFORM_H__
 
+#ifndef COLLADA_BIG_ENDIAN
+#ifdef __BYTE_ORDER__
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define COLLADA_BIG_ENDIAN
+#endif
+#endif
+#endif
+
+//This is a "small-string" style optimization
+//that is used by daeURI.
+#ifndef COLLADA_MAX_PATH
+#define COLLADA_MAX_PATH 260 //Win32 MAX_PATH.
+#endif
+
 //Definitions from here down to COLLADA_DOM_INCLUDE
 //are made available for use by COLLADA_DOM_INCLUDE.
 //
@@ -69,16 +83,6 @@ namespace ColladaDOM_3
 	 * method layouts, and no more (names don't matter.)
 	 */
 	namespace DAEP{}
-
-	/**namespace COLLADA::XS
-	 * 
-	 * This namespace contains classes that correspond
-	 * to elements in the XML Schema's (XSD) namespace.
-	 *
-	 * Classes in this namespace are used to configure
-	 * the code-generation step's XML element metadata.
-	 */
-	namespace XS{}
 }
 /**
  * @namespace COLLADA
@@ -228,6 +232,10 @@ includes the C++98 set. daeStringSet, etc. require one or the other.
 #endif
 #endif
 
+#ifndef COLLADA_NOEXCEPT //MSVC2013 C2694
+#define COLLADA_NOEXCEPT
+#endif
+
 #ifndef COLLADA_ASSUME //__assume
 #define COLLADA_ASSUME(x) assert(x);
 #endif
@@ -246,12 +254,20 @@ includes the C++98 set. daeStringSet, etc. require one or the other.
 #if defined(NDEBUG) && defined(BUILDING_COLLADA_DOM)
 #error Importing with BUILDING_COLLADA_DOM in Release mode
 #endif //Clients may want to see hidden data in their debugger.
-#define COLLADA_DOM_LINKAGE COLLADA_DOM_IMPORT COLLADA_NOINLINE
+#define COLLADA_DOM_LINKAGE2 COLLADA_DOM_IMPORT
 #elif defined(EXPORTING_COLLADA_DOM)
-#define COLLADA_DOM_LINKAGE COLLADA_DOM_EXPORT
+#define COLLADA_DOM_LINKAGE2 COLLADA_DOM_EXPORT
 #else 
-#define COLLADA_DOM_LINKAGE
+#define COLLADA_DOM_LINKAGE2
 #endif
+
+	//COLLADA_DOM_LINKAGE2 is for data-export.
+
+#ifndef COLLADA_USED
+#define COLLADA_USED //__attribute__((__used__))
+#endif
+//Data exports must declare COLLADA_DOM_LINKAGE2.
+#define COLLADA_DOM_LINKAGE COLLADA_DOM_LINKAGE2 COLLADA_NOINLINE COLLADA_USED
 
 //See LINKAGE.HPP shorthand
 #ifdef BUILDING_COLLADA_DOM
@@ -277,6 +293,10 @@ includes the C++98 set. daeStringSet, etc. require one or the other.
 #include <map> //ref caches
 #include <algorithm>
 #include <vector> //daeIOController
+#if !defined(_MSC_VER) || _MSC_VER >= 1800
+#define COLLADA_INITIALIZER_LIST
+#include <initializer_list> //daeSmartTag
+#endif
 
 //Assuming this is set by the CMake build script.
 #ifdef COLLADA_DOM_NEED_NULLPTR
@@ -309,7 +329,7 @@ includes the C++98 set. daeStringSet, etc. require one or the other.
 #define COLLADA_DOM_SET
 #endif
 #endif
-
+	  
 //PHASING OUT? APPARENTLY WRITING () AFTER IS NEEDED.
 //(PUTTING THE ARRAY IN THE PARAMETERS DOESN'T HELP.)
 //(ADDING () MAY BE "MOST-VEXING-PARSE." CAN'T TELL.)
@@ -336,26 +356,19 @@ template<int N> struct daeCTC{ char compile[N>0?1:/*-1*/N-1]; daeCTC(const void*
 #ifdef NDEBUG
 #error Setup a helper macro to glue COLLADA_ on last thing.
 #endif
-//__VA_ARGS__ is added so generated namespace can use this
-//macro. MSVC2013's compiler fails those macros if keyword 
-//is namespace. It must be a bug. This may not be portable.
-//FOR WHATEVER REASON MSVC WILL WORK WHEN ... IS namespace.
-//UPDATE: 
-//What the compiler is actually doing is converting the ## 
-//into a further macro at every step along the way. So the
-//COLLADA__namespace__ is produced, and ... is added to it.
-//(For the record, Intellisense is busy doing the opposite.)
-//https://connect.microsoft.com/VisualStudio/feedback/details/3101668
-#define COLLADA_(keyword,...) COLLADA__##keyword##__##__VA_ARGS__
-
-//COLLADA_(extern)
-/**GCC, DECORATIVE
- * This silences warning: initialized and declared 'extern'
- * 'extern' variables should be used sparingly and so need
- * to be marked.
- * @note Also eliminates the need to provide a contruction.
+/**C-PREPROCESSOR MACRO
+ * __VA_ARGS__ is added so generated namespace can use this
+ * macro. MSVC2013's compiler fails those macros if keyword 
+ * is namespace. It must be a bug. This may not be portable.
+ * FOR WHATEVER REASON MSVC WILL WORK WHEN ... IS namespace.
+ * UPDATE: 
+ * What the compiler is actually doing is converting the ## 
+ * into a further macro at every step along the way. So the
+ * COLLADA__namespace__ is produced, and ... is added to it.
+ * (For the record, IntelliSense is busy doing the opposite.)
+ * https://connect.microsoft.com/VisualStudio/feedback/details/3101668
  */
-#define COLLADA__extern__
+#define COLLADA_(keyword,...) COLLADA__##keyword##__##__VA_ARGS__
 
 //COLLADA_(nullptr)
 //SCHEDULED FOR REMOVAL?
@@ -376,6 +389,24 @@ template<int N> struct daeCTC{ char compile[N>0?1:/*-1*/N-1]; daeCTC(const void*
 #define COLLADA__nullptr__ ((void*)0)
 #endif
 
+//COLLADA_(extern)
+/**GCC, NOTATIONAL
+ * This silences warning: initialized and declared 'extern'
+ * 'extern' variables should be used sparingly and so need
+ * to be marked.
+ * @note Also eliminates the need to provide a constructor.
+ */
+#define COLLADA__extern__
+//COLLADA_(const,extern)
+/**GCC, NOTATIONAL
+ * GCC won't let @c extern be used freely. C++ defaults to
+ * internal linkage for @c const definitions. I don't know
+ * if GCC will accept these or not, so this macro is being
+ * consistent with @c COLLADA_(extern).
+ * @note @c COLLADA__extern__ is preventing "extern,const".
+ */
+#define COLLADA__const__extern(var) extern const var; const var
+
 //The generator will do:
 /**warning: multi-line comment [-Wcomment]
  * COLLADA_(http_www_collada_org_2008_03_COLLADASchema,namespace) 
@@ -387,6 +418,16 @@ template<int N> struct daeCTC{ char compile[N>0?1:/*-1*/N-1]; daeCTC(const void*
 //namespace http_www_collada_org_2008_03_COLLADASchema
 #define COLLADA_DOM_NICKNAME(nick,name) \
 namespace nick{} namespace name = nick; namespace nick
+	  
+//EXPERIMENTAL
+//Enables daeDomTypes.h	use of C++11's "using" keyword.
+#ifndef COLLADA__using__
+#ifdef COLLADA_DOM_ALIAS_TEMPLATE
+#define COLLADA__using__ 1
+#else
+#define COLLADA__using__ 0
+#endif
+#endif
 
 #ifndef COLLADA_SUPPRESS_C
 #define COLLADA_SUPPRESS_C(xxxx) //suppress MSVC++ warning
@@ -482,6 +523,23 @@ COLLADA_(namespace)
 	//If this fails, define	COLLADA_UPTR_MAX manually.
 	static daeCTC<sizeof(size_t)==sizeof(void*)> dae64_check;
 	#endif
+
+	//__declspec(align(X)) doesn't accept sizeof().
+	#if UINT_MAX < COLLADA_UPTR_MAX	
+	#define COLLADA_PTR_CHAR 8
+	#else
+	#define COLLADA_PTR_CHAR 4
+	#endif	
+	static daeCTC<COLLADA_PTR_CHAR==sizeof(void*)> COLLADA_PTR_CHAR_check;
+
+	/**C-PREPROCESSOR-MACRO
+	 * Size of @c COLLADA_UPTR_MAX in bits.
+	 */
+	#define COLLADA_PTR_BIT (COLLADA_PTR_CHAR*CHAR_BIT)
+	/**C-PREPROCESSOR-MACRO
+	 * Size of @a bits bits in units of @c COLLADA_UPTR_MAX.
+	 */
+	#define COLLADA_BIT_PTR(bits) (((bits)+COLLADA_PTR_BIT-1)/COLLADA_PTR_BIT)
 }
 
 #endif //__COLLADA_DOM__DAE_PLATFORM_H__

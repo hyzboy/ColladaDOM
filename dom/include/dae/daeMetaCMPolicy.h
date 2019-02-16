@@ -16,13 +16,11 @@ COLLADA_(namespace)
 //<-'
 
 class daeParentCM;
-/**ABSTRACT BASE-CLASS
+
+/**
  * Class @c daeCM is the base-class for the content-model policy classes 
  * which are used to describe the availability and order of	the children.
- *
- * @remark The destructor is the only virtual method remaining. There's
- * really no need to excise them. The place APIs are statically virtual.
- * @see @c daeMetaElement::findChild() for the removed "findChild" APIs. 
+ * @see The "findChild" APIs are moved to @c daeMetaElement::findChild().
  */
 class daeCM
 {	
@@ -34,17 +32,14 @@ COLLADA_(public) //"vptr" DATA-MEMBER
 	 */
 	daeCM():_maxOrdinals(),_meta(),_parentCM(){}
 	#endif
-	/**
-	* Virtual Destructor
-	*/
-	virtual ~daeCM(){}
-
+	
 COLLADA_(protected) //Implementation details	
 	/**
 	 * This is now stored so the placement procedures can be unrolled.
 	 */
 	daeXS _xs; 
 
+	friend XS::Sequence;
 	/**
 	 * Historically the library has used "ordinals" to place children.
 	 */
@@ -57,7 +52,12 @@ COLLADA_(protected) //XML Schema relationships
 	daeMeta *_meta;
 
 	friend daeMetaElement;
-	/**
+	/**WARNING
+	 * @warning @c XS::Group spawns elements that retain parents
+	 * from their global group. I think that is to retain access 
+	 * to said group. In that case, walking up the graph through
+	 * the parent enters a different CM-graph altogether.
+	 *
 	 * Parent XML Schema element in the CM. The root is @c nullptr.
 	 * @c daeMetaElement::~daeMetaElement() sets this to @c nullptr
 	 * in order to communicate that it owns/destructs @c this object.
@@ -104,14 +104,31 @@ COLLADA_(public)
 	 */
 	static bool isParentCM(daeXS xs){ return xs<0; }
 
-	/**
+	/**WARNING
+	 * @warning The parents of xs:group included elements is
+	 * the global xs:group element's CM-graph.
+	 * Tells if @c this node is not the root of its CM graph.
+	 */
+	inline bool hasParentCM()const{ return _parentCM!=nullptr; }
+
+	/**WARNING
+	 * @warning @c XS::Group spawns elements that retain parents
+	 * from their global group. I think that is to retain access 
+	 * to said group. In that case, walking up the graph through
+	 * the parent enters a different CM-graph altogether.
+	 *
 	 * Gets the parent of this content-model policy object.
-	 * @return Returns a @c daeParentCM pointer to the parent node.
+	 * @return Returns @c nullptr if @c this is a CM-graph's top.
 	 */
 	inline daeParentCM *getParentCM(){ return _parentCM; }
-	/**CONST-PROPOGATING-FORM
+	/**WARNING, CONST-PROPOGATING-FORM
+	 * @warning @c XS::Group spawns elements that retain parents
+	 * from their global group. I think that is to retain access 
+	 * to said group. In that case, walking up the graph through
+	 * the parent enters a different CM-graph altogether.
+	 *
 	 * Gets the parent of this content-model policy object.
-	 * @return Returns a @c daeParentCM pointer to the parent node.
+	 * @return Returns @c nullptr if @c this is a CM-graph's top.
 	 */
 	inline const daeParentCM *getParentCM()const{ return _parentCM; }
 
@@ -120,6 +137,15 @@ COLLADA_(public)
 	 * @return Returns @c nullptr if the content-model is an empty variety. 
 	 */
 	inline daeMeta &getMeta()const{ return *_meta; }	
+
+	/**
+	 * Gets the containing @c daeMetaElement for this @c daeCM.
+	 * @return Returns @c nullptr if the content-model is an empty variety. 
+	 */
+	inline const XS::Schema &getSchema()const
+	{
+		return **(DAEP::Make**)_meta; //INCOMPLETE
+	}
 
 	/**WARNING
 	 * Gets the XML Schema maxOccurs attribute.
@@ -165,6 +191,22 @@ COLLADA_(public)
 	//It could just call _meta->findChild() but the semantics wouldn't be clearly defined.
 	void findChild(const void*)const;
 	#endif //COLLADA_NODEPRECATED
+
+COLLADA_(public) //Formerly of XS::Attribute	
+	/**
+	 * Formerly "isArrayAttribute," although the meaning is
+	 * slightly different this time.
+	 * @see @c isArrayChildID() for a use-case that is closer
+	 * to the old "isArrayAttribute."
+	 */
+	inline bool canReoccur()const{ return _maxOccurs>1; }
+
+	/**LEGACY-SUPPORT
+	 * Previoiusly "getIsRequired."
+	 * Tells if the schema indicates that this is a required attribute.
+	 * @return Returns true if this is a required attribute, false if not.
+	 */
+	inline bool isRequired()const{ return _minOccurs>0; }
 	
 #ifdef BUILDING_COLLADA_DOM
 
@@ -184,7 +226,7 @@ COLLADA_(public) //INVISIBLE
 		_xs = xs; _meta = meta; _parentCM = parent; _ordSubtrahend = subtrahend; _minOccurs = minO; _maxOccurs = maxO;
 	}
 
-COLLADA_(public) //ABSTRACT INTERFACE	
+COLLADA_(public) //FORMERLY ABSTRACT INTERFACES
 	/**
 	 * Tells if an existing choice is compatible with @c this CM node.
 	 * @param minuend is an ordinal count from the @c _parentCM frame.
@@ -271,31 +313,84 @@ COLLADA_(public) //ABSTRACT INTERFACE
 	inline bool __subsetofT(const daeCM&,int,int)const;
 	/** Used to prioritize choices. */
 	inline bool __subsetofXS(const daeCM&)const;
+
+	//SCHEDULED FOR REMOVAL
+	/**
+	 * Removing virtual destructors, moving toward @c daeStringAllocator.
+	 */
+	//inline void _self_delete()const;
 	
 #endif //BUILDING_COLLADA_DOM
+
+COLLADA_(public) //daeParentCM::getCM iterator
+	
+	//Defining here since daeCM is less 
+	//typing than daeParentCM::iterator.
+	typedef const daeCM*const *pointer;
+	/**
+	 * This is a quick/dirty graph walking API.
+	 * Simple iterator for use with @c getCM().
+	 * @c operator->() alleviates (*p)-> style
+	 * notation.
+	 */
+	struct iterator
+	{
+		pointer _ptr;
+				  
+		inline iterator operator=(pointer ptr)
+		{
+			_ptr = ptr; return *this;
+		}
+
+		inline operator pointer&(){ return _ptr; }
+
+		inline const daeCM *operator->(){ return *_ptr; }
+	};
+	#ifdef NDEBUG
+	#error addCM should pass the reserve size of this vector.
+	#endif
+	//Using allocator in lieu of destructor.
+	typedef std::vector<const daeCM*,daeSA> _CM_vector;
 };
 
-/**TODO, INTERNAL, HELPER
- * @todo: USE THIS CLASS TO WALK THE CONTENT-MODELS IF USERS/CLIENTS EVER WANT TO.
+/**
  * @c XS::Sequence and @c XS::Choice (and "XS::All"?) are based on @c daeParentCM.
  * @todo: VARIABLE-LENGTH makes sense for @c _deepCM, but it can wait until later.
  */
 class daeParentCM : public daeCM
 {
+COLLADA_(public)
+	/**OVERLOAD
+	 * This is a quick/dirty graph walking API.
+	 */
+	inline iterator getCM(size_t &n)const
+	{
+		iterator b,e; getCM(b,e); n = e-b; return b;
+	}
+	COLLADA_NOALIAS
+	/**OVERLOAD
+	 * This is a quick/dirty graph walking API.
+	 */
+	COLLADA_DOM_LINKAGE void getCM(iterator&b,iterator&e)const
+	COLLADA_DOM_SNIPPET( b = &*_CM.begin(); e = &*_CM.end(); )	
+
 #ifdef BUILDING_COLLADA_DOM
 	
+	//std::string SHOULD BE TEMPORARY.
+	typedef short _CM_index;	
+	typedef std::char_traits<_CM_index> _DeepCM_traits;
+	typedef std::basic_string<_CM_index,_DeepCM_traits,daeSA> _DeepCM_string;
+
 COLLADA_(protected) //INVISIBLE
 	
 	friend class XS::Element;
 	friend class daeMetaElement;
+
 	/**
 	 * This is managed by @c daeMetaElement. 
 	 */
-	std::vector<const daeCM*> _CM;
+	_CM_vector _CM;
 	
-	//std::string SHOULD BE TEMPORARY.
-	typedef short _CM_index;	
-	typedef std::basic_string<_CM_index> _DeepCM_string;
 	/**TODO
 	 * This is jump table per the child-ID names.
 	 * The elements index into @c _CM.
@@ -345,20 +440,6 @@ COLLADA_(public) //INVISIBLE
 	 * Cross-access of this comes up often.
 	 */
 	inline bool __names(int name)const{ return !_deepCM[name].empty(); }
-
-COLLADA_(public) //INVISIBLE
-
-	#ifdef _DEBUG
-	/**
-	 * Dummy Constructor
-	 * @c daeMetaElement::_addCM() initializes CMs.
-	 */
-	daeParentCM():_deepCM(){}
-	#endif
-	/**
-	 * Virtual Destructor
-	 */
-	virtual ~daeParentCM();
 
 #endif //BUILDING_COLLADA_DOM
 };		

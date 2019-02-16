@@ -206,6 +206,9 @@ static int COLLADA_viewer_main(int argc, char **argv, const char *default_dae)
 	//get their UI information.
 	//InitSceneEffects();
 
+	#ifdef NDEBUG
+	#error This is a design problem.
+	#endif
 	//GLUT's main loop calls exit() to exit.
 	//This is so RT::Main::DOM is cleared before
 	//Windows can destroy the schema metadata globals.

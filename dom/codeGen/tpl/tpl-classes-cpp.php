@@ -28,16 +28,13 @@ else if($meta['parent_meta']===NULL)
 		
 #include \"$1$2.h\"",
 	ucfirst($meta['element_name']));
-	else 
 	echo 
-"#define COLLADA_target_namespace \
-COLLADA::$target_namespace
+"#ifndef COLLADA_DOM_LITE
 COLLADA_(namespace)
 {
 	namespace DAEP //GCC
 	{//-.
 //<-----'
-#ifndef COLLADA_DOM_LITE
 ";
 }
 else if(empty($meta['isSynth']))
@@ -57,14 +54,15 @@ $shortname = getFriendlyType($meta['element_name']);
 $globalName = /*asFriendlyType(*/$meta['element_name']/*)*/;
 echoCode("
 template<>
-COLLADA_(inline) DAEP::Model& DAEP::Elemental
-<::COLLADA_target_namespace:: $longname
->::__DAEP__Object__v1__model()const
+COLLADA_(inline) Model &Elemental
+<xmlns::$target_namespace::$longname>
+::__DAEP__Object__v1__model()const
 {
-	static DAEP::Model *om = nullptr; if(om!=nullptr) return *om;
-
-	Elemental::TOC toc; daeMetaElement &el = 
-	::COLLADA_target_namespace::__XS__().addElement(toc,\"$globalName\");");
+	static Model *om = nullptr; if(om!=nullptr) return *om;
+	
+	__COLLADA__Element * toc=0;
+	daeMetaElement &el = xmlns::$target_namespace
+	::__XS__Schema__().addElement(toc,\"$globalName\");");
 
 //ATTRIBUTES
 if(2!==$COLLADA_DOM) 
@@ -126,30 +124,31 @@ echo applyTemplate('classes-cpp',$ea);
 
 if(inline_CM&&$meta['parent_meta']===NULL) 
 {
-	echo "\n", '#endif //!COLLADA_DOM_LITE';
-	
+	echo "
+//-------.
+    }//<-'
+}
+#endif //!COLLADA_DOM_LITE
+#endif //!COLLADA_DOM_FLAT
+";
 	if(2!==$COLLADA_DOM)
 	{
-		echo "
-//----------.
-		//<-'			
-        COLLADA_($target_namespace,namespace)
-        {//-.
+		echo " 
+COLLADA_(namespace)
+{
+	namespace DAEP
+	{
+		COLLADA_($target_namespace,namespace)
+		{//-.
 //<---------'
-";						
-		echo applyTemplate('ColladaDOM-3',$meta);	
+";		echo applyTemplate('ColladaDOM-3',$meta);	
 		echo
 "//-----------.
         }//<-'
-    }
-}";
-	}
-	else echo "
-//---.
-}//<-'";
-echo "
-#undef COLLADA_target_namespace
+    }	
+}
 ";
+	}
 }
 
 ?>

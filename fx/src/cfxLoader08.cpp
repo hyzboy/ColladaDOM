@@ -13,7 +13,7 @@ COLLADA_(namespace)
 	{	
 		#define YY 8 //MSVC2015 wants FX::??
 		namespace ColladaYY = FX::Collada08;
-		namespace ColladaYY_XSD = Collada08_XSD;
+		namespace ColladaYY_xsd = Collada08_xsd;
 	}
 }
 #define _if_YY(x,y) y

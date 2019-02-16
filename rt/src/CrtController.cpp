@@ -26,7 +26,7 @@ COLLADA_(namespace)
 #endif
 static std::vector<RT::Matrix> CrtController_mats; 	
 static std::vector<RT::Matrix> CrtController_matsIT; 
-/**NOT THREAD-SAFE
+/**ALGORITHM
  * This implements much of RT::Skin::Update_VBuffer2().
  */
 struct CrtController_skin
@@ -156,7 +156,7 @@ void RT::Skin::Update_VBuffer2(RT::Stack_Data **joints)
 
 //NOT THREAD-SAFE
 static std::vector<RT::Float> CrtController_weights;
-/**NOT THREAD-SAFE
+/**ALGORITHM
  * This implements much of RT::Morph::Update_VBuffer2().
  *
  * THIS IS MUCH EASIER THAN @c CrtController_skin SINCE
@@ -167,7 +167,7 @@ struct CrtController_morph
 {
 	RT::Morph &morph;
 
-	//vN,iN are not really required, but this an algorithm.
+	//vN,iN aren't really needed, but this is an algorithm.
 	const size_t vN,iN;
 	RT::Float w; size_t i;	
 	const RT::Float nonzero;
@@ -176,12 +176,15 @@ struct CrtController_morph
 	,vN(morph.Geometry->Vertices)
 	,iN(morph.MorphTargets.size()),nonzero(0.00001f)
 	{	
+		//ADDENDUM: Returning to this comment I can't make
+		//sense of it. But maybe there is something to it?
+		//
 		//COLLADA uses the concept of a "base mesh" but it
 		//is really no different from another target. Most
 		//systems won't make this distinction, since there
 		//is a need to blend key frames when all are equal.
 
-		//calculate one_minus_sum_of_weights		
+		//Calculate "one_minus_sum_of_weights".
 		if(!morph.Using_RELATIVE_method)
 		{
 			w = 0;

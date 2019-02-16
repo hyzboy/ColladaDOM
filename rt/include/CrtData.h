@@ -40,8 +40,13 @@ class Base
 COLLADA_(public)
 	
 	//SCHEDULED FOR REMOVAL
-	daeName Id,Sid; xs::string DocURI;	
-
+	//
+	// Note: DocURI (though seldom used as such)
+	// needs instead an xml:base URI in at least
+	// one place: RT::Image::Load(). Maybe Image
+	// alone needs a Base field, or can use Sid?
+	//
+	daeName Id; xs::string DocURI;	
 	/**
 	 * This is currently whatever @c RT::Asset is
 	 * when @c RT::Base::Base() is called.
@@ -50,11 +55,16 @@ COLLADA_(public)
 	
 COLLADA_(public)
 
-	Base():Id(0),Sid(0),DocURI(){}
+	Base():Id(nullptr),DocURI(){}
 	virtual ~Base(){}
 };
 inline xs::string DocURI(const DAEP::Element *e)
 {
+	//RT::Image::Load() uses DocURI in place of
+	//xml:base. RT::Base needs to consider this.
+	#ifdef NDEBUG
+	#error Worried callers expect xml:base here.
+	#endif
 	return dae(e)->getDoc()->getDocURI()->data();
 }
 

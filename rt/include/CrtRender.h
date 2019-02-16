@@ -534,15 +534,17 @@ struct Frame_Asset
 		_operator_YY(dae(cp),typename DAEP::Generic<E>::schema());
 	}
 	//HACK: __NB__ is DAEP::Generic<ColladaYY::COLLADA>::schema.
-	void _operator_YY(const daeElement*,Collada05_XSD::__NB__ schema);
-	void _operator_YY(const daeElement*,Collada08_XSD::__NB__ schema);
+	typedef DAEP::Generic<Collada05::dynamic>::schema _schema05;
+	typedef DAEP::Generic<Collada08::dynamic>::schema _schema08;
+	void _operator_YY(const xs::element_type*,_schema05 schema);
+	void _operator_YY(const xs::element_type*,_schema08 schema);
 	#ifdef PRECOMPILING_COLLADA_RT //asset is incomplete.
-	inline void operator=(const Collada05_XSD::asset *cp)
+	inline void operator=(const Collada05_xsd::asset *cp)
 	{
 		Up = cp->up_axis->value->*Up;
 		Meter = cp->unit->meter->*Meter;
 	}
-	inline void operator=(const Collada08_XSD::asset_type *cp)
+	inline void operator=(const Collada08_xsd::asset_type *cp)
 	{
 		Up = cp->up_axis->value->*Up;
 		Meter = cp->unit->meter->*Meter;
@@ -552,7 +554,7 @@ struct Frame_Asset
 	/** 
 	 * Implements @c operator=().
 	 */
-	void _OverrideWith(const daeElement*);
+	void _OverrideWith(const xs::element_type*);
 };
 
 /**SINGLETON

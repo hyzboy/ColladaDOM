@@ -34,7 +34,7 @@ struct Geometry_Semantic : Collada05::const_float_array
 		this->~Geometry_Semantic();
 		new(this) RT::Geometry_Semantic(cp); return *this;
 	}
-	void operator=(const Collada05_XSD::float_array *WTF) 
+	void operator=(const Collada05_xsd::float_array *WTF) 
 	{
 		const_float_array::operator=(WTF);
 	}

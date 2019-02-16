@@ -6,6 +6,7 @@
  *
  */
 #include <ColladaDOM.inl> //PCH
+#include <ColladaDOM.g++> //GCH
 
 #ifdef __COLLADA_DOM__ZAE
 
@@ -161,7 +162,7 @@ COLLADA_(public) //CENTRAL-DIRECTORY
 
 COLLADA_(public) //daeAtlas methods
 	
-	virtual daeError getNames(daeArray<daeClientString>&,daeName)const;
+	virtual daeError getNames(daeArray<daeClientString>&,const daeName&)const;
 	virtual daeError getValues(daeArray<int>&,daeClientString)const;
 	
 COLLADA_(public) //HELPER
@@ -204,10 +205,10 @@ COLLADA_(public) //I/O
 		daeIO *IO;			
 		daeIORequest req;			
 		rw(daeIO *IO=nullptr):e()
-		,offset(),e_overflowed(-1),IO(IO) //piggybackI
+		,e_overflowed(-1),offset(),IO(IO) //piggybackI
 		{}
 		rw(const trio &p):daeIOSecond(req)
-		,e(p.third),offset(),e_overflowed(-1),IO()
+		,e(p.third),e_overflowed(-1),offset(),IO()
 		,req(e==nullptr?nullptr:&p.second->getArchive())
 		{				
 			if(e!=nullptr) //Use daeImage?
@@ -463,11 +464,6 @@ daeZAE::Stack<daeGZ> daeZAE::gz_stack;
 
 daeError daeZAE::maybe_init(daeIO &IO)
 {
-	if(this==nullptr)
-	{
-		assert(this!=nullptr);
-		return DAE_ERR_BACKEND_IO;
-	}
 	if(!_initialized) _initialized = true;
 	else return DAE_OK;
 
@@ -547,7 +543,7 @@ daeError daeZAE::_init_central_directory(daeIO *IO, char *buf, int bufN, int rem
 			short pathlen = BigEndian<16,short>(cdp+28);
 			if(cdp+46+pathlen>eob) break;
 
-			int eN = sizeof(cde)+pathlen;
+			size_t eN = sizeof(cde)+pathlen;
 			if(A._nexT->path+pathlen>=A._end)
 			A._reserve(std::max(eN,A._reserveN()));
 			cde &e = *A._nexT; A._nexT+=eN;			
@@ -598,8 +594,8 @@ daeOK daeZAEPlugin::addDoc(daeDocRef &add, daeMeta *rootmeta)
 	}
 	else //HACK: Open any ZIP without dae_root or manifest.xml?
 	{			
-		#ifdef NDEBUG
-		#error Can (or should) this wait until it's called for?
+		#ifdef NDEBUG //GCC wants quotes.
+		#error "Can (or should) this wait until it's called for?"
 		#endif
 
 		//This is what _read2 would do, but there isn't an API
@@ -623,7 +619,8 @@ daeOK daeZAEPlugin::readContent(daeIO &IO, daeContents &content)
 	//hard to imagine doing a partial read into the index document.
 
 	daeDocument *d = (daeDocument*)content.getElement().getDoc();
-	daeZAE *zae = dynamic_cast<daeZAE*>(&d->getArchive().getAtlas());
+	daeZAE *zae = dynamic_cast<daeZAE*>(&d->getArchive().getAtlas());	
+	if(zae==nullptr){ assert(zae!=nullptr); return DAE_ERR_BACKEND_IO; }
 	daeOK OK = zae->maybe_init(IO); if(!OK) return OK;
 	
 	daeIO *zae_IO = zae->piggybackI(IO,"manifest.xml");
@@ -683,7 +680,7 @@ daeOK daeZAEPlugin::readContent(daeIO &IO, daeContents &content)
 	{			
 		if(getRequest().localURI!=nullptr) //Overrules dae_root fragment?
 		{
-			daeRefView fragment = getRequest().localURI->getURI_fragment();
+			daeName fragment = getRequest().localURI->getURI_fragment();
 			if(!fragment.empty()) d->getFragment() = fragment;
 		}
 	}
@@ -713,7 +710,7 @@ struct daeZAE_inflated : daeImage
 		{
 			if(in!=nullptr&&r1==nullptr) //Read?
 			{
-				//COLLADA_SUPPRESS_C(4996)
+				//_SCL_SECURE_NO_WARNINGS
 				std::copy(it+r2->first,it+r2->second,(char*)in);
 				return _data.size();
 			}
@@ -944,13 +941,14 @@ daeOK daeZAE::io::writeOut(const void *out, size_t chars)
 	assert(0); return OK = DAE_ERR_NOT_IMPLEMENTED;
 }
 
-daeError daeZAE::getNames(daeArray<daeClientString> &o, daeName wc)const
+daeError daeZAE::getNames(daeArray<daeClientString> &o, const daeName &wc)const
 {
 	daeError err = DAE_OK;
 	size_t i = 0, m = CD.size(), n = m; if(wc!=nullptr)
 	{
 		cde *v = cde_cast(wc.string);
 		i = m = std::lower_bound(CD.begin(),CD.end(),v,cde::less)-CD.begin();
+		//_SCL_SECURE_NO_WARNINGS
 		//&[0]: MSVC sees path as a 1-sized container (char[1].)
 		while(m<n&&std::equal(wc.begin(),wc.end(),&CD[m]->path[0]))
 		m++;		
@@ -1139,7 +1137,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 			std::vector<char> &sel = method==0?stored:deflated;				 
 			int ret = (int)sel.size();			
 
-			if(OK&&0!=ret) if(ret!=sel.size()) //ZIP64?
+			if(OK&&0!=ret) if((size_t)ret!=sel.size()) //ZIP64?
 			{	
 				//TODO: daeZAE_HUGE_file_error(); 
 				assert(0); OK = DAE_ERR_NOT_IMPLEMENTED;
@@ -1204,7 +1202,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 		size_t i,idoc,_ipop,j,_jpop;		
 		iter(Zipper &z, const daeArchive &a)
 		:z(z)
-		,i(z.directory.size()),_ipop(i),idoc(i)
+		,i(z.directory.size()),idoc(i),_ipop(i)
 		,j(z.docs.size()),_jpop(j)
 		{
 			daeAtlas &atlas = a.getAtlas();
@@ -1219,9 +1217,9 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 			for(size_t k=0,jN=z.docs.size()-1;j<jN;j++,k++)
 			{
 				const daeDoc *d = a.getDoc(k);
-				daeRefView diff = d->getDocURI()-a.getDocURI();
+				daeName diff = d->getDocURI()-a.getDocURI();
 				daeClientString name = atlas.name(diff);
-				doc().first = nullptr!=name?name:diff.view;
+				doc().first = nullptr!=name?name:diff.string;
 				doc().second = d;
 			}
 			j = _jpop;
@@ -1290,7 +1288,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 		if(_now!=0) return _now;
 		COLLADA_SUPPRESS_C(4996)
 		time_t utc; time(&utc); tm &t = *gmtime(&utc);
-		return _now = 
+		return _now = //COLLADA_SUPPRESS_C(4554) 
 		//(daeAtlasValue::decomposeTIME in reverse.)
 		t.tm_year-80<<25|t.tm_mon+1<<21|t.tm_mday<<16
 		|t.tm_hour<<11|t.tm_min<<4|t.tm_sec/2;
@@ -1472,7 +1470,7 @@ class daeZAEPlugin::Zipper : daeAtlasValue
 			//HACK: Copy position+method~size from data set aside by 
 			//output_local_entries().
 			int position = (int&)*it;
-			std::copy(it+4,it+22,cde+10);
+			std::copy(it+4,it+22,cde+10); //_SCL_SECURE_NO_WARNINGS
 			it+=22;
 			daeZAE::BigEndian<16>((short&)cde[28]=(short)i.extent);			
 			daeZAE::BigEndian<32>((int&)cde[42]=position);

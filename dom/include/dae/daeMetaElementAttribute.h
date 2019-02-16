@@ -14,121 +14,116 @@
 #include "daeMetaCMPolicy.h"
 
 COLLADA_(namespace)
+{//-.
+//<-'
+
+#include "../LINKAGE.HPP" //#define LINKAGE
+
+/**INTERNAL, SEALED
+ * @c XS::Any and @c XS::Element are derived from this class. It is more-or-less
+ * a "leaf node" in the graph, associated with an actionable ordinal.
+ *
+ * @remarks Having this class simplifies padding and lets @c __place() be shared.
+ * IT SHOULDN'T BE ADDED TO. IT WILL BREAK MINOR RELEASES IF SO.
+ */
+class daeElementCM : public daeCM
 {
-	/**INTERNAL, SEALED
-	 * @c XS::Any and @c XS::Element are derived from this class. It is more-or-less
-	 * a "leaf node" in the graph, associated with an actionable ordinal.
-	 *
-	 * @remarks Having this class simplifies padding and lets @c __place() be shared.
-	 * IT SHOULDN'T BE ADDED TO. IT WILL BREAK MINOR RELEASES IF SO.
-	 */
-	class daeElementCM : public daeCM
+COLLADA_(protected) //PADDING AND ONLY DATA-MEMBER
+
+	daeElementCM(){ _maxOrdinals_x_maxOccurs = 1; }
+
+	enum
 	{
-	COLLADA_(protected) //PADDING AND ONLY DATA-MEMBER
-
-		daeElementCM(){ _maxOrdinals_x_maxOccurs = 1; }
-
-		enum
-		{
-		__size_of_CM=12*sizeof(void*), 	
-		__reserved_for_daeCM=__size_of_CM-sizeof(daeCM)
-		};
-		char __pad1[__reserved_for_daeCM];
-
-		friend class daeCM;
-		friend class daeMetaElement;
-		/**
-		 * This is the same value as _maxOccurs, unless there are substitution-groups
-		 * involved, in which case, it is 0.
-		 * @remarks  This isn't assigned to prior to @c daeCM::_prepareContentModel().
-		 * @note SINCE maxOccurs WOULDN'T NORMALLY BE 0, IT'S PROBABLY SAFE TO ASSUME
-		 * THAT A NONZERO VALUE CAN BE USED TO GENERICALLY QUERY WHETHER OR NOT THESE
-		 * ELEMENTS (WITH THIS NAME) ARE SUBJECT TO SUBSTITUTIONS.	
-		 * @see @c XS::Element::hasSubstitutes().
-		 */
-		daeCounter _substitute_maxOccurs;
-
-		friend class XS::All;
-		template<class C>
-		/** 
-		 * Called by @c daeCM::__placeXS(). 
-		 */
-		inline daeError __place(daeCM_Placement<C> &c, daeOrdinal o)const;
-
-		/**CIRCULAR-DEPENDENCY
-		 * This is to represent the pseudo-element content model.
-		 */
-		inline daeMeta &getOnlyChild()const;
+	__size_of_CM=12*sizeof(void*), 	
+	__reserved_for_daeCM=__size_of_CM-sizeof(daeCM)
 	};
+	char __pad1[__reserved_for_daeCM];
 
-	/**INTERNAL
-	 * @c XS::Any and @c XS::AnyAttribute are derived from this 
-	 * class.
+	friend class daeCM;
+	friend class daeMetaElement;
+	/**
+	 * This is the same value as _maxOccurs, unless there are substitution-groups
+	 * involved, in which case, it is 0.
+	 * @remarks  This isn't assigned to prior to @c daeCM::_prepareContentModel().
+	 * @note SINCE maxOccurs WOULDN'T NORMALLY BE 0, IT'S PROBABLY SAFE TO ASSUME
+	 * THAT A NONZERO VALUE CAN BE USED TO GENERICALLY QUERY WHETHER OR NOT THESE
+	 * ELEMENTS (WITH THIS NAME) ARE SUBJECT TO SUBSTITUTIONS.	
+	 * @see @c XS::Element::hasSubstitutes().
 	 */
-	class daeAny
-	{	
-		int _processContents;
+	daeCounter _substitute_maxOccurs;
 
-		daeHashString _namespace;
+	friend class XS::All;
+	template<class C>
+	/** 
+	 * Called by @c daeCM::__placeXS(). 
+	 */
+	inline daeError __place(daeCM_Placement<C> &c, daeOrdinal o)const;
+};
 
-	COLLADA_(public)
-		/**UNUSED
-		 * Get the "namespace" attribute as set by the generator.
-		 */
-		const daeHashString &getNamespaceString()const
-		{
-			return _namespace;
-		}
+/**INTERNAL
+ * @c XS::Any and @c XS::AnyAttribute are derived from this 
+ * class.
+ */
+class daeAny
+{	
+	int _processContents;
 
-		/**C++98 SCOPED ENUM 
-		 * Possible values returned by @c getProcessContents().
-		 */
-		struct processContents{ enum{ lax=3,skip=4,strict=6 }; };
-		/**UNUSED
-		 * Get the "processContents" attribute as set by the generator.
-		 */
-		inline int getProcessContents()const{ return _processContents; }
+	daeName _namespace;
 
-	COLLADA_(public) //GENERATOR-SIDE APIs
+COLLADA_(public)
+	/**UNUSED
+	 * Get the "namespace" attribute as set by the generator.
+	 */
+	daeClientString2 getNamespaceString()const
+	{
+		return _namespace;
+	}
+
+	/**C++98 SCOPED ENUM 
+	 * Possible values returned by @c getProcessContents().
+	 */
+	struct processContents{ enum{ lax=3,skip=4,strict=6 }; };
+	/**UNUSED
+	 * Get the "processContents" attribute as set by the generator.
+	 */
+	inline int getProcessContents()const{ return _processContents; }
+
+COLLADA_(public) //GENERATOR-SIDE APIs
 	
-		template<int N>
-		/**WARNING, UNUSED
-		 * This is just being used to detect if schemas require
-		 * a feature that is not implemented.
-		 * @warning Currently the library assumes "##any" values.
-		 */
-		inline daeAny &setNamespaceString(const daeStringCP (&ns)[N])
-		{
-			_namespace = ns; return *this;
-		}
+	template<int N>
+	/**WARNING, UNUSED
+	 * This is just being used to detect if schemas require
+	 * a feature that is not implemented.
+	 * @warning Currently the library assumes "##any" values.
+	 */
+	inline daeAny &setNamespaceString(const daeStringCP (&ns)[N])
+	{
+		_namespace = ns; return *this;
+	}
 
-		template<int N>
-		/**WARNING, UNUSED
-		 * This is just being used to detect if schemas require
-		 * a feature that is not implemented.
-		 * @warning Currently the library assumes "lax" values.
-		 */
-		inline daeAny &setProcessContents(const daeStringCP (&pc)[N])
-		{
-			_processContents = N-1; return *this;
-		}
+	template<int N>
+	/**WARNING, UNUSED
+	 * This is just being used to detect if schemas require
+	 * a feature that is not implemented.
+	 * @warning Currently the library assumes "lax" values.
+	 */
+	inline daeAny &setProcessContents(const daeStringCP (&pc)[N])
+	{
+		_processContents = N-1; return *this;
+	}
 
-	COLLADA_(public)
-		/**
-		 * Default Constructor
-		 */
-		daeAny():_processContents(processContents::strict),_namespace("##any")
-		{}
-	};
-
-	namespace XS
-	{//-.
-//<-----'
-		
+COLLADA_(public)
+	/**
+	 * Default Constructor
+	 */
+	daeAny():_processContents(processContents::strict),_namespace("##any")
+	{}
+};
+	
 /**
  * The COLLADA::XS::All class defines the behavior of an xs:all content-model.
  */
-class All : public daeParentCM
+class XS::All : public daeParentCM
 {	
 COLLADA_(public)
 
@@ -190,7 +185,7 @@ COLLADA_(protected) //daeCM methods
  * a special path: e.g. "_placeUnnamedElement" in order to consider ambiguity.
  * Of course, before this is done, support for <xs:any> features must improve.
  */
-class Any : public daeElementCM, public daeAny
+class XS::Any : public daeElementCM, public daeAny
 {	
 COLLADA_(public)
 
@@ -213,7 +208,7 @@ COLLADA_(public) //INVISIBLE
 /**
  * The COLLADA::XS::Choice class defines the behavior of an xs:choice content-model.
  */
-class Choice : public daeParentCM
+class XS::Choice : public daeParentCM
 {	
 COLLADA_(public)
 
@@ -247,12 +242,9 @@ COLLADA_(public)
 		void rearrange(daeContent*,const daeContent*,daeContents&,daeOrdinal)const;
 
 	}_solution_cache_null/* = {0,0,0}*/;
-	/**
-	 * Virtual Destructor
-	 */
-	~Choice(){ for(size_t i=0;i<_solutions.size();i++) delete[] _solutions[i].keys; }
-
+	
 	friend class COLLADA::daeCM;
+	friend class COLLADA::daeMetaElement;
 
 COLLADA_(protected) //daeCM methods		
 	template<class A, class B, class C>
@@ -300,6 +292,13 @@ COLLADA_(protected) //INVISIBLE
 	 */
 	_DeepCM_string *_proclaimCM;
 
+	//REMINDER: _solution IS A LARGE OBJECT.
+	#ifdef NDEBUG
+	#error Can use _solution*; though with cache trade-off.
+	#endif
+	//Using allocator in lieu of destructor.	
+	typedef std::vector<_solution,daeSA> _solutions_vector;
+
 	mutable const _solution *_solution_cache;
 	/**
 	 * This converts a new solution into a permanent solution.
@@ -309,13 +308,20 @@ COLLADA_(protected) //INVISIBLE
 	 * These save the solutions to ordinal promotion problems,
 	 * -so that they can be reused once they're required once.	 
 	 */
-	mutable std::vector<_solution> _solutions;
+	mutable _solutions_vector _solutions;
 
 	friend class COLLADA::daeParentCM;
 	/**
 	 * Called by @c daeCM::_prepareContentModel().
 	 */
 	void __preparePromotionStrategy();
+
+	/**
+	 * Non-virtual Destructor
+	 *
+	 * @c daeCM::_self_delete() is responsible for calling this.
+	 */
+	//~Choice(){ for(size_t i=0;i<_solutions.size();i++) delete[] _solutions[i].keys; }
 
 #endif //BUILDING_COLLADA_DOM
 };
@@ -325,7 +331,7 @@ COLLADA_(protected) //INVISIBLE
  * HISTORICAL-NOTE
  * This class (previously "daeMetaElementAttribute") was never really exposed by the APIs.
  */
-class Element : public daeElementCM
+class XS::Element : public daeElementCM
 {
 COLLADA_(private)
 
@@ -340,6 +346,42 @@ COLLADA_(private)
 	//NOTE: ALL OF XS::Element's MEMBERS SHOULD GO INSIDE _Element.
 	struct _Element 
 	{
+	/**BITFIELD, FIRST-MEMBER
+	 * Aligns with @c daeElementTags::namespaceTag.
+	 */
+	unsigned int namespaceTag:8;
+	/**BITFIELD-CONTINUED, SECOND-MEMBER
+	 * Aligns with @c daeElementTags::nameTag.
+	 */
+	unsigned int nameTag:8;
+	/**BITFIELD-CONTINUED
+	 * The qualified part of a QName is trimmed off. This is used to
+	 * reconstruct the QName. 
+	 * @note The library doesn't use this, but it might be of use to
+	 * users.
+	 */
+	unsigned int qualified_name_offset:8;
+	/**BITFIELD-CONTINUED
+	 * Tells if the @c XS::Schema objects originating this child's
+	 * meta data is different from its parent's.
+	 */
+	unsigned int child_is_import:1;
+	/**BITFIELD-CONTINUED
+	 * @c namefellows_demote is calculated by @c addContentModel().
+	 * It means that these elements' can shift the ordinals arround them if removed.
+	 *
+	 * @remarks IT'D BE HELPFUL IF THE GENERATOR PRODUCED THIS INFO.
+	 * ON ONE HAND, IT CAN WAIT FOR A FULLY INLINE MODE OF INSERTION.
+	 * ON THE OTHER HAND, REMOVAL IS PRETTY STRAIGHTFORAWRD TO INLINE.
+	 */
+	unsigned int namefellows_demote:1;	
+	/**BITFIELD-CONTINUED
+	 *
+	 * RESERVED FOR IMPLEMENTING form="unqualified" AND elementFormDefault.
+	 * @note This will be copied into the element's data-structure somehow.
+	 * COLLADA is qualified. A feature can wait until a schema requires it.
+	 */	
+	unsigned int form_is_unqualified:1;
 	/**
 	 * Address of the child-group where @c this==nullptr.
 	 * The offset can be shared by multiple @c XS::Element,
@@ -360,12 +402,9 @@ COLLADA_(private)
 	 */
 	daeChildID childID;
 	/**
-	 * This is the name of the children, of which there may be more than 1, or 0.
-	 * Probably @c name.string is a @c daeClientString.
-	 * @c daeHashString isn't a hash or anything; it just has an @c extent member.
-	 * The "extent" is used to slightly accelerate look-up.
+	 * This is the name of the children, of which there may be more than 1, or 0.	 
 	 */
-	daePseudonym name; 
+	daeName name; 
 	/**
 	 * @c namefellows has two purposes:
 	 * 1) It's used during metadata setup to act like temporary working memory.
@@ -375,19 +414,7 @@ COLLADA_(private)
 	 * @c daeMetaElement::_elems, but it can't know which one until @c setChild().
 	 * If @c namefellows==this then @c this is said to be temporary working memory.
 	 */
-	XS::Element *namefellows;
-	/**BITFIELD FLAGS
-	 * This is an @c int sized bitfield. It's not a mask, the library just reserves
-	 * the ability to convert this into a bitfield if need be.
-	 * INTERNAL
-	 * @c namefellows_demote is calculated by @c addContentModel().
-	 * It means that these elements' can shift the ordinals arround them if removed.
-	 *
-	 * @remarks IT'D BE HELPFUL IF THE GENERATOR PRODUCED THIS INFO.
-	 * ON ONE HAND, IT CAN WAIT FOR A FULLY INLINE MODE OF INSERTION.
-	 * ON THE OTHER HAND, REMOVAL IS PRETTY STRAIGHTFORAWRD TO INLINE.
-	 */
-	int namefellows_demote;	
+	XS::Element *namefellows;	
 	};	
 	enum
 	{
@@ -408,30 +435,106 @@ COLLADA_(public) //OPERATORS
 	
 	COLLADA_DOM_OBJECT_OPERATORS(XS::Element)
 
-COLLADA_(public) //Previously of XS::Attribute
+COLLADA_(public) //Schema names & namespace APIs
+
+	//Want to be sure the library is using getNCName.
+	#ifndef EXPORTING_COLLADA_DOM
 	/**
-	 * Formerly "isArrayAttribute," although the meaning is
-	 * slightly different this time.
-	 * @see @c isArrayChildID() for a use-case that is closer
-	 * to the old "isArrayAttribute."
+	 * Gets the supplied QName. Note, this could get messy
+	 * if imported xs:group elements were ever implemented.
+	 * It's not called "getQName" to avoid complicating it.
 	 */
-	inline bool canReoccur()const{ return getMaxOccurs()>1; }
+	inline daePseudonym getName()const
+	{
+		daeName o = _element.name; 
+		o.string-=_element.qualified_name_offset;
+		o.extent+=_element.qualified_name_offset; return o;
+	}
+	#endif
 
-	/**LEGACY-SUPPORT
-	 * Previoiusly "getIsRequired."
-	 * Tells if the schema indicates that this is a required attribute.
-	 * @return Returns true if this is a required attribute, false if not.
+	/**
+	 * Gets the NCName of this child element set.
+	 * Use @c getQName() to get the full name as it appears in a
+	 * schema's document.
+	 *
+	 * @remark This class is geared around the NCName since it's
+	 * what @c daeMeta::pushBackWRT() and @c createWRT() utilize.
 	 */
-	inline bool isRequired()const{ return getMinOccurs()>0; }
+	inline daeClientString2 getNCName()const{ return _element.name; }
 
+	typedef unsigned char CP;
+	/**
+	 * @return Returns the offset to the beginning of the NCName 
+	 * part of the supplied QName.
+	 */
+	inline CP getNCNameCP()const{ return _element.qualified_name_offset; }
+		  
+	/**WARNING, LOW-LEVEL
+	 * These tags are in terms of @c getParentCM()->getMeta().
+	 * @warning The interface & module tags are not meaningful.
+	 * @c false==getLocalNameTags().found() should never be at
+	 * the moment, however if imported xs:group is implemented
+	 * that might have to change.
+	 */ 
+	inline daeTags getLocalNameTags()const{ return *(daeTags*)&_element; }
+
+	/**
+	 * Matches @c et against @c getLocalNameTags().namespaceTag.
+	 */
+	inline bool hasNamespaceTag(daeTags et)const
+	{
+		return getLocalNameTags().namespaceTag==et.namespaceTag;
+	}
+	
+	/**
+	 * Get @c this element's originating namespace.
+	 */
+	inline daeStringRef_base getNamespace()const
+	{
+		return getLocalNameTags().first(); 
+	}
+	/*NOT IMPLEMENTING "QName" features on purpose.
+	///**
+	// * Get @c this element's local QName prefix.
+	// */
+	//inline daeStringRef_base getQNamePrefix()const
+	//{
+	//	return getLocalNameTags().second(); 
+	//}*/
+
+	/**WARNING, LOW-LEVEL
+	 * This API is provided for completion sake. 
+	 * @return Returns @c nullptr after the linked-list's end.
+	 *
+	 * @warning Don't use this when walking the CM graph with
+	 * @c daeParentCM. @c daeMeta::getTOC() lists elements by
+	 * name. This gets a 0-terminated linked-list of elements
+	 * all having the same name. 
+	 *
+	 * The library isn't designed to handle so-named elements 
+	 * unless they are all functionally the same logical name.
+	 * Should a schema require two elements to have identical
+	 * NCNames it will have to be looked at.
+	 */
+	inline const XS::Element *getNamefellows()const
+	{
+		return _element.namefellows;
+	}
+
+COLLADA_(public) //Formerly of XS::Attribute	
 	/**
 	 * Tells if this element is part of a substitution-group.
 	 * Its siblings will have equal values for @c daeCM::getSubtrahend()
 	 * and will be adjacent in the CM node list of @c getParentCM().
-	 * @note At the time of writing this, there are not APIs for walking
-	 * the CM node graph.
 	 */
 	inline bool hasSubstitutes()const{ return 0==_substitute_maxOccurs; }
+
+	/**
+	 * Tells if the @c XS::Schema objects originating this child's
+	 * meta data is different from its parent's.
+	 * @example For COLLADA the MathML element is imported.
+	 */
+	inline bool isImportedChild()const{ return 0==_element.child_is_import; }
 
 	/**
 	 * Tells if this element is transcluded via <xs:group ref>.
@@ -443,7 +546,7 @@ COLLADA_(public) //Previously of XS::Attribute
 	 * @remark Grouplicated is a portmanteau: group-duplicated.
 	 */
 	inline bool isGrouplicated()const{ return _meta!=&_parentCM->getMeta(); }
-
+	 
 	/**LEGACY
 	 * Gets the @c sizeof(char) offset (from @ this) where this value's storage is
 	 * found in its container element class.
@@ -454,12 +557,6 @@ COLLADA_(public) //Previously of XS::Attribute
 	 * Gets the negative offset from the contents-array's offset.
 	 */
 	inline daeOffset getCAOffset()const{ return _element.content_offset;  }
-
-	/**LEGACY
-	 * Gets the name of this child element set.
-	 * @return Returns the name of this child element set.
-	 */
-	inline const daePseudonym &getName()const{ return _element.name; }
 
 	/**WARNING
 	 * @warning This ID can belong to more than one @c XS::Element.
@@ -506,11 +603,11 @@ COLLADA_(public) //GENERATOR-SIDE APIs
   //value; The "setX" API must then use _element.namefellows instead of "this."//
   ///////////////////////////////////////////////////////////////////////////////
 
-	template<class T, int N> //DAEP::Child
+	template<class T> //DAEP::Child
 	/**GENERATOR-SIDE API	 
 	 * Sets the element type for the element that the children point to.
 	 */
-	inline void setChild(T &nul, daeClientStringCP (&name)[N])
+	inline void setChild(T &nul, daeClientString2 name)
 	{
 		//Perhaps _setChild2() should have its body put here?
 		//(For a short while substitution-groups had their own implementation.)
@@ -526,13 +623,13 @@ COLLADA_(private) //DELICATE-MACHINERY
 	 * The child is set to @c daeGetMeta<S>(), which may be recursive.
 	 * @c see @c _setChild3()
 	 */
-	inline void _setChild2(T &nul, daePseudonym name)
+	inline void _setChild2(T &nul, daeClientString2 name)
 	{
 		XS::Element &real = _setChild3(nul.feature(),nul.offset(),name);
 		real._element.child = daeGetMeta<S>();
 		//Uncomment this if something like setX() is added.
-		//And then do setX(X x){ _element.namefellow->_element.x = x; }
-		//_element.namefellow = real;
+		//And then do setX(X x){ _element.namefellows->_element.x = x; }
+		//_element.namefellows = real;
 		real._assert_id(nul);
 	}	
 	friend class XS::Group; template<class T> inline void _assert_id(T &nul)
@@ -549,7 +646,7 @@ COLLADA_(private) //DELICATE-MACHINERY
 	 * @see the daeMetaElement.cpp TU's definition. Perhaps it should
 	 * be "daeMetaElement::_addChild()" instead.
 	 */
-	COLLADA_DOM_LINKAGE XS::Element &_setChild3(daeFeatureID,daeOffset,daePseudonym)const;
+	LINKAGE XS::Element &_setChild3(daeFeatureID,daeOffset,daeClientString2)const;
 
 COLLADA_(public) //"WRT" APIs. (With Respect To.)
 
@@ -635,6 +732,11 @@ COLLADA_(public) //INVISIBLE
 	 * @c setChild() is called. offset is used to detect a first namefellow.
 	 */
 	Element(){ _maxOrdinals = 1; _element.offset = 0; }
+	//SCHEDULED FOR REMOVAL
+	/**
+	 * Non-virtual Destructor
+	 */
+	//~Element(){ delete _element.namefellows; }
 
 #endif //BUILDING_COLLADA_DOM
 };
@@ -642,7 +744,7 @@ COLLADA_(public) //INVISIBLE
 /**VARIABLE-LENGTH
  * The COLLADA::XS::Group class defines the behavior of an xs:group ref content-model.
  */
-class Group : public daeCM
+class XS::Group : public daeCM
 {
 COLLADA_(public)
 
@@ -660,14 +762,14 @@ COLLADA_(public) //GENERATOR-SIDE APIs
 	 */
 	inline XS::Group &setGroup(){ _setGroup(daeGetMeta<S>()); return *this; }
 
-	template<class T, int N>
+	template<class T>
 	/**GENERATOR-SIDE API
 	 * @return Returns @c *this so @c addChild().addChild() can be done.
 	 */
-	inline XS::Group &addChild(T &nul, daeClientStringCP (&pseudonym)[N])
+	inline XS::Group &addChild(T &nul, daeClientString2 name)
 	{
 		//hit: Sometimes registration must be deferred due to dependencies.
-		XS::Element *hit = _addChild(nul.feature(),nul.offset(),pseudonym);
+		XS::Element *hit = _addChild(nul.feature(),nul.offset(),name);
 		if(hit!=nullptr) hit->_assert_id(nul); return *this;
 	}
 
@@ -675,21 +777,31 @@ COLLADA_(private) //Implementation details
 
 	friend class COLLADA::daeMetaElement;
 	/** Implements setGroup(). */
-	COLLADA_DOM_LINKAGE void _setGroup(daeMeta&);
+	LINKAGE void _setGroup(daeMeta&);
 	/** Implements addChild(). */
-	COLLADA_DOM_LINKAGE XS::Element *_addChild(daeFeatureID,daeOffset,daePseudonym);
+	LINKAGE XS::Element *_addChild(daeFeatureID,daeOffset,daeClientString2);
 
 COLLADA_(public) //This is really not required.
-
-	COLLADA_NOALIAS
 	/**LEGACY
 	 * Formerly "getElementType" or "getChild."
 	 * Gets the shared metadata for the <xs:group> "ref" attribute.
 	 */
-	COLLADA_DOM_LINKAGE daeMeta &getGroup()const
-	COLLADA_DOM_SNIPPET( return _groupCM->getMeta(); )
-
+	NOALIAS_LINKAGE daeMeta &getGroup()const
+	SNIPPET( return _groupCM->getMeta(); )
+				
 #ifdef BUILDING_COLLADA_DOM
+	
+	//UNIMPLEMENTED: It seems like the generator would require the
+	//groups schema to pull this off within 2.5's WYSIWYG paradigm. 
+	/**
+	 * Tells if the @c XS::Schema objects originating this child's
+	 * meta data is different from its parent's.
+	 */
+	inline bool __isImportedGroup()const
+	{
+		const XS::Schema &incomplete = **(DAEP::Make**)&getGroup();
+		return &incomplete!=&getSchema(); 
+	}
 
 COLLADA_(protected) 
 
@@ -731,7 +843,7 @@ COLLADA_(public) //INVISIBLE
 		return _groupNames[name]!=_groupNames_not_included;
 	}
 
-COLLADA_(public) //INVISIBLE
+COLLADA_(public) //INVISIBLE	
 	/**
 	 * Dummy Constructor
 	 * @c daeMetaElement::_addCM() initializes CMs.
@@ -748,7 +860,7 @@ COLLADA_(public) //INVISIBLE
 /**
  * The COLLADA::XS::Sequence class defines the behavior of an xs:sequence content-model in the COLLADA Schema.
  */
-class Sequence : public daeParentCM
+class XS::Sequence : public daeParentCM
 {
 COLLADA_(public)
 
@@ -772,9 +884,10 @@ COLLADA_(protected) //daeCM methods
 #endif //BUILDING_COLLADA_DOM
 };		  
 
-//-------.
-	}//<-'
-}
+#include "../LINKAGE.HPP" //#undef LINKAGE
+
+//---.
+}//<-'
 
 #endif //__COLLADA_DOM__DAE_META_ELEMENT_ATTRIBUTE_H__
 /*C1071*/

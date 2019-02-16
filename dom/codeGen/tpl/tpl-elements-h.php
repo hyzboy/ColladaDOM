@@ -87,8 +87,6 @@ foreach($synthetics as $k =>& $ea)
 		echo applyTemplate('class-h-def',$ea0[0]), "\n";
 	}}
 if($synth) echoCode("
-#define COLLADA_target_namespace \
-COLLADA::$target_namespace
 //-------.
 	}//<-'	
 	
@@ -100,11 +98,15 @@ if($synth) foreach($synthetics as $k =>& $ea)
 {
 	foreach($ea as& $ea0) break; //reset(); 
 	if(!empty($ea0[0]['isSynth']))
-	echo applyTemplate('classes-cpp',$ea0[0]);
+	echo applyTemplate('classes-cpp',$ea0[0]),"\n";
 }unset($ea);
 if($synth) echoCode("
-
 #endif //!COLLADA_DOM_LITE");
+if(2===$COLLADA_DOM) 
+if($synth) echoCode("
+//-------.
+	}//<-'");	
+
 if(2!==$COLLADA_DOM) 
 if($synth) echoCode("
 //----------.
@@ -124,8 +126,6 @@ if($synth) echoCode("
 //-----------.
 		}//<-'
 	}");
-if($synth) echoCode("
-#undef COLLADA_target_namespace");
 
 if(2==$COLLADA_DOM)
 {
@@ -152,6 +152,7 @@ namespace {$namespace}_TYPE //deprecated
 global $COLLADA_DOM_GENERATION;
 echoCode("
 $1}	
+
 //This is at the end because some code highlighters
 //(e.g. NetBeans) gray-out text that follows #error.
 #if $COLLADA_DOM_GENERATION != COLLADA_DOM_GENERATION

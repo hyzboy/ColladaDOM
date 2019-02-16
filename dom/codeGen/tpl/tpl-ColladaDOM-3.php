@@ -9,11 +9,12 @@
 
 $compare = $meta['context'];
 $shortname = $meta['element_name'];
+$longname = '__::';
 if($synth=!empty($meta['isSynth']))
 {
-	$longname = getIntelliSenseName($meta);
+	$longname.=getIntelliSenseName($meta);
 }
-else $longname = getScopedClassName($meta);
+else $longname.=getScopedClassName($meta);
 
 global $global_parents, $global_children, $abstract; 
 
@@ -80,7 +81,7 @@ $names = array(); //__alias
 echo $class_doxy,
 $typedef_, "struct $structname
 :
-daeSmartRef<$const::COLLADA_target_namespace::$longname>
+daeSmartRef<$const$longname>
 {
 	COLLADA_DOM_3($structname,struct,daeSmartRef)
 ";
@@ -192,10 +193,18 @@ foreach($vattribs as $k=>$ea)
 	}
 	
 	$type = getFriendlyType($type);
-	if($ext===0) echoCode("
-	typedef $const::COLLADA_target_namespace::$type $name;");
-	else echoCode("
-	typedef $const$type $name;"); //todo? import namespaces
+		
+	if($ext===0)
+	{
+		$ns = $const.'__::';
+	}
+	else //todo? import namespaces
+	{
+		//todo: prepend DAEP:: to imported namespace as required
+		$ns = $const;
+	}	
+	echoCode("
+	typedef $ns$type $name;");
 }
 if(!$attribs)
 {

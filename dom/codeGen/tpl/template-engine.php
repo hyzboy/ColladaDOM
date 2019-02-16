@@ -40,13 +40,16 @@ $_globals['copyright'] = "
 if(2===$COLLADA_DOM)
 {
 	$_globals['prefix']	= 'dom'; //$prefix
-	$_globals['namespace'] = 'COLLADA'; //$namespace
+	$_globals['namespace'] = 'COLLADA'; //$namespace 
 }
 else $_globals['prefix'] = 'dom'; //just preventing PHP errors
 $_fsystem['rootdir'] = getcwd()."/../generated-$COLLADA_DOM/"; 
+//note: gen.php is overriding 'include' if inline_CM 
 $_fsystem['include'] = $_fsystem['rootdir'].'COLLADA/'; 
 $_fsystem['sources'] = $_fsystem['rootdir'].'src/'; 
 $_fsystem['logfile'] = $_fsystem['rootdir'].'gen.log';
+
+$_globals['Content'] = array('Empty','Simple','Complex','Mixed');
 
 //maybe these should be objects so that __aliasPop() etc.
 //can compare their object instance?
@@ -243,7 +246,7 @@ function echoDoxygen($doc, $tab='', $see='', $tags='')
 	$undoc = empty($doc)?'UNDOCUMENTED':'';
 	if($undoc) $doc = 
 	"The XSD schema does not provide documentation in this case.";	
-	if($tags) //TRANSCLUDED
+	if($tags) //TRANSCLUDED/OVERLOADED
 	{
 		//The caller has to handle $indent becuase $tab=='*' doesn't
 		//put a newline afterward.
@@ -390,7 +393,7 @@ if(2==$COLLADA_DOM)
 		//-but it's not worth bothering to rule them out 
 		$preType = getFriendlyType($type);	
 		if(isLocalType(asFriendlyType($type),$meta))
-		$preType = '__namespace__::'.$preType;		
+		$preType = '__::'.$preType;		
 		return $preType;
 	}
 	function getFriendlyName($name) //C identifier mangling
@@ -438,7 +441,7 @@ else //ColladaDOM 3
 		//global $keywords; 
 		$type = getFriendlyType($type);	
 		//if(isLocalType($type,$meta)||2==@$keywords[$type])
-		//$type = '__namespace__::'.$type;		
+		//$type = '__::'.$type;		
 		return $type;
 	}
 	function getFriendlyName($name) //C identifier mangling
@@ -579,16 +582,11 @@ function echoElementsCPP(&$meta,$elementsPtoMs,$N,$any)
 	$lo = layoutTOC($meta);
 	if(!empty($lo)||$any) echoCode("
 public: //Elements");		
-		
-	//TODO: EVENTUALLY THIS SHOULD BE REPLACED
-	//BY SOME ATTRIBUTE DATA-MEMBERS THAT WILL 
-	//GET THE ALIGNMENT ON TRACK. IF THERE ARE
-	//NO ATTRIBUTES, ALIGNMENT ISN'T NECESSARY
-	//aligning contents-arrays on 64bit builds	
 	echoCode("
 		
-	COLLADA_WORD_ALIGN"); //COLLADA_ALIGN(sizeof(_*))
+	COLLADA_WORD_ALIGN"); 
 	
+	$zclashes = ''; //HACK: anon-union problem
 	$i = $elementsPtoMs;
 	if($_elem=2==$COLLADA_DOM?'elem':'')
 	$nc = array(); else $nc = $meta['attributes'];
@@ -613,20 +611,38 @@ public: //Elements");
 		}
 		$clash = getNameClash($nc,$ea->child,'__ELEMENT');
 		$name = $_elem.getFriendlyName($ea->child.$clash);
-		echoDoxygen(@$meta['element_documentation'][$ea->child],"\t",$ea->type);		
-		
-		//Suppress GCC warnings about the class name matching the member's.
-		$class = $ea->type; if($name===$class) 
+		echoDoxygen(@$meta['element_documentation'][$ea->child],"\t",$ea->type);
+				
+		//Suppress GCC warnings about the class name matching the member's.	
+		//Visual Studio requires this if there are functions due to $clash.		
+		//TODO: Attributes may need this done too. See tpl-class-h-def.php.
+		$type = $ea->type; if($name===$type||$clash) 
 		{
 			//Could omit class keyword if recursive, but recursive__ is only
 			//required because of class, so leaving it so it doesn't appear as
 			//if __recursive is otherwise required.
-			if(!empty($_globals['recursive'][$class]))
-			$class.='__recursive'; $class = 'class '.$class;
+			if(!empty($_globals['recursive'][$type]))
+			$type.='__recursive';
+			//NOTE: strstr is concerned with the "local__" prefix on clash.
+			if(FALSE===strstr($type,'__'))
+			$type = 'class '.$type;
 		}		
 		
 		echoCode("
-	DAEP::Child<$k,$class,_,(_::_)&_::$_> $name;");
+	DAEP::Child<$k,$type,_,(_::_)&_::$_> $name;");
+				
+		//OVERLOAD MACROS
+		if(empty($clash)) continue;	
+		if($k<0) ob_start(); //HACK: $zclashes fix
+		$name = substr($name,0,-9);
+		$clash = $_elem.getFriendlyName($ea->child);
+		if($name!==$clash)
+		$clash = ','.substr($clash,strlen($name));
+		else $clash = '';
+		echoDoxygen(@$meta['element_documentation'][$ea->child],"\t",$ea->type,"\t/**OVERLOADED");		
+		echoCode("
+	COLLADA_DOM_ELEMENT($k,$type,$_,$name$clash)");
+		if($k<0){ $zclashes.=ob_get_contents(); ob_end_clean(); }
 	}
 	if(empty($singles))
 	{ 
@@ -637,7 +653,8 @@ public: //Elements");
 		if($any) echoAnyEtcCPP(); else echoNoNameCPP();		
 	}
 	else echoCode("
-	};");		 
+	};");		
+	echo $zclashes;
 	echo "\n";
 }
 
@@ -675,7 +692,13 @@ function echoAccessorsAndMutatorsCPP_attribs($meta)
 			//and then to daeStringRef, which is ambiguous, in
 			//addition to multiple string conversion backflips.
 			if(@$typemeta_type['isString'])
-			$setType = 'daeHashString2';
+			{
+				$setType = 'daeHashString2';
+				
+				//HACK: Haven't settled on a type for xml:base
+				//but it's best to access it through xs:anyURI.
+				if($preType=='xmlBase') $preType = 'xsAnyURI';
+			}
 			else $setType = $preType;
 			echoCode("
 	/**
@@ -1000,17 +1023,17 @@ function echoContentModelCPP(& $indent,& $meta, $closure_text)
 		{
 		case ElementMeta::sequenceCMopening: //xs:sequence			
 			echoCode("
-	el.$addCM<XS::Sequence>(cm,$curOrd,$minOccurs,$maxOccurs);");
+	el.$addCM<XS::Sequence>(cm,$curOrd,$minOccurs,$maxOccurs,$total);");
 			$push_cm($ea); break;
 			
 		case ElementMeta::choiceCMopening: //xs:choice				
 			echoCode("
-	el.$addCM<XS::Choice>(cm,$curOrd,$minOccurs,$maxOccurs);");			
+	el.$addCM<XS::Choice>(cm,$curOrd,$minOccurs,$maxOccurs,$total);");			
 			$push_cm($ea); break;
 			
 		case ElementMeta::allCMopening: //xs:all		
 			echoCode("
-	el.$addCM<XS::All>(cm,$curOrd,$minOccurs,$maxOccurs);");
+	el.$addCM<XS::All>(cm,$curOrd,$minOccurs,$maxOccurs,$total);");
 			$push_cm($ea); break;
 		
 		case ElementMeta::anyCM: //xs:any 			
@@ -1047,10 +1070,11 @@ function echoContentModelCPP(& $indent,& $meta, $closure_text)
 
 			//There's no way to have C++'s templates inferred this type.
 			$preType = getFriendlyType($ref); 
+			global $_globals;
 			echo $indent, //not pretty
-"	el.$addCM<XS::Group>(cm,$curOrd,$minOccurs,$maxOccurs).setGroup
+"	el.$addCM<XS::Group>(cm,$curOrd,$minOccurs,$maxOccurs)
 ",			$indent,
-"		<::COLLADA_target_namespace:: $preType>()";
+"		.setGroup<xmlns::{$_globals['target_namespace']}::$preType>()";
 			$push_cm($ea); 
 			$curOrd = echoGroupCM($indent,$pt,$classmeta[$ref],$nc);
 			echo ";\n"; //not pretty

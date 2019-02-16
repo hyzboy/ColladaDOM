@@ -24,7 +24,7 @@ struct ColorSpace
 
 	ColorSpace(bool sRGB=false):sRGB(sRGB){}
 	ColorSpace(daeName space){ sRGB = space=="sRGB"; }
-	ColorSpace(Collada05_XSD::fx_surface_format_hint_option_enum e)
+	ColorSpace(Collada05_xsd::fx_surface_format_hint_option_enum e)
 	{
 		sRGB = e==e.SRGB_GAMMA;
 	}

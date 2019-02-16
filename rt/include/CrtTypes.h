@@ -12,15 +12,13 @@
 //really, as this isn't how it's included.
 #include "RT.pch.h"
 
+//WARNING: IMPORTANT DO NOT INCLUDE TWICE.
+#ifdef PRECOMPILING_COLLADA_RT
 //GCC precompiled headers cannot remember
 //#pragma diagnostics; so bring them back.
-#ifdef PRECOMPILING_COLLADA_RT
-#include "../../dom/include/WARNING.HPP"
+#include <ColladaDOM.g++> 
 #endif
-
-//Remove me. Don't wan to rebuild PCH.
-#include <float.h> 
-
+				   
 //SCHEDULED FOR REMOVAL
 #define COLLADA_DOM_LITE
 //RT::RigidBody

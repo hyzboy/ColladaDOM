@@ -193,7 +193,7 @@ bool RT::Frame::Load(const xs::anyURI &URI)
 	"\n"<<URL;
 	
 	//SCHEDULED FOR REMOVAL
-	daeElement *any = nullptr;
+	xs::any_type *any = nullptr;
 	daeDocument *doc = res->getDocument();
 	if(doc!=nullptr) any = doc->getRoot();
 	if(any==nullptr

@@ -39,7 +39,8 @@ _(no-strict-aliasing -fno-strict-aliasing 0) ##REMOVE ME
 _(c++11 -std=gnu++11 0)
 _(rtti -frtti 0)
 _(visibility -fvisibility=hidden 0)
-_(permissive -fpermissive 0)
+_(permissive "-fpermissive;-fno-delete-null-pointer-checks" 0)
+_(no-delete-null-pointer-checks -fno-delete-null-pointer-checks 0)
 _(Wall "-Wall;-Winvalid-pch" 0) ##How can -Wall be optional? (All warnings?)
 _(Wno-multichar -Wno-multichar 0)
 _(Wno-unused-but-set-variable "-Wno-unused-but-set-variable;-Wmaybe-uninitialized" 0)
@@ -141,8 +142,15 @@ add_compile_options(${_fno-strict-aliasing}) ##SCHEDULED FOR REMOVAL
 
 add_compile_options(${_rtti} ${_visibility} ${_permissive} ${_Wall} ${_Wno-multichar})
 
-#Extend dom/include/WARNING.PHP to the end of the internal precompiled headers.
-add_definitions(-DCOLLADA_DOM_WARNING_HPP)
+#WORK-IN-PROGRESS 
+#Trying to suppress GCC's warnings, but nothing seems to ever do the trick :(
+#The g++ project can't implement diagnostic pragma:
+#https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+#	set(CMAKE_CXX_COMPILER gcc)
+	message(WARNING "Using gcc over g++: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431")
+endif()
+
 
 macro(try_package name NAME)
 	find_package(${name} QUIET) 

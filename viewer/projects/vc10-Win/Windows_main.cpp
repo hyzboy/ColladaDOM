@@ -169,6 +169,13 @@ int __stdcall wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 		if(Silence_console_if_DEBUG!=1) //If so it's already been set.
 		daeErrorHandler::setErrorHandler(new daeStandardErrorHandler);		
 	}
+	//NEW: Trying to not cut off the console output.	
+	CONSOLE_SCREEN_BUFFER_INFOEX csbi = {sizeof(csbi)};
+	if(GetConsoleScreenBufferInfoEx(GetStdHandle(STD_OUTPUT_HANDLE),&csbi))
+	{
+		csbi.dwSize.Y = 5000; //10000;
+		SetConsoleScreenBufferInfoEx(GetStdHandle(STD_OUTPUT_HANDLE),&csbi);
+	}
 	//There are shutdown issues if the CONSOLE is used. Especially if
 	//debugging.
 	SetConsoleCtrlHandler(Windows_CONSOLE_HandlerRoutine,1);
