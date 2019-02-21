@@ -142,16 +142,6 @@ add_compile_options(${_fno-strict-aliasing}) ##SCHEDULED FOR REMOVAL
 
 add_compile_options(${_rtti} ${_visibility} ${_permissive} ${_Wall} ${_Wno-multichar})
 
-#WORK-IN-PROGRESS 
-#Trying to suppress GCC's warnings, but nothing seems to ever do the trick :(
-#The g++ project can't implement diagnostic pragma:
-#https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-#	set(CMAKE_CXX_COMPILER gcc)
-	message(WARNING "Using gcc over g++: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431")
-endif()
-
-
 macro(try_package name NAME)
 	find_package(${name} QUIET) 
 	if(NOT ${NAME}_FOUND AND PKGCONFIG_FOUND) 
