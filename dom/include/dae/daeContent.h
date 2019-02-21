@@ -886,7 +886,7 @@ COLLADA_(public) //daeSmartRef methods (nonconst accessors)
 	inline T &operator*(){ return **(T**)this; }		   
 		
 	/**EXPERIMENTAL
-	 * Implements DAEP QName accessor.
+	 * Implements DAEP @c xs::complexType accessor.
 	 */
 	inline const daeSmartTag &operator->*(daeString)
 	{
@@ -2662,16 +2662,14 @@ COLLADA_(public) //OPERATORS
 	}
 	
 	/**EXPERIMENTAL
-	 * Implements DAEP QName accessor.
-	 * @warning @c daeQName does not implement speculative access.
+	 * Implements DAEP @c xs::complexType accessor.
 	 */
 	inline const daeSmartTag &operator->*(daeString)
 	{
 		return operator[](0)->*daeString(); 
 	}
 	/**EXPERIMENTAL
-	 * Implements DAEP QName accessor.
-	 * @warning @c daeQName does not implement speculative access.
+	 * Implements DAEP @c xs::complexType accessor.
 	 */
 	inline const daeSmartTag_base &operator->*(daeString)const
 	{

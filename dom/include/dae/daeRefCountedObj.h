@@ -891,7 +891,8 @@ COLLADA_(public) //daeObject/daeArray implementation
 	/** Implements reAlloc(). */
 	inline void _reAlloc(daeAlloc<>* &au, size_t newT, _(fn,)=nullptr, daeDatabase *db=nullptr)const
 	{	
-		assert(newT>au->getCapacity()); //This is one-way.
+		//1) Must clear isFreeAU. 2) Increase capacity.
+		assert(newT>1); assert(newT>au->getCapacity());
 		daeAlloc<> &recycling = *au;
 		bool wasFree = AO?false:daeAlloc<>::isFreeAU(au);
 		if(!DB) db = _ptr==nullptr?nullptr:_ptr->_getDBase();	

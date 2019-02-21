@@ -1116,9 +1116,18 @@ FX::Material *FX::Loader::Load(ColladaYY::const_material material, FX::Effect *e
 	for(size_t j=0;j<p->Passes[i]->Shaders.size();j++)
 	//if(nullptr==p->Passes[i]->Shaders[j]->Cg)
 	if(0==p->Passes[i]->Shaders[j]->GLSL)
-	{
+	{			
 		daeEH::Warning<<"Cg shader is unusable. Avoiding cgGL API crash by not using Cg for "<<material->id;
-		delete out; return nullptr;	
+
+		//NOT HAPPENING.
+		//delete out; return nullptr;
+		//for(size_t k=0;k<e->Techniques.size();k++) if(e->Techniques[k]->IsProfile_COMMON())
+		{				
+			delete out; return nullptr;
+		}		
+		//NEW: Trying to fill out Mono_TexId for indirect GLX rendering; So textures won't turn white. 
+		//daeEH::Warning<<"Returning unusable Cg effect, because no profile_COMMON technique is described.";
+		//break;
 	}
 
 	daeEH::Verbose<<"Created material "<<material->id<<" effect "<<instance_effect->url;
