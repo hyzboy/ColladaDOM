@@ -36,10 +36,12 @@ class daeCharData_size
 :
 public daeArray<daeStringCP,size_on_stack>  //FIRST
 ,
-public daeString_support<daeCharData>
+//Must include size_on_stack this time.
+//public daeString_support<daeCharData>
+public daeString_support<daeCharData_size<size_on_stack>>
 {
 	typedef daeArray<daeStringCP,size_on_stack> _1;
-	typedef daeString_support<daeCharData> _2;
+	typedef daeString_support<daeCharData_size<size_on_stack>> _2;
 
 COLLADA_(public)
 
