@@ -136,6 +136,9 @@ COLLADA_(public)
 
 	friend class COLLADA::daeCM;
 
+	//Would be nice if get_allocator returned a reference???
+	XS::All(daeSA a):daeParentCM(a){} 
+
 COLLADA_(protected) //daeCM methods		
 	/**INVISIBLE
 	 * @return Returns @c true, meaning that order is specified.
@@ -219,6 +222,9 @@ COLLADA_(public)
 
 #ifdef BUILDING_COLLADA_DOM
 	
+	//Would be nice if get_allocator returned a reference???
+	XS::Choice(daeSA a):daeParentCM(a),_solutions(a){} 
+
 	static struct _solution //INVISIBLE
 	{	
 		size_t keysN; const daeCM *to,*fro; 		
@@ -247,6 +253,7 @@ COLLADA_(public)
 	friend class COLLADA::daeMetaElement;
 
 COLLADA_(protected) //daeCM methods		
+
 	template<class A, class B, class C>
 	/**INVISIBLE
 	 * Called by @c daeCM::__placeT<XS::All>() for @c XS::ALL_LIKE_CHOICE_X.
@@ -298,7 +305,7 @@ COLLADA_(protected) //INVISIBLE
 	#endif
 	//Using allocator in lieu of destructor.	
 	typedef std::vector<_solution,daeSA> _solutions_vector;
-
+	
 	mutable const _solution *_solution_cache;
 	/**
 	 * This converts a new solution into a permanent solution.
@@ -872,6 +879,9 @@ COLLADA_(public)
 #ifdef BUILDING_COLLADA_DOM
 
 	friend class COLLADA::daeCM;
+
+	//Would be nice if get_allocator returned a reference???
+	XS::Sequence(daeSA a):daeParentCM(a){} 
 
 COLLADA_(protected) //daeCM methods
 

@@ -1438,7 +1438,7 @@ template<class T=char, int N=0>
  * @see #c daeStringAlignment
  */
 class daeStringAlligator
-{
+{	
 	struct _Maw
 	{
 		union{ char *mem; _Maw *old; };
@@ -1503,18 +1503,9 @@ COLLADA_(public)
 	}
 	/** Destructor */
 	~daeStringAlligator(){ for(_Maw m=_maw,o;m!=nullptr;delete m,m=o) o = *m; }
-};
 
-#ifdef NDEBUG
-#error Providing this in all cases until can figure out when not to.
-#endif
-//_ITERATOR_DEBUG_LEVEL consumes memory when empty.
-#ifdef NDEBUG
-enum{ daeDebugAlligator=0 };
-#else
-#define COLLADA_DOM_DEBUG_ALLOCATOR
-COLLADA_DOM_LINKAGE2 extern daeStringAlligator<> *daeDebugAlligator;
-#endif	
+	enum{ sharing_allocator=N==0 }; //SKETCHY
+};
 
 template<class T>
 /**PARTIAL TEMPLATE-SPECIALIZATION
@@ -1522,11 +1513,15 @@ template<class T>
  */
 struct daeStringAllocator<T,-1> : std::allocator<T>
 {
-	typedef daeStringAllocator B; daeStringAllocator(){}
+	enum{ sharing_allocator=0 }; //SKETCHY
+
+	typedef daeStringAllocator B; 
+	
+	daeStringAllocator(){} //C++
 
 	//I think MSVC2010 might have a bug. It seems to use different allocators as
 	//map::allocator_type than the template parameter's. 
-	template<class S> daeStringAllocator(const S&){ /*NOP*/ }
+	template<class S> daeStringAllocator(S&){ /*NOP*/ }
 
 	template<class U> struct rebind{ typedef daeStringAllocator<U,/*0*/-1> other; };
 };
@@ -1537,14 +1532,20 @@ template<class T=char, int N=0>
  * If 0 a pointer sized object replaces this built-in allocator.
  * Unfortunately the pointer is not required post-initialization.
  *
- * @c daeStringAllocator implements a Standard Library allocator. 
- * It's based on @c daeStringAlligator in order to keep the STL's
- * requirements separate.
- * Actually, it's very complicated, and difficult to meet all of
- * the various requirements.
+ * SKETCHY
+ * @remark I regret implementing shared-allocators, as I did not
+ * realize how inflexible allocators are as designed by the C++
+ * Standard Library. I thought surely "get_allocator" returned
+ * a reference. (It doesn't!) But ran into problems with iterator
+ * debugging proxies that allocated memory for empty containers
+ * that at first was a nightmare to try to work around, but that
+ * ultimately was the hint that assigning to get_allocator was a
+ * misconception. Though it would be nice were only it possible.
  */
 struct daeStringAllocator
 {				  
+	enum{ sharing_allocator=N==0 }; //SKETCHY
+
 	typedef daeStringAlligator<T,N> Alligator;
 	/**
 	 * This has to be wrapped in a class or MSVC2013
@@ -1557,7 +1558,7 @@ struct daeStringAllocator
 	//REMINDER: If N is 0 this is a pointer that daeStringMap doesn't 
 	//require  once initiaized. It's just wasted space in other words.
 	typedef typename daeTypic<N,Alligator,daeStringAllocator>::type B;
-
+		   
 	/**
 	 * @old is a C++03 requirement, that C++11 removes.
 	 */
@@ -1581,9 +1582,20 @@ struct daeStringAllocator
 	 */
 	inline void deallocate(T*, size_t/*n*/){ /*NOP*/ } 	
 	
-	daeStringAllocator(Alligator &cp):A(&cp){}
-	daeStringAllocator():A(N==0?(Alligator*)daeDebugAlligator:nullptr){}
-	daeStringAllocator(daeStringAlligator<>*p):A((Alligator*)p){ assert(p!=nullptr); }
+	daeStringAllocator(Alligator *cp):A((Alligator*)cp){}
+	daeStringAllocator(Alligator &cp):A((Alligator*)&cp){}
+
+	//daeSA buisness
+
+	daeStringAllocator(int=0):A(){} 
+	template<class T> T &operator/(T *cp) //SKETCHY
+	{
+		//NOTE: This weird approach is mainly to avoid wordy typename constructs inside of
+		//the many class definitions that follow.
+		if(T::sharing_allocator&&N==0){ ((B*)cp)->A = A; assert(A!=nullptr); } return *cp; 
+	}	
+
+	//rebind business
 
 	template<class U, int M>
 	daeStringAllocator(daeStringAllocator<U,M> cp):A((Alligator*)cp.A){}
@@ -1592,8 +1604,7 @@ struct daeStringAllocator
 	template<class U, int M>
 	inline bool operator!=(daeStringAllocator<U,M> b)const{ return (void*)A!=(void*)b.A; }
 
-	//N must carry over for MSVC2010 uses rebind to arrive at its allocator_type???
-	template<class U> struct rebind{ typedef daeStringAllocator<U,/*0*/N> other; };
+	template<class U> struct rebind{ typedef daeStringAllocator<U,N> other; };
 
 	//C++11 REQUIREMENTS
 
@@ -1635,7 +1646,7 @@ daeStringEqualFunctor,daeStringAllocator<daeHashString,N>>>
 struct daeStringSet:map::allocator_type::B,map
 {	
 	COLLADA_SUPPRESS_C(4355)
-	daeStringSet():map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),*this){}
+	daeStringSet(daeSA a=0):map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),a/this){}
 };
 #elif defined(COLLADA_DOM_SET)
 template<int N=-1, class map=
@@ -1646,7 +1657,7 @@ std::set<daeString,daeStringLessFunctor,daeStringAllocator<daeString,N>>>
 struct daeStringSet:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringSet():map(key_compare(),*this){}
+	daeStringSet(daeSA a=0):map(key_compare(),a/this){}
 };
 #endif //COLLADA_DOM_SET
 
@@ -1662,7 +1673,7 @@ daeStringEqualFunctor,daeStringAllocator<std::pair<const daeHashString,T>,N>>>
 struct daeStringMap:map::allocator_type::B,map 
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringMap():map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),*this){}
+	daeStringMap(daeSA a=0):map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),a/this){}
 };
 template<class T, int N=-1, class map=
 std::unordered_multimap<daeHashString,T,daeStringHashFunctor,
@@ -1673,7 +1684,7 @@ daeStringEqualFunctor,daeStringAllocator<std::pair<const daeHashString,T>,N>>>
 struct daeStringMultiMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringMultiMap():map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),*this){}
+	daeStringMultiMap(daeSA a=0):map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),a/this){}
 };
 template<class T, int N=-1, class map=
 std::unordered_map<daeString/*Ref*/,T,std::hash<daeString>,
@@ -1684,7 +1695,7 @@ std::equal_to<daeString>,daeStringAllocator<std::pair<const daeString,T>,N>>>
 struct daeStringRefMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringRefMap():map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),*this){}
+	daeStringRefMap(daeSA a=0):map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),a/this){}
 };
 template<class T, int N=-1, class map=
 std::unordered_multimap<daeString/*Ref*/,T,std::hash<daeString>,
@@ -1695,7 +1706,7 @@ std::equal_to<daeString>,daeStringAllocator<std::pair<const daeString,T>,N>>>
 struct daeStringRefMultiMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringRefMultiMap():map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),*this){}
+	daeStringRefMultiMap(daeSA a=0):map(8/*MSVC2013*/,typename map::hasher(),typename map::key_equal(),a/this){}
 };
 
 #elif defined(COLLADA_DOM_MAP)
@@ -1709,7 +1720,7 @@ daeStringAllocator<std::pair<const daeString,T>,N>>>
 struct daeStringMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringMap():map(typename map::key_compare(),*this){}
+	daeStringMap(daeSA a=0):map(typename map::key_compare(),a/this){}
 };
 template<class T, int N=-1, class map=
 std::multimap<daeString,T,daeStringLessFunctor,
@@ -1720,7 +1731,7 @@ daeStringAllocator<std::pair<const daeString,T>,N>>>
 struct daeStringMultiMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringMultiMap():map(typename map::key_compare(),*this){}
+	daeStringMultiMap(daeSA a=0):map(typename map::key_compare(),a/this){}
 };
 template<class T, int N=-1, class map=
 std::map<daeString,T,std::less<daeString>,
@@ -1731,7 +1742,7 @@ daeStringAllocator<std::pair<const daeString,T>,N>>>
 struct daeStringRefMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringRefMap():map(typename map::key_compare(),*this){}
+	daeStringRefMap(daeSA a=0):map(typename map::key_compare(),a/this){}
 };
 template<class T, int N=-1, class map= 
 std::multimap<daeString,T,std::less<daeString>,
@@ -1742,7 +1753,7 @@ daeStringAllocator<std::pair<const daeString,T>,N>>>
 struct daeStringRefMultiMap:map::allocator_type::B,map
 {
 	COLLADA_SUPPRESS_C(4355)
-	daeStringRefMultiMap():map(typename map::key_compare(),*this){}
+	daeStringRefMultiMap(daeSA a=0):map(typename map::key_compare(),a/this){}
 };
 
 #endif //COLLADA_DOM_MAP

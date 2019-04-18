@@ -1058,10 +1058,21 @@ COLLADA_(protected) //INVISIBLE
 		void *_new(size_t n){ return _allocator().allocate(n); }
 		template<class T>
 		T *_new(size_t n=1){ return new(_new(n*sizeof(T))) T[n]; }		
+		template<class T>
+		T *_newSA(size_t n=1) //TODO: Move this stuff elsewhere.
+		{
+			//WHY?! get_allocator doesn't return a reference :(
+			daeSA a = _allocator();
+			T *b = (T*)a.allocate(n*sizeof(T));
+			for(T *i=b,*e=b+n;i<e;i++) new(i) T(a); return b;
+		}		
 
 		template<class T> 
 		/** These members begin their life as zeroed memory. */
-		T &_bring_to_life(T &t){ new(&t) T(); return t; }					
+		T &_bring_to_life(T &t){ new(&t) T(); return t; }
+		template<class T> 
+		/** These members begin their life as zeroed memory. */
+		T &_bring_to_lifeSA(T &t){ new(&t) T(_allocator()); return t; }
 		daeAttribute *_IDs_id,*_IDs;
 		daeDefault *_value;
 		const daeCM *_CMRoot, *_CMEntree;

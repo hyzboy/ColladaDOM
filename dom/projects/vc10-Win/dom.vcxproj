@@ -193,6 +193,8 @@
       <AdditionalDependencies>../../external-libs/libxml2/trunk/lib/libxml2.lib;../../external-libs/tinyxml/trunk/lib/tinyxml.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <OutputFile>$(OutDir)colladadom25-sd$(TargetExt)</OutputFile>
+      <ShowProgress>NotSet</ShowProgress>
+      <LinkStatus>true</LinkStatus>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

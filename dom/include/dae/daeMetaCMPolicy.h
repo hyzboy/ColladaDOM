@@ -346,9 +346,7 @@ COLLADA_(public) //daeParentCM::getCM iterator
 
 		inline const daeCM *operator->(){ return *_ptr; }
 	};
-	#ifdef NDEBUG
-	#error addCM should pass the reserve size of this vector.
-	#endif
+
 	//Using allocator in lieu of destructor.
 	typedef std::vector<const daeCM*,daeSA> _CM_vector;
 };
@@ -376,11 +374,14 @@ COLLADA_(public)
 
 #ifdef BUILDING_COLLADA_DOM
 	
+	//Would be nice if get_allocator returned a reference???
+	daeParentCM(daeSA a):_CM(a){} 
+
 	//std::string SHOULD BE TEMPORARY.
 	typedef short _CM_index;	
 	typedef std::char_traits<_CM_index> _DeepCM_traits;
-	typedef std::basic_string<_CM_index,_DeepCM_traits,daeSA> _DeepCM_string;
-
+	typedef std::basic_string<_CM_index,_DeepCM_traits,daeSA> _DeepCM_string;		
+	
 COLLADA_(protected) //INVISIBLE
 	
 	friend class XS::Element;
