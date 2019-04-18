@@ -191,8 +191,9 @@ void *daeMeta::_continue_XS_Schema_addElement2(void ctor(DAEP::Object*), daeFeat
 	
 	//XS::Schema::addElement has initialized a lot of the model already by this stage.	
 	_bring_to_life(_elems);
-	_bring_to_life(_elem_names);
-	_elem_names.get_allocator() = _allocator();
+	_bring_to_lifeSA(_elem_names);
+	//Doesn't work like this :(
+	//_elem_names.get_allocator() = _allocator();
 	_destructor_ptr = daeMetaElement_self_destruct;
 	_constructor = ctor;
 	size_t features = -(int)_finalFeatureID;	
@@ -603,13 +604,13 @@ daeCM &daeMeta::_addCM(daeXS xs, daeParentCM *parent, int (&i4)[4])
 {
 	daeCM *out; switch(xs) //Initialize.
 	{
-	case XS::ALL: out = _new<XS::All>(); break;
+	case XS::ALL: out = _newSA<XS::All>(); break;
 	case XS::ANY: out = _new<XS::Any>(); break;
-	case XS::CHOICE: out = _new<XS::Choice>(); break;
+	case XS::CHOICE: out = _newSA<XS::Choice>(); break;
 	case XS::ELEMENT: //The real element is resolved by setChild().
 	new(out=&_schema->_temporary_working_memory)XS::Element; break;
 	case XS::GROUP:	daeMetaElement_newGroup(out,getTOC(),_allocator()); break;
-	case XS::SEQUENCE: out = _new<XS::Sequence>(); break;
+	case XS::SEQUENCE: out = _newSA<XS::Sequence>(); break;
 	default: assert(0); return *(out=nullptr); //???
 	}
 	out->_daeCM_init(xs,this,parent,(daeCounter)i4[0],i4[1],i4[2]);	
@@ -619,18 +620,19 @@ daeCM &daeMeta::_addCM(daeXS xs, daeParentCM *parent, int (&i4)[4])
 	{	
 		//The daeParentCM destructor undoes this.
 		daeParentCM &pout = (daeParentCM&)*out;		
-		pout._CM.get_allocator() = _allocator();
+		//Doesn't work like this :(
+		//pout._CM.get_allocator() = _allocator();
 		pout._CM.reserve(i4[3]);
 		size_t avail = _elems.size();
 		if(xs==XS::CHOICE) 
 		{
-			avail*=2; //_proclaimCM //OVERKILL//OVERKILL//OVERKILL//OVERKILL
-			((XS::Choice*)&pout)->_solutions.get_allocator() = _allocator();
+			avail*=2; //_proclaimCM //OVERKILL//OVERKILL//OVERKILL//OVERKILL			
+			//((XS::Choice*)&pout)->_solutions.get_allocator() = _allocator();
 		}
 		//TODO: do something like daeMetaElement_newGroup() once more solid.
-		pout._deepCM = _new<daeParentCM::_DeepCM_string>(avail);
-		for(size_t i=0;i<avail;i++)
-		pout._deepCM[i].get_allocator() = _allocator();
+		pout._deepCM = _newSA<daeParentCM::_DeepCM_string>(avail);
+		//for(size_t i=0;i<avail;i++)
+		//pout._deepCM[i].get_allocator() = _allocator();
 		pout._deepCM-=_elems[0].getChildID().getName();
 	}	
 	else assert(parent!=nullptr||xs==XS::GROUP); //These are XML Schema rules.

@@ -22,15 +22,6 @@ COLLADA_(extern) daePShare DOM_process_share = 0;
 static daeOK _1st_things_1st = DOM_process_share.grant();
 #endif
 
-//HACK: Microsoft's containers allocate prior to being
-//assigned an allocator. Providing an allocator to the
-//constructor is cumbersome.
-#ifdef COLLADA_DOM_DEBUG_ALLOCATOR
-static daeSA::Alligator daeStringRef_dba(256*sizeof(void*));
-COLLADA_(extern)
-daeStringAlligator<> *daeDebugAlligator = &daeStringRef_dba;
-#endif
-
 static struct daeStringRef_dummyAtlas : daeAtlas
 {
 virtual daeIO *openIO(daeIOPlugin&,daeIOPlugin&)
